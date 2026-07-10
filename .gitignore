@@ -1,0 +1,66 @@
+# Node.js / TypeScript
+node_modules/
+dist/
+
+# Java / Gradle (mods/cross-spire/)
+.gradle/
+.kotlin/
+build/
+!scripts/build/
+!scripts/build/**
+*.iml
+.idea/
+local.properties
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+
+# Temporary workspace files
+_tmp*
+.tmp*
+tmp/
+agent-tmp/
+__pycache__/
+*.py[cod]
+
+# Debug and runtime outputs
+*.log
+hs_err_pid*.log
+logs/
+debug-artifacts/
+
+# Secrets and signing
+*.jks
+*.keystore
+*.p12
+*.pfx
+.env
+.env.local
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Mod build outputs
+mods/*/bin/
+mods/*/build/
+
+# Local Codex/tool workspace state
+/.codex/
+/.codex_tmp/
+/.codex-tmp/
+/.opencode/
+
+# Extracted mod/workshop contents at repo root (accidental)
+/META-INF/
+/org/
+/com/
+/audio/
+/effects/
+/images/
+/localization/
+/ModTheSpire.json
