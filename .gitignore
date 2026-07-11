@@ -55,12 +55,6 @@ mods/*/build/
 /.codex-tmp/
 /.opencode/
 
-# Extracted mod/workshop contents at repo root (accidental)
-/META-INF/
-/org/
-/com/
-/audio/
-/effects/
-/images/
-/localization/
-/ModTheSpire.json
+# SlayTheAmethyst symlinks
+/scripts/tools
+/gradlew

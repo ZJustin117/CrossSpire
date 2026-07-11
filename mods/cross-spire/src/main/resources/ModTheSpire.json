@@ -1,0 +1,10 @@
+{
+  "modid": "crossspire",
+  "name": "CrossSpire",
+  "author_list": ["CrossSpire Contributors"],
+  "description": "Open-source multiplayer mod for Slay the Spire",
+  "version": "0.1.0",
+  "mts_version": "3.30.0",
+  "sts_version": "12-18-2022",
+  "dependencies": ["basemod"]
+}
