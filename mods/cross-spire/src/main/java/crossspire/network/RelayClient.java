@@ -39,6 +39,10 @@ public class RelayClient extends WebSocketClient {
             String joinedId = msg.get("playerId").getAsString();
             BaseMod.logger.info("CrossSpire player joined: " + joinedId);
             RemotePlayerRegistry.register(joinedId);
+            // Re-broadcast battle_start if we already started
+            if (CrossSpireMod.startedGame) {
+                CrossSpireMod.resendBattleStart();
+            }
         } else {
             BaseMod.logger.info("CrossSpire routing: type=" + type + " len=" + message.length());
             CrossSpireMod.messageRouter.route(message);

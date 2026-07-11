@@ -6,7 +6,7 @@ public class ServerPicker {
 
     public static String serverUrl = "ws://127.0.0.1:9876";
     public static String roomCode = "CROSS";
-    public static boolean autoConnect = true;
+    public static boolean autoConnect = false;
     public static boolean isStageHost = true;
 
     static {

@@ -54,7 +54,6 @@ mods/*/build/
 /.codex_tmp/
 /.codex-tmp/
 /.opencode/
-/.codenomad/
 
 # SlayTheAmethyst symlinks
 /scripts/tools

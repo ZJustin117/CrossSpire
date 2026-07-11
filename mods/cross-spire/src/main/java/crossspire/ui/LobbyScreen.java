@@ -28,6 +28,7 @@ public class LobbyScreen implements PostInitializeSubscriber, PostRenderSubscrib
     @Override
     public void receivePostInitialize() {
         BaseMod.logger.info("LobbyScreen initialized");
+        CrossSpireMod.runStartupScript();
     }
 
     @Override

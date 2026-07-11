@@ -13,6 +13,7 @@ import crossspire.EventSuppression;
 import crossspire.network.Protocol;
 import crossspire.remote.RemotePlayerRegistry;
 import crossspire.remote.RemotePlayerState;
+import crossspire.remote.GameStarter;
 
 public class SyncExecutor {
 
@@ -21,9 +22,23 @@ public class SyncExecutor {
             handleRemotePlayerSync(rawMessage);
         } else if ("combat_result".equals(subtype)) {
             handleCombatResult(rawMessage);
+        } else if ("battle_start".equals(subtype)) {
+            handleBattleStart(rawMessage);
         } else if ("monster_intent".equals(subtype)) {
             BaseMod.logger.info("SyncExecutor monster_intent source=" + source + " seq=" + seq);
         }
+    }
+
+    private void handleBattleStart(String rawMessage) {
+        JsonObject msg = Protocol.GSON.fromJson(rawMessage, JsonObject.class);
+        String charName = msg.has("character") ? msg.get("character").getAsString() : "IRONCLAD";
+        String seed = msg.has("seed") ? msg.get("seed").getAsString() : "";
+        String source = msg.has("source") ? msg.get("source").getAsString() : "";
+
+        if (source.equals(CrossSpireMod.playerId)) return;
+
+        BaseMod.logger.info("SyncExecutor battle_start from " + source.substring(0, 8) + " char=" + charName + " seed=" + seed);
+        GameStarter.start(charName, seed);
     }
 
     private void handleRemotePlayerSync(String rawMessage) {
