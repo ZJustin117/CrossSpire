@@ -34,6 +34,7 @@ public class RelayClient extends WebSocketClient {
             joinRoom();
         } else if ("room_state".equals(type)) {
             CrossSpireMod.lobbyScreen.setStatus("In room " + msg.get("code").getAsString());
+            CrossSpireMod.lobbyState.onRoomJoined();
             CrossSpireMod.p2pManager.start();
             CrossSpireMod.p2pManager.sendHello();
             ResourceRegistryTracker.sendMyRegistry();
@@ -41,6 +42,7 @@ public class RelayClient extends WebSocketClient {
             String joinedId = msg.get("playerId").getAsString();
             BaseMod.logger.info("CrossSpire player joined: " + joinedId);
             RemotePlayerRegistry.register(joinedId);
+            CrossSpireMod.lobbyState.onPlayerJoined(joinedId);
             // Re-broadcast battle_start if we already started
             if (CrossSpireMod.startedGame) {
                 CrossSpireMod.resendBattleStart();

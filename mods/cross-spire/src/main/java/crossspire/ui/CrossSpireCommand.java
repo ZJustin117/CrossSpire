@@ -22,6 +22,8 @@ public class CrossSpireCommand extends ConsoleCommand {
             cmdDisconnect();
         } else if ("status".equals(sub)) {
             cmdStatus();
+        } else if ("ready".equals(sub)) {
+            cmdReady(tokens, depth);
         } else if ("start".equals(sub)) {
             cmdStart(tokens, depth);
         } else {
@@ -76,6 +78,12 @@ public class CrossSpireCommand extends ConsoleCommand {
         }
     }
 
+    private void cmdReady(String[] tokens, int depth) {
+        String charName = tokens.length > depth + 1 ? tokens[depth + 1].toUpperCase() : "IRONCLAD";
+        DevConsole.log("Ready as " + charName + "...");
+        CrossSpireMod.lobbyState.markLocalReady(charName);
+    }
+
     private void broadcastBattleStart(String charName, String seed) {
         if (CrossSpireMod.relayClient == null || !CrossSpireMod.relayClient.isOpen()) return;
         Protocol.StageSync msg = new Protocol.StageSync();
@@ -90,6 +98,6 @@ public class CrossSpireCommand extends ConsoleCommand {
 
     @Override
     public void errorMsg() {
-        DevConsole.log("crossspire: connect <url> <room> | disconnect | status | start [char] [seed]");
+        DevConsole.log("crossspire: connect <url> <room> | ready [char] | status | start [char] [seed]");
     }
 }

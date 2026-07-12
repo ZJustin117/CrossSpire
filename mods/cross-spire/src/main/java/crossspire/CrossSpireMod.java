@@ -10,6 +10,7 @@ import crossspire.sync.SyncExecutor;
 import crossspire.combat.QueueManager;
 import crossspire.network.P2PManager;
 import crossspire.network.Protocol;
+import crossspire.ui.LobbyState;
 import crossspire.ui.CrossSpireCommand;
 import crossspire.ui.LobbyScreen;
 import crossspire.ui.ServerPicker;
@@ -24,6 +25,7 @@ public class CrossSpireMod {
     public static LobbyScreen lobbyScreen;
     public static QueueManager queueManager;
     public static P2PManager p2pManager;
+    public static LobbyState lobbyState;
     public static String playerId = "";
     public static boolean startedGame = false;
     public static String lastStartedChar = "IRONCLAD";
@@ -35,6 +37,7 @@ public class CrossSpireMod {
 
         queueManager = new QueueManager();
         p2pManager = new P2PManager();
+        lobbyState = new LobbyState();
         messageRouter = new MessageRouter(new SyncExecutor(), queueManager);
         lobbyScreen = new LobbyScreen();
         lobbyScreen.hide();

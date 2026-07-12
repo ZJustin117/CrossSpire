@@ -55,6 +55,8 @@ public class MessageRouter {
             RemoteResourceManager.onResourceResponse(rawMessage);
         } else if ("hello".equals(type)) {
             CrossSpireMod.p2pManager.onHelloReceived(rawMessage);
+        } else if ("player_ready".equals(type)) {
+            CrossSpireMod.lobbyState.onPlayerReady(rawMessage);
         }
     }
 }

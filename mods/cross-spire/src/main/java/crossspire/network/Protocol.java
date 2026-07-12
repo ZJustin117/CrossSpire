@@ -91,6 +91,13 @@ public final class Protocol {
         @SerializedName("members") public MemberInfo[] members;
     }
 
+    // -- lobby ready --
+
+    public static class PlayerReady extends GameMessage {
+        public PlayerReady() { type = "player_ready"; }
+        public String character;
+    }
+
     public static class MemberInfo {
         public String id;
         public String ip;
