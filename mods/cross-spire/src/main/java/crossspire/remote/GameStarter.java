@@ -8,6 +8,7 @@ import com.megacrit.cardcrawl.core.CardCrawlGame;
 import com.megacrit.cardcrawl.dungeons.AbstractDungeon;
 import com.megacrit.cardcrawl.dungeons.Exordium;
 import com.megacrit.cardcrawl.helpers.SeedHelper;
+import crossspire.CrossSpireMod;
 import java.util.ArrayList;
 
 public class GameStarter {
@@ -34,6 +35,8 @@ public class GameStarter {
             SeedHelper.setSeed("");
         }
 
+        AbstractDungeon.player = player;
+        CrossSpireMod.localPlayer = player;
         AbstractDungeon.generateSeeds();
         new Exordium(player, new ArrayList<String>());
         CardCrawlGame.mode = CardCrawlGame.GameMode.GAMEPLAY;

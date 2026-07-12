@@ -12,6 +12,7 @@ import com.megacrit.cardcrawl.potions.AbstractPotion;
 import com.megacrit.cardcrawl.powers.AbstractPower;
 import com.megacrit.cardcrawl.relics.AbstractRelic;
 import crossspire.EventSuppression;
+import crossspire.CrossSpireMod;
 import crossspire.network.Protocol;
 
 public class CombatResultReplayer {
@@ -79,7 +80,9 @@ public class CombatResultReplayer {
                         AbstractDungeon.player.currentHealth -= amount;
                     break;
                 case "apply_power": {
-                    BaseMod.logger.info("CombatResultReplayer apply_power: " + eff.get("power_id").getAsString());
+                    String powerId = eff.has("power_id") ? eff.get("power_id").getAsString() : "";
+                    if (!powerId.isEmpty() && getPlayer() != null)
+                        applyPower(powerId, target, amount);
                     break;
                 }
                 case "remove_power": {
@@ -117,7 +120,14 @@ public class CombatResultReplayer {
                     break;
                 }
                 case "obtain_potion": {
-                    BaseMod.logger.info("CombatResultReplayer obtain_potion: " + eff.get("potion_id").getAsString());
+                    String potionId = eff.has("potion_id") ? eff.get("potion_id").getAsString() : "";
+                    if (!potionId.isEmpty() && getPlayer() != null) {
+                        com.megacrit.cardcrawl.potions.AbstractPotion p = com.megacrit.cardcrawl.helpers.PotionHelper.getPotion(potionId);
+                        if (p != null) {
+                            getPlayer().obtainPotion(p);
+                            BaseMod.logger.info("CombatResultReplayer obtained potion: " + potionId);
+                        }
+                    }
                     break;
                 }
                 default:
@@ -156,5 +166,53 @@ public class CombatResultReplayer {
             if (targetId.equals(m.id)) return m;
         }
         return null;
+    }
+
+    private com.megacrit.cardcrawl.characters.AbstractPlayer getPlayer() {
+        if (AbstractDungeon.player != null) return AbstractDungeon.player;
+        return CrossSpireMod.localPlayer;
+    }
+
+    private void applyPower(String powerId, String target, int amount) {
+        try {
+            String className = "com.megacrit.cardcrawl.powers." + toCamelCase(powerId) + "Power";
+            Class<?> powerClass = Class.forName(className);
+
+            com.megacrit.cardcrawl.core.AbstractCreature owner;
+            if ("self".equals(target)) {
+                owner = getPlayer();
+            } else {
+                owner = findMonster(target);
+            }
+            if (owner == null) return;
+
+            com.megacrit.cardcrawl.powers.AbstractPower power;
+            try {
+                java.lang.reflect.Constructor<?> ctor = powerClass.getConstructor(
+                    com.megacrit.cardcrawl.core.AbstractCreature.class, int.class, boolean.class);
+                power = (com.megacrit.cardcrawl.powers.AbstractPower) ctor.newInstance(owner, amount, false);
+            } catch (NoSuchMethodException e) {
+                java.lang.reflect.Constructor<?> ctor = powerClass.getConstructor(
+                    com.megacrit.cardcrawl.core.AbstractCreature.class, int.class);
+                power = (com.megacrit.cardcrawl.powers.AbstractPower) ctor.newInstance(owner, amount);
+            }
+
+            owner.powers.add(power);
+            BaseMod.logger.info("CombatResultReplayer apply_power: " + powerId + "→" + target + " x" + amount);
+        } catch (Exception e) {
+            BaseMod.logger.error("CombatResultReplayer apply_power failed (" + powerId + "): " + e.getMessage());
+        }
+    }
+
+    private String toCamelCase(String id) {
+        if (id == null || id.isEmpty()) return id;
+        StringBuilder sb = new StringBuilder();
+        for (String part : id.split("[\\s_\\-]+")) {
+            if (!part.isEmpty()) {
+                sb.append(Character.toUpperCase(part.charAt(0)));
+                if (part.length() > 1) sb.append(part.substring(1).toLowerCase());
+            }
+        }
+        return sb.toString();
     }
 }

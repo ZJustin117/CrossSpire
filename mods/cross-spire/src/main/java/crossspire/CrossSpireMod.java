@@ -12,6 +12,7 @@ import crossspire.combat.QueueManager;
 import crossspire.network.P2PManager;
 import crossspire.network.Protocol;
 import crossspire.ui.LobbyState;
+import com.megacrit.cardcrawl.characters.AbstractPlayer;
 import crossspire.ui.CrossSpireCommand;
 import crossspire.ui.LobbyScreen;
 import crossspire.ui.ServerPicker;
@@ -31,6 +32,7 @@ public class CrossSpireMod {
     public static boolean startedGame = false;
     public static String lastStartedChar = "IRONCLAD";
     public static String lastStartedSeed = "";
+    public static AbstractPlayer localPlayer = null;
 
     public static void initialize() {
         BaseMod.logger.info("CrossSpire mod initialized");
