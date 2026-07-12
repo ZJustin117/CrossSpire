@@ -83,3 +83,40 @@
 - **测试**: vitest (TS), MTS 加载 + 日志验证 (Java)
 - **协议**: JSON over WebSocket, type + subtype 模式
 - **部署**: adb push + MTS mods_library
+
+## 2026-07-12: 引用系统 + 完整管道验证
+
+### Phase B: 引用系统 (reference/)
+- **ContentValidator.java**: SHA-256 资源哈希校验 (card/relic/power)
+- **Reference.java**: 抽象基类: refId/ownerId/type(LOCAL/REMOTE/NULL)
+- **LocalReference.java**: 直接 UseCardAction + EventSuppression + 广播
+- **RemoteReference.java**: invoke → P2P relay → 30s等待invoke_result → 广播
+- **NullReference.java**: 不可达处理 + tryDegrade (ContentValidator回退)
+- **ReferenceFactory.java**: 路由: self→LOCAL, P2P直连→REMOTE, relay→REMOTE, 离线→NULL
+- QueueManager.checkHead 已完全替换为 Reference 路由 (移除旧 ownerId 判断)
+- LocalCapturePatches 增加 ContentValidator resource_hash
+- MessageRouter 增加 invoke/invoke_result 路由
+
+### Phase 3: 完整战斗管道验证
+**双设备端到端测试 (D1 IRONCLAD + D2 DEFECT, seed=220644)**
+
+| # | 节点 | D1 验证 | D2 验证 |
+|---|------|---------|---------|
+| 1 | MessageRouter routing | ✅ `queue_packet routing` | ✅ |
+| 2 | QueueManager.onQueuePacket | ✅ `received packet: Strike_R` | ✅ `received packet: Defend_R` |
+| 3 | ReferenceFactory.createCardRef | ✅ `refType=LOCAL owner=9cbe870e` | ✅ |
+| 4 | Reference.dereference | ✅ `LOCAL dereference: Strike_R` | ✅ `LOCAL dereference: Defend_R` |
+| 5 | QueueManager dequeue | ✅ packet removed | ✅ |
+| 6 | broadcast queue_complete | ✅ `broadcast queue_complete: Strike_R` | ✅ |
+| 7 | Observer received COMPLETE | ✅ `COMPLETE #1: card:Strik` | ✅ `COMPLETE #2: card:Defen` |
+| 8 | CombatResultReplayer | — | ✅ `CombatResultReplayer fallback: effects=1` |
+| 9 | REMOTE reference 路由 | ✅ `REMOTE dereference: Defend_R → 0138e8aa direct=true` | ✅ P2P直连 |
+| 10 | 远程设备同步 | — | ✅ `queue_packet parsed: Bash by 9cbe870e` |
+
+**全 10 节点通过。**
+
+### 最终项目统计
+- Java 源文件: 34
+- TypeScript 源文件: 6
+- vitest 测试: 19 passing
+- Git 提交: 14 个 feature commits
