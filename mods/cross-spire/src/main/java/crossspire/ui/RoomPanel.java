@@ -18,29 +18,20 @@ public class RoomPanel implements PostRenderSubscriber, PostUpdateSubscriber {
 
     private Texture whitePixel;
 
-    private static final float X, Y, ROW_H, BTN_W, BTN_H;
-    private static final Color BG = new Color(0.0F, 0.0F, 0.1F, 0.75F);
-    private static final Color BTN_BG = new Color(0.2F, 0.3F, 0.4F, 0.85F);
-    private static final Color BTN_HOVER = new Color(0.3F, 0.5F, 0.6F, 0.9F);
-    private static final Color BTN_PRESS = new Color(0.5F, 0.7F, 0.8F, 1.0F);
-    private static final Color BTN_GREEN = new Color(0.15F, 0.5F, 0.2F, 0.85F);
-    private static final Color BTN_ORANGE = new Color(0.6F, 0.4F, 0.1F, 0.85F);
-    private static final Color BTN_RED = new Color(0.6F, 0.15F, 0.15F, 0.85F);
-    private static final Color TITLE_COLOR = new Color(0.95F, 0.8F, 0.1F, 1.0F);
-    private static final Color WHITE = new Color(1, 1, 1, 1);
-    private static final Color CYAN = new Color(0.3F, 0.8F, 0.9F, 1.0F);
-    private static final Color GREEN = new Color(0.2F, 0.8F, 0.2F, 1.0F);
-    private static final Color RED = new Color(0.8F, 0.2F, 0.2F, 1.0F);
+    private static final Color BG         = new Color(0.0F, 0.0F, 0.15F, 0.8F);
+    private static final Color BTN_BG     = new Color(0.2F, 0.3F, 0.4F, 0.85F);
+    private static final Color BTN_HOVER  = new Color(0.3F, 0.55F, 0.65F, 0.9F);
+    private static final Color BTN_PRESS  = new Color(0.5F, 0.75F, 0.85F, 1.0F);
+    private static final Color BTN_GREEN  = new Color(0.15F, 0.55F, 0.2F, 0.85F);
+    private static final Color BTN_ORANGE = new Color(0.65F, 0.4F, 0.1F, 0.85F);
+    private static final Color BTN_RED    = new Color(0.6F, 0.15F, 0.15F, 0.85F);
+    private static final Color TITLE_C    = new Color(0.95F, 0.8F, 0.05F, 1.0F);
+    private static final Color WHITE_C    = Color.WHITE;
+    private static final Color CYAN_C     = new Color(0.3F, 0.85F, 0.9F, 1.0F);
+    private static final Color GREEN_C    = new Color(0.2F, 0.85F, 0.2F, 1.0F);
+    private static final Color RED_C      = new Color(0.85F, 0.2F, 0.2F, 1.0F);
 
     private String selectedCharacter = "IRONCLAD";
-
-    static {
-        X = 20.0F * Settings.xScale;
-        Y = Settings.HEIGHT - 60.0F * Settings.yScale;
-        ROW_H = 24.0F * Settings.yScale;
-        BTN_W = 140.0F * Settings.xScale;
-        BTN_H = 28.0F * Settings.yScale;
-    }
 
     public RoomPanel() {
         BaseMod.subscribe(this);
@@ -62,144 +53,132 @@ public class RoomPanel implements PostRenderSubscriber, PostUpdateSubscriber {
         ensureTexture();
         if (whitePixel == null) return;
 
-        float y = Y;
+        float sx = Math.max(Settings.xScale, 1);
+        float sy = Math.max(Settings.yScale, 1);
 
-        // background panel
-        float panelH = 380 * Settings.yScale;
+        float x   = 30.0F * sx;
+        float y   = Settings.HEIGHT - 30.0F * sy;
+        float rh  = 22.0F * sy;
+        float bw  = 145.0F * sx;
+        float bh  = 26.0F * sy;
+
+        float panelW = 295.0F * sx;
+        float panelH = 270.0F * sy;
         sb.setColor(BG);
-        sb.draw(whitePixel, X - 8, y - panelH, 280 * Settings.xScale, panelH);
+        sb.draw(whitePixel, x - 12, y + 12 - panelH, panelW, panelH);
         sb.setColor(Color.WHITE);
 
-        y -= 8;
+        y -= 4;
         FontHelper.renderFontLeftTopAligned(sb, FontHelper.cardTitleFont,
-            "CrossSpire Lobby", X, y, TITLE_COLOR);
-        y -= ROW_H + 4;
+            "CrossSpire Lobby", x, y, TITLE_C);
+        y -= rh + 6;
 
         boolean connected = CrossSpireMod.isConnected();
         FontHelper.renderFontLeftTopAligned(sb, FontHelper.tipBodyFont,
-            "Status: " + (connected ? "Connected" : "Disconnected"),
-            X, y, connected ? GREEN : RED);
-        y -= ROW_H;
+            connected ? "[ Connected ]" : "[ Disconnected ]", x, y, connected ? GREEN_C : RED_C);
+        y -= rh;
 
         String pid = CrossSpireMod.playerId;
         FontHelper.renderFontLeftTopAligned(sb, FontHelper.tipBodyFont,
-            "Player: " + (pid.isEmpty() ? "(none)" : pid.substring(0, 8)), X, y, Color.WHITE);
-        y -= ROW_H;
+            "Player: " + (pid.isEmpty() ? "(none)" : (pid.length() >= 8 ? pid.substring(0, 8) : pid)), x, y, WHITE_C);
+        y -= rh;
 
         FontHelper.renderFontLeftTopAligned(sb, FontHelper.tipBodyFont,
-            "Room: " + ServerPicker.roomCode, X, y, CYAN);
-        y -= ROW_H + 4;
+            "Room: " + ServerPicker.roomCode, x, y, CYAN_C);
+        y -= rh + 6;
 
-        // --- Connect / Disconnect buttons ---
-        if (!connected) {
-            drawButton(sb, "Connect to Relay", X, y, BTN_W, BTN_H, BTN_GREEN);
-        } else {
-            drawButton(sb, "Disconnect", X, y, BTN_W, BTN_H, BTN_RED);
-        }
-        y -= BTN_H + 4;
+        drawBtn(sb, connected ? "Disconnect" : "Connect to Relay", x, y, bw, bh, connected ? BTN_RED : BTN_GREEN);
+        y -= bh + 6;
 
-        // --- Character selection ---
-        FontHelper.renderFontLeftTopAligned(sb, FontHelper.tipBodyFont,
-            "Character:", X, y, Color.WHITE);
-        y -= ROW_H;
+        FontHelper.renderFontLeftTopAligned(sb, FontHelper.tipBodyFont, "Character:", x, y, WHITE_C);
+        y -= rh;
         String[] chars = {"IRONCLAD", "THE_SILENT", "DEFECT", "WATCHER"};
-        float cx = X;
+        float cx = x;
         for (String ch : chars) {
-            Color btnColor = ch.equals(selectedCharacter) ? BTN_ORANGE : BTN_BG;
-            float charW = FontHelper.getWidth(FontHelper.tipBodyFont, ch, 1.0F) + 20;
-            drawButton(sb, ch, cx, y, charW, BTN_H - 4, btnColor);
-            cx += charW + 6;
-            if (cx > X + 260 * Settings.xScale) break;
+            boolean sel = ch.equals(selectedCharacter);
+            float cw = FontHelper.getWidth(FontHelper.tipBodyFont, ch, 1.0F) * 1.5F + 14;
+            drawBtn(sb, ch, cx, y, cw, bh - 3, sel ? BTN_ORANGE : BTN_BG);
+            cx += cw + 4;
         }
-        y -= BTN_H + 2;
+        y -= bh + 2;
 
-        // --- Ready / Start buttons ---
-        drawButton(sb, "Ready", X, y, BTN_W / 2 - 4, BTN_H, BTN_ORANGE);
-        drawButton(sb, "Start Game", X + BTN_W / 2 + 4, y, BTN_W / 2 - 4, BTN_H, BTN_GREEN);
-        y -= BTN_H + 6;
+        drawBtn(sb, "Ready", x, y, bw * 0.45F, bh, BTN_ORANGE);
+        drawBtn(sb, "Start Game", x + bw * 0.48F, y, bw * 0.52F, bh, BTN_GREEN);
+        y -= bh + 8;
 
-        // --- Remote player list ---
         int count = RemotePlayerRegistry.count();
-        FontHelper.renderFontLeftTopAligned(sb, FontHelper.tipBodyFont,
-            "Remote (" + count + "):", X, y, CYAN);
-        y -= ROW_H;
+        FontHelper.renderFontLeftTopAligned(sb, FontHelper.tipBodyFont, "Remote (" + count + ")", x, y, CYAN_C);
+        y -= rh;
         for (RemotePlayerState rp : RemotePlayerRegistry.all()) {
-            String info = "  " + rp.playerId.substring(0, 8);
+            String info = rp.playerId.substring(0, 8);
             if (rp.characterClass != null && !rp.characterClass.isEmpty()) info += " " + rp.characterClass;
-            info += " " + rp.hp + "/" + rp.maxHp;
-            FontHelper.renderFontLeftTopAligned(sb, FontHelper.tipBodyFont, info, X, y, Color.WHITE);
-            y -= ROW_H;
+            info += " HP:" + rp.hp + "/" + rp.maxHp;
+            FontHelper.renderFontLeftTopAligned(sb, FontHelper.tipBodyFont, info, x + 8, y, WHITE_C);
+            y -= rh;
         }
+
+        sb.setColor(Color.WHITE);
     }
 
-    private void drawButton(SpriteBatch sb, String text, float x, float y, float w, float h, Color color) {
+    private void drawBtn(SpriteBatch sb, String text, float x, float y, float w, float h, Color bc) {
         float mx = InputHelper.mX;
         float my = InputHelper.mY;
         boolean hover = mx >= x && mx <= x + w && my <= y && my >= y - h;
+        Color c = hover ? (InputHelper.isMouseDown ? BTN_PRESS : BTN_HOVER) : bc;
 
-        Color drawColor = hover ? (InputHelper.isMouseDown ? BTN_PRESS : BTN_HOVER) : color;
-        sb.setColor(drawColor);
+        sb.setColor(c);
         sb.draw(whitePixel, x, y - h, w, h);
         sb.setColor(Color.WHITE);
 
-        FontHelper.renderFontLeftTopAligned(sb, FontHelper.tipBodyFont,
-            text, x + 6, y - 6, WHITE);
+        FontHelper.renderFontLeftTopAligned(sb, FontHelper.tipBodyFont, text, x + 6, y - 5, Color.WHITE);
     }
 
     @Override
     public void receivePostUpdate() {
         if (!InputHelper.justClickedLeft) return;
 
+        float sx = Math.max(Settings.xScale, 1);
+        float sy = Math.max(Settings.yScale, 1);
+        if (sx <= 0 || sy <= 0) return;
+
         float mx = InputHelper.mX;
         float my = InputHelper.mY;
-        float y = Y;
+        float x  = 30.0F * sx;
+        float y  = Settings.HEIGHT - 30.0F * sy;
+        float rh = 22.0F * sy;
+        float bw = 145.0F * sx;
+        float bh = 26.0F * sy;
 
-        // skip title + status + player + room (4 rows + 4 padding)
-        y -= 8 + ROW_H + 4 + ROW_H * 3 + 4;
+        y -= 4 + rh + 6 + rh * 2 + 6;
 
-        // Connect / Disconnect button
-        if (clickInRect(mx, my, X, y, BTN_W, BTN_H)) {
-            boolean connected = CrossSpireMod.isConnected();
-            if (!connected) {
-                CrossSpireMod.connect();
-            } else {
-                CrossSpireMod.disconnect();
-            }
+        if (inRect(mx, my, x, y, bw, bh)) {
+            if (CrossSpireMod.isConnected()) CrossSpireMod.disconnect();
+            else CrossSpireMod.connect();
             return;
         }
-        y -= BTN_H + 4;
+        y -= bh + 6;
 
-        // "Character:" row
-        y -= ROW_H;
-
-        // Character selection buttons
+        y -= rh;
         String[] chars = {"IRONCLAD", "THE_SILENT", "DEFECT", "WATCHER"};
-        float cx = X;
+        float cx = x;
         for (String ch : chars) {
-            float charW = FontHelper.getWidth(FontHelper.tipBodyFont, ch, 1.0F) + 20;
-            if (clickInRect(mx, my, cx, y, charW, BTN_H - 4)) {
-                selectedCharacter = ch;
-                return;
-            }
-            cx += charW + 6;
+            float cw = FontHelper.getWidth(FontHelper.tipBodyFont, ch, 1.0F) * 1.5F + 14;
+            if (inRect(mx, my, cx, y, cw, bh - 3)) { selectedCharacter = ch; return; }
+            cx += cw + 4;
         }
-        y -= BTN_H + 2;
+        y -= bh + 2;
 
-        // Ready button
-        if (clickInRect(mx, my, X, y, BTN_W / 2 - 4, BTN_H)) {
+        if (inRect(mx, my, x, y, bw * 0.45F, bh)) {
             CrossSpireMod.lobbyState.markLocalReady(selectedCharacter);
             return;
         }
-
-        // Start Game button
-        if (clickInRect(mx, my, X + BTN_W / 2 + 4, y, BTN_W / 2 - 4, BTN_H)) {
-            String seed = String.valueOf(System.currentTimeMillis() % 900000 + 100000);
-            crossspire.remote.GameStarter.start(selectedCharacter, seed);
-            return;
+        if (inRect(mx, my, x + bw * 0.48F, y, bw * 0.52F, bh)) {
+            crossspire.remote.GameStarter.start(selectedCharacter,
+                String.valueOf(System.currentTimeMillis() % 900000 + 100000));
         }
     }
 
-    private boolean clickInRect(float mx, float my, float x, float y, float w, float h) {
+    private boolean inRect(float mx, float my, float x, float y, float w, float h) {
         return mx >= x && mx <= x + w && my <= y && my >= y - h;
     }
 }
