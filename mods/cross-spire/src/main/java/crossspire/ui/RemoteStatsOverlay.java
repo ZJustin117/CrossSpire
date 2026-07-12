@@ -124,7 +124,7 @@ public class RemoteStatsOverlay implements PostRenderSubscriber {
             int amt = i < rp.powerAmounts.length ? rp.powerAmounts[i] : 1;
             String text = iconName(powerName) + (amt > 1 ? "x" + amt : "");
 
-            float textW = FontHelper.getSmartWidth(FontHelper.tipBodyFont, text, 9999, 1) + pad * 4;
+            float textW = FontHelper.getWidth(FontHelper.tipBodyFont, text, 1.0F) + pad * 4;
             float textH = iconH;
 
             sb.setColor(powerName.toLowerCase().contains("vulnerable") || powerName.toLowerCase().contains("weak") || powerName.toLowerCase().contains("frail") ? DEBUFF_TEXT : BUFF_TEXT);
