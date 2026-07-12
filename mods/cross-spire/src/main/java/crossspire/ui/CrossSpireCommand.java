@@ -8,6 +8,7 @@ import crossspire.CrossSpireMod;
 import crossspire.network.Protocol;
 import crossspire.remote.RemotePlayerRegistry;
 import crossspire.remote.RemotePlayerState;
+import crossspire.ui.QueueDisplay;
 
 public class CrossSpireCommand extends ConsoleCommand {
 
@@ -26,6 +27,8 @@ public class CrossSpireCommand extends ConsoleCommand {
             cmdReady(tokens, depth);
         } else if ("start".equals(sub)) {
             cmdStart(tokens, depth);
+        } else if ("queue".equals(sub)) {
+            QueueDisplay.show();
         } else {
             errorMsg();
         }

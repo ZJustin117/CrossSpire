@@ -7,6 +7,7 @@ import crossspire.network.RelayClient;
 import crossspire.remote.RemoteRenderer;
 import crossspire.sync.MessageRouter;
 import crossspire.sync.SyncExecutor;
+import crossspire.combat.CombatResultReplayer;
 import crossspire.combat.QueueManager;
 import crossspire.network.P2PManager;
 import crossspire.network.Protocol;
@@ -38,7 +39,7 @@ public class CrossSpireMod {
         queueManager = new QueueManager();
         p2pManager = new P2PManager();
         lobbyState = new LobbyState();
-        messageRouter = new MessageRouter(new SyncExecutor(), queueManager);
+        messageRouter = new MessageRouter(new SyncExecutor(), queueManager, new CombatResultReplayer());
         lobbyScreen = new LobbyScreen();
         lobbyScreen.hide();
         ConsoleCommand.addCommand("crossspire", CrossSpireCommand.class);

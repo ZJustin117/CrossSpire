@@ -3,8 +3,10 @@ package crossspire.sync;
 import basemod.BaseMod;
 import com.google.gson.JsonObject;
 import crossspire.CrossSpireMod;
+import crossspire.combat.CombatResultReplayer;
 import crossspire.combat.QueueManager;
 import crossspire.network.Protocol;
+import crossspire.ui.QueueDisplay;
 import crossspire.resource.RemoteResourceManager;
 import crossspire.resource.ResourceRegistryTracker;
 
@@ -12,10 +14,12 @@ public class MessageRouter {
 
     private final SyncExecutor syncExecutor;
     private final QueueManager queueManager;
+    private final CombatResultReplayer resultReplayer;
 
-    public MessageRouter(SyncExecutor syncExecutor, QueueManager queueManager) {
+    public MessageRouter(SyncExecutor syncExecutor, QueueManager queueManager, CombatResultReplayer resultReplayer) {
         this.syncExecutor = syncExecutor;
         this.queueManager = queueManager;
+        this.resultReplayer = resultReplayer;
     }
 
     public void route(String rawMessage) {
@@ -34,13 +38,15 @@ public class MessageRouter {
                 Protocol.QueuePacket pkt = Protocol.GSON.fromJson(rawMessage, Protocol.QueuePacket.class);
                 BaseMod.logger.info("MessageRouter queue_packet parsed: " + pkt.cardId + " by " + pkt.senderId.substring(0,8));
                 queueManager.onQueuePacket(pkt);
+                QueueDisplay.onPacket(pkt);
             } catch (Exception e) {
                 BaseMod.logger.error("MessageRouter queue_packet parse error: " + e.getMessage());
             }
         } else if ("queue_complete".equals(type)) {
             Protocol.QueueComplete complete = Protocol.GSON.fromJson(rawMessage, Protocol.QueueComplete.class);
             queueManager.onQueueComplete(complete);
-            syncExecutor.handleSync("combat_result", null, 1, rawMessage);
+            QueueDisplay.onComplete(complete.packetId);
+            resultReplayer.handleCombatResult(rawMessage);
         } else if ("player_state".equals(type)) {
             syncExecutor.handleSync("remote_player", null, 1, rawMessage);
         } else if ("stage_sync".equals(type)) {
