@@ -22,6 +22,10 @@ public class RemoteStatsOverlay implements PostRenderSubscriber {
     private static final Color HP_YELLOW = new Color(0.9F, 0.8F, 0.1F, 0.9F);
     private static final Color HP_RED = new Color(0.8F, 0.1F, 0.1F, 0.9F);
     private static final Color BLOCK_COLOR = new Color(0.3F, 0.6F, 0.9F, 1.0F);
+    private static final Color BUFF_BG = new Color(0.15F, 0.15F, 0.25F, 0.8F);
+    private static final Color BUFF_TEXT = new Color(0.7F, 0.9F, 0.3F, 1.0F);
+    private static final Color DEBUFF_TEXT = new Color(0.9F, 0.3F, 0.3F, 1.0F);
+    private static final Color CHAR_COLOR = new Color(0.9F, 0.8F, 0.2F, 1.0F);
 
     public RemoteStatsOverlay() {
         BaseMod.subscribe(this);
@@ -56,21 +60,24 @@ public class RemoteStatsOverlay implements PostRenderSubscriber {
         float hpBarW = 120.0F * Settings.xScale;
         float hpBarH = 10.0F * Settings.yScale;
         float lineH = 20.0F * Settings.yScale;
-        float lineHMini = 16.0F * Settings.yScale;
+        float iconSize = 14.0F * Settings.yScale;
 
         float y = panelY;
         FontHelper.renderFontLeftTopAligned(sb, FontHelper.cardTitleFont, "Remote", panelX, y, Color.YELLOW);
         y -= lineH;
 
         for (RemotePlayerState rp : RemotePlayerRegistry.all()) {
-            y = drawPlayerRow(sb, rp, panelX, y, hpBarW, hpBarH, lineH, lineHMini, lineH);
+            y = drawPlayerRow(sb, rp, panelX, y, hpBarW, hpBarH, lineH, iconSize);
         }
     }
 
     private float drawPlayerRow(SpriteBatch sb, RemotePlayerState rp, float x, float y,
-                                 float barW, float barH, float lineH, float lineHMini, float spacing) {
+                                 float barW, float barH, float lineH, float iconH) {
         String label = rp.playerId.substring(0, 8);
-        FontHelper.renderFontLeftTopAligned(sb, FontHelper.tipBodyFont, label, x, y, Color.WHITE);
+        if (rp.characterClass != null && !rp.characterClass.isEmpty()) {
+            label += " (" + rp.characterClass + ")";
+        }
+        FontHelper.renderFontLeftTopAligned(sb, FontHelper.tipBodyFont, label, x, y, CHAR_COLOR);
         y -= lineH;
 
         float ratio = rp.maxHp > 0 ? (float) rp.hp / rp.maxHp : 0;
@@ -93,7 +100,60 @@ public class RemoteStatsOverlay implements PostRenderSubscriber {
             sb.setColor(barColor);
         }
         FontHelper.renderFontLeftTopAligned(sb, FontHelper.tipBodyFont, hpText, x + barW + 4, y, sb.getColor());
+        y -= barH + 4;
 
-        return y - barH - 4;
+        if (rp.powers != null && rp.powers.length > 0) {
+            y = drawBuffRow(sb, rp, x, y, iconH);
+        }
+
+        return y - 4;
+    }
+
+    private float drawBuffRow(SpriteBatch sb, RemotePlayerState rp, float x, float y, float iconH) {
+        float bufX = x;
+        int maxShow = Math.min(rp.powers.length, 6);
+        float pad = 3;
+
+        for (int i = 0; i < maxShow; i++) {
+            String powerName = rp.powers[i];
+            int amt = i < rp.powerAmounts.length ? rp.powerAmounts[i] : 1;
+            String text = iconName(powerName) + (amt > 1 ? "x" + amt : "");
+
+            float textW = FontHelper.getSmartWidth(FontHelper.tipBodyFont, text, 9999, 1) + pad * 4;
+            float textH = iconH;
+
+            sb.setColor(powerName.toLowerCase().contains("vulnerable") || powerName.toLowerCase().contains("weak") || powerName.toLowerCase().contains("frail") ? DEBUFF_TEXT : BUFF_TEXT);
+            sb.setColor(BUFF_BG);
+            sb.draw(whitePixel, bufX, y - textH - 2, textW, textH + 4);
+            sb.setColor(Color.WHITE);
+
+            sb.setColor(powerName.toLowerCase().contains("vulnerable") || powerName.toLowerCase().contains("weak") ? DEBUFF_TEXT : BUFF_TEXT);
+            FontHelper.renderFontLeftTopAligned(sb, FontHelper.tipBodyFont, text, bufX + pad, y - pad / 2, sb.getColor());
+
+            bufX += textW + 4;
+            if (bufX > x + 200) break;
+        }
+
+        return y - iconH - 4;
+    }
+
+    private String iconName(String powerId) {
+        if (powerId == null || powerId.isEmpty()) return "?";
+        if (powerId.length() <= 4) return powerId;
+        StringBuilder sb = new StringBuilder();
+        for (char c : powerId.toCharArray()) {
+            if (sb.length() > 0 && Character.isUpperCase(c)) sb.append(' ');
+            sb.append(c);
+        }
+        String result = sb.toString().trim();
+        String[] words = result.split(" ");
+        if (words.length > 1) {
+            StringBuilder abbr = new StringBuilder();
+            for (String w : words) {
+                if (!w.isEmpty()) abbr.append(Character.toUpperCase(w.charAt(0)));
+            }
+            return abbr.length() > 0 ? abbr.toString() : result.substring(0, Math.min(3, result.length()));
+        }
+        return result.length() > 4 ? result.substring(0, 4) : result;
     }
 }

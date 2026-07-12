@@ -16,6 +16,7 @@ import com.megacrit.cardcrawl.characters.AbstractPlayer;
 import crossspire.ui.CrossSpireCommand;
 import crossspire.ui.LobbyScreen;
 import crossspire.ui.RemoteStatsOverlay;
+import crossspire.ui.RoomPanel;
 import crossspire.ui.ServerPicker;
 import com.google.gson.JsonObject;
 import java.net.URI;
@@ -48,6 +49,7 @@ public class CrossSpireMod {
         ConsoleCommand.addCommand("crossspire", CrossSpireCommand.class);
         new RemoteRenderer();
         new RemoteStatsOverlay();
+        new RoomPanel();
 
         if (ServerPicker.autoConnect) {
             connect();

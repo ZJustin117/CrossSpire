@@ -115,16 +115,37 @@ public class P2PManager {
         hello.port = listenPort;
         hello.source = CrossSpireMod.playerId;
         hello.seq = 1;
+
+        java.util.List<Protocol.MemberInfo> peerList = new java.util.ArrayList<Protocol.MemberInfo>();
+        for (Map.Entry<String, Socket> entry : connections.entrySet()) {
+            Protocol.MemberInfo mi = new Protocol.MemberInfo();
+            mi.id = entry.getKey();
+            mi.ip = "127.0.0.1";
+            mi.port = listenPort;
+            peerList.add(mi);
+        }
+        hello.peers = peerList.toArray(new Protocol.MemberInfo[0]);
+
         CrossSpireMod.relayClient.send(Protocol.GSON.toJson(hello));
-        BaseMod.logger.info("P2PManager sent hello: 127.0.0.1:" + listenPort);
+        BaseMod.logger.info("P2PManager sent hello: 127.0.0.1:" + listenPort + " peers=" + peerList.size());
     }
 
     public void onHelloReceived(String rawMessage) {
         Protocol.HelloMessage hello = Protocol.GSON.fromJson(rawMessage, Protocol.HelloMessage.class);
         if (hello.source == null || hello.source.equals(CrossSpireMod.playerId)) return;
-        if (connections.containsKey(hello.source)) return;
-        BaseMod.logger.info("P2PManager hello from " + hello.source.substring(0, 8) + " @" + hello.ip + ":" + hello.port);
-        connectTo(hello.source, hello.ip, hello.port);
+        if (!connections.containsKey(hello.source)) {
+            BaseMod.logger.info("P2PManager hello from " + hello.source.substring(0, 8) + " @" + hello.ip + ":" + hello.port);
+            connectTo(hello.source, hello.ip, hello.port);
+        }
+
+        if (hello.peers != null) {
+            for (Protocol.MemberInfo peer : hello.peers) {
+                if (peer.id == null || peer.id.equals(CrossSpireMod.playerId)) continue;
+                if (connections.containsKey(peer.id)) continue;
+                BaseMod.logger.info("P2PManager auto-connecting to peer: " + peer.id.substring(0, 8) + " @" + peer.ip + ":" + peer.port);
+                connectTo(peer.id, peer.ip, peer.port);
+            }
+        }
     }
 
     private String readPeerId(Socket socket) {

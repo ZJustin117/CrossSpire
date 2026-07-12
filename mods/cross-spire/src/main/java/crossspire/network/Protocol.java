@@ -60,6 +60,9 @@ public final class Protocol {
         @SerializedName("max_hp") public int maxHp;
         public int block;
         public int energy;
+        @SerializedName("character_class") public String characterClass;
+        public String[] powers;
+        @SerializedName("power_amounts") public int[] powerAmounts;
         public String[] relics;
         public String[] potions;
     }
@@ -82,6 +85,7 @@ public final class Protocol {
         public HelloMessage() { type = "hello"; }
         public String ip;
         public int port;
+        public MemberInfo[] peers;
     }
 
     public static class RoomInfoMessage extends GameMessage {

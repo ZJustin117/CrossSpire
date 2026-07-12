@@ -55,6 +55,19 @@ public class SyncExecutor {
         if (p.has("max_hp")) rp.maxHp = p.get("max_hp").getAsInt();
         if (p.has("block")) rp.block = p.get("block").getAsInt();
         if (p.has("energy")) rp.energy = p.get("energy").getAsInt();
+        if (p.has("character_class")) rp.characterClass = p.get("character_class").getAsString();
+
+        if (p.has("powers") && p.has("power_amounts")) {
+            JsonArray pw = p.getAsJsonArray("powers");
+            JsonArray pa = p.getAsJsonArray("power_amounts");
+            int len = Math.min(pw.size(), pa.size());
+            rp.powers = new String[len];
+            rp.powerAmounts = new int[len];
+            for (int i = 0; i < len; i++) {
+                rp.powers[i] = pw.get(i).getAsString();
+                rp.powerAmounts[i] = pa.get(i).getAsInt();
+            }
+        }
 
         BaseMod.logger.info("SyncExecutor remote_player " + source.substring(0, 8) + " hp=" + rp.hp + " blk=" + rp.block);
     }
