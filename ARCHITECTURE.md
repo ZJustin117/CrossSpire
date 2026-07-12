@@ -4,15 +4,15 @@
 
 1. [设计目标](#设计目标)
 2. [关键术语定义](#关键术语定义)
-3. [核心思想：双角色投影与所有权模型](#核心思想双角色投影与所有权模型)
-4. [就近原则](#就近原则)
-5. [图主权威模型](#图主权威模型)
-6. [待打出队列：战斗流程](#待打出队列战斗流程)
-7. [怪物回合](#怪物回合)
-8. [事件处理](#事件处理)
-9. [双通道协议：Invoke / Sync](#双通道协议invoke--sync)
-10. [BaseMod 事件抑制机制](#basemod-事件抑制机制)
-11. [Mod 兼容性设计：Fallback 效果系统与分层同步](#mod-兼容性设计fallback-效果系统与分层同步)
+3. [核心思想：引用模型与双角色投影](#核心思想引用模型与双角色投影)
+4. [引用系统](#引用系统)
+5. [就近原则](#就近原则)
+6. [图主权威模型](#图主权威模型)
+7. [分布式广播队列：战斗流程](#分布式广播队列战斗流程)
+8. [怪物回合](#怪物回合)
+9. [事件处理](#事件处理)
+10. [Mod 兼容性设计：内容校验与分层引用](#mod-兼容性设计内容校验与分层引用)
+11. [BaseMod 事件抑制机制](#basemod-事件抑制机制)
 12. [素材传递系统](#素材传递系统)
 13. [在线角色：独立 AbstractPlayer 实例与渲染集成](#在线角色独立-abstractplayer-实例与渲染集成)
 14. [RNG 同步策略](#rng-同步策略)
@@ -34,311 +34,355 @@ CrossSpire 是一个开源的杀戮尖塔1联机Mod，目标：
 
 ## 关键术语定义
 
-在深入架构之前，必须精确定义以下关键操作，所有协议和实现都基于这些术语：
-
 | 术语 | 英文 | 定义 |
 |------|------|------|
-| **触发** | Trigger | 行为可被钩子(hook)发现并回调。钩子包括本地钩子(BaseMod事件、SpirePatch等)和远程钩子(通过网络订阅的远端事件) |
-| **同步** | Sync | 将计算结果和渲染特效从一方传递到另一方，**接收方不触发任何钩子**。用于状态镜像，而非因果传播 |
-| **调用** | Invoke | 一方将信息传递给另一方，由被调用方在**自身的Player对象处**执行逻辑、渲染、触发钩子。调用完成后，被调用方将结果**同步**给调用方。调用方和被调用方可以是同一实体（就近原则：图主调用自己退化为纯本地操作） |
-| **所有者** | Owner | 某个游戏元素（卡牌、遗物、药水、人物、怪物、地图等）的拥有者，掌握该元素的完整信息和执行逻辑，允许被其他玩家调用 |
-| **图主** | Stage Host | 当前阶段（Act + Floor）地图的拥有者，由所有成员投票选定。图主拥有怪物、事件和地图的完整权威，负责编排所有非玩家本地的执行 |
-| **待打出队列** | Pending Play Queue | 图主维护的FIFO队列，存放玩家提交的待处理卡牌。队列中的牌按先进先出顺序处理，前一张的效果完全计算并同步完毕后才处理下一张 |
+| 引用 | Reference | 对任意可执行对象（卡牌/遗物/怪物/玩家/地图等）的统一抽象，封装了【所有者是谁】和【如何到达它】。`本地引用` = 对象在本地且内容校验通过，可直接执行；`远程引用` = 对象在远端机器上，解引用时通过网络调用。上层 API 对本地/远程引用透明 |
+| 解引用 | Dereference | 调用引用指向的对象，执行其逻辑，并同步结果。本地解引用退化为直接方法调用；远程解引用走网络调用 → 等待结果 → 同步 |
+| 本地引用 | Local Reference | 对象在本地存在且内容校验通过。解引用 = 直接调用，无网络开销 |
+| 远程引用 | Remote Reference | 对象在远端机器上。解引用 = 网络调用所有者 → 执行 → 回传结果 |
+| 空引用 | Null Reference | 远程引用不再可达（所有者掉线或断开）。解引用失败，需引用退化或引用转移 |
+| 引用退化 | Reference Degradation | 远程引用 → 本地引用。当本地获得对象完整定义（下载完成、内容校验通过）后降级为本地执行 |
+| 引用转移 | Reference Migration | 改变远程引用的指向源（如原所有者掉线后切换到备份源），用于处理空引用 |
+| 广播 | Broadcast | 向房间内所有成员发送消息。用于同步分布式队列、宣告新玩家、交换IP、心跳保活等 |
+| 内容校验 | Content Validation | 同名类/方法不等同于相同类/方法。通过内容哈希比对判定两个实体是否真正一致。对同 Mod 不同版本隔离有关键意义 |
+| 图主 | Stage Host | 当前阶段（Act + Floor）地图/事件/怪物的**强所有者**。其他人只能对此建立远程引用（不允许本地引用）。由所有成员投票选定 |
+| 标准包 | Standard Packet | 待打出卡牌队列中的一项，包含 `{packet_id, sender_id, owner_id, timestamp, card_id, resource_hash, target}`。所有人收到后插入本地排序队列 |
 
-### 操作关系图
+### 操作关系
 
 ```
-触发 (Trigger):   Action ──→ Hook (local or remote)
-同步 (Sync):      Owner A ──→ Player B   [B does NOT trigger any hooks]
-调用 (Invoke):    Caller ──→ Owner ──→ Owner executes locally ──→ Sync result back to Caller
+远程引用解引用:
+  A 持有指向 B 对象的远程引用
+    → A 调用 ref.dereference(args)
+    → 引用系统识别为 REMOTE
+    → 网络调用 B → B 本地执行 → B 回传结果
+    → A 收到结果 → 渲染
+
+本地引用解引用:
+  A 持有指向自己对象的本地引用
+    → A 调用 ref.dereference(args)
+    → 引用系统识别为 LOCAL
+    → 直接调用，零网络往返
+
+交叉引用示例:
+  A 打出 B 的远程卡牌 → 解引用 → 网络调用 B → B 执行
+  B 的卡牌效果触发 A 的本地遗物 → A 的遗物是本地引用 → A 本地直接生效
 ```
 
-触发与同步/调用的核心区别：**触发是一个动作"是否被钩子发现"的开关属性；同步和调用是"执行权和数据流向"的编排模式。**
-
-## 核心思想：双角色投影与所有权模型
+## 核心思想：引用模型与双角色投影
 
 每台机器上有**两种角色**：
 
 ```
 机器A                                    机器B
-┌──────────────────────┐                ┌──────────────────────┐
-│ 本地角色 (Player A)   │                │ 本地角色 (Player B)   │
-│ • 完整本地引擎执行      │                │ • 完整本地引擎执行      │
-│ • 玩家实际操作的角色    │                │ • 玩家实际操作的角色    │
-│ • 本机Mod生效          │                │ • 本机Mod生效          │
-│ • 卡牌/遗物/药水的所有者 │                │ • 卡牌/遗物/药水的所有者 │
-├──────────────────────┤                ├──────────────────────┤
-│ 在线角色 (Player B投影) │◄──投影───►    │ 在线角色 (Player A投影) │
-│ • 独立 AbstractPlayer  │               │ • 独立 AbstractPlayer  │
-│ • 接收B的状态同步       │               │ • 接收A的状态同步       │
-│ • 纯渲染+状态镜像       │               │ • 纯渲染+状态镜像       │
-│ • 不触发本地钩子        │               │ • 不触发本地钩子        │
-└──────────────────────┘                └──────────────────────┘
+┌──────────────────────────┐            ┌──────────────────────────┐
+│ 本地角色 (Player A)       │            │ 本地角色 (Player B)       │
+│ • 玩家操作的实体           │            │ • 玩家操作的实体           │
+│ • 对自身卡牌/遗物持有      │            │ • 对自身卡牌/遗物持有      │
+│   本地引用                │            │   本地引用                │
+├──────────────────────────┤            ├──────────────────────────┤
+│ 在线角色 (Player B投影)    │◄──引用───►│ 在线角色 (Player A投影)    │
+│ • 纯渲染镜像              │            │ • 纯渲染镜像              │
+│ • 持有指向B对象的远程引用   │            │ • 持有指向A对象的远程引用   │
+│ • 解引用耗时 = 网络RTT    │            │ • 解引用耗时 = 网络RTT    │
+└──────────────────────────┘            └──────────────────────────┘
 ```
 
 **核心原则**：
-- 在线角色是**渲染和状态镜像**——它活在本地游戏循环中，拥有手牌、遗物、能力、格挡值的外观副本，能被UI渲染，但其状态由远端"所有者机器"通过同步写入，**不触发任何钩子**。
-- 执行权归属**所有者**——每张卡牌、每个遗物的效果计算由拥有该元素的玩家机器执行。图主是调度者，不是执行者（除非图主本身就是该元素的所有者）。
+- 在线角色是渲染和状态镜像——状态由远端所有者通过解引用写入，不自行触发钩子
+- 执行权归属所有者——解引用永远在所有者机器上执行逻辑
+- 引用系统封装网络复杂性——上层代码不区分本地/远程，只调用 `ref.dereference()`
+
+## 引用系统
+
+### 引用数据结构
+
+```typescript
+interface Reference<T> {
+  refId: string;             // 对象唯一标识 (如 "card:Strike_R@playerA")
+  ownerId: string;           // 所有者机器 ID
+  type: "LOCAL" | "REMOTE" | "NULL";
+  remoteAddr?: { ip: string; port: number };  // 远程引用目标地址
+  resourceHash?: string;     // 内容校验哈希
+  dereference(args: any): Result<T>;           // 执行逻辑(跨网络透明)
+  tryDegrade(): boolean;     // 尝试引用退化
+  tryMigrate(): boolean;     // 尝试引用转移
+}
+```
+
+### 解引用流程
+
+```
+ref.dereference(args):
+  │
+  ├─ type == LOCAL
+  │     → 本地直接调用对象逻辑
+  │     → 触发本地钩子 (BaseMod 事件等)
+  │     → 返回 Result
+  │
+  ├─ type == REMOTE
+  │     → 通过网络向 ownerId 发送 invoke 请求
+  │     → owner 本地执行 → 回传结果
+  │     → 本地渲染结果，不触发钩子
+  │     → 返回 Result
+  │
+  └─ type == NULL
+        → tryDegrade()     // 本地是否已有完整定义？
+        → tryMigrate()     // 是否有其他节点持有副本？
+        → 都失败 → 抛出空引用异常，界面显示不可达
+```
+
+### 引用生命周期
+
+```
+创建 → 远程引用 (网络 invoke)
+   │
+   ├─ 下载完整定义 → 内容校验通过 → 引用退化 → 本地引用 (直接调用)
+   │
+   ├─ 所有者掉线 → 空引用
+   │     ├─ 引用转移 → 新的远程引用 (指向备份源)
+   │     └─ 引用退化 → 本地引用 (若本地已缓存)
+   │
+   └─ 对象销毁 (卡牌消耗/怪物死亡) → 引用析构
+```
+
+### 接口触发
+
+引用可以指定在什么接口（事件钩子）下触发：
+
+```
+Reference<Card> cardRef;
+cardRef.triggerOn("onCardUse");     // 当卡牌被打出时触发解引用
+cardRef.triggerOn("onExhaust");     // 当卡牌被消耗时触发解引用
+
+Reference<Relic> relicRef;
+relicRef.triggerOn("atBattleStart"); // 战斗开始时触发
+relicRef.triggerOn("onPlayerDamaged"); // 玩家受伤时触发
+```
+
+基于 BaseMod 事件体系注册引用触发器。远程遗物可被本地卡牌触发（本地卡牌打出发出事件 → 远程遗物引用收到事件 → 解引用 → 网络调用所有者），远程卡牌也可触发仅在本地的遗物（本地遗物是本地引用，直接在本地生效）。
 
 ## 就近原则
 
-> 能本地处理就本地处理，不行才由远程所有者处理。
-
-### 计算所有权
-
-| 元素 | 所有者 | 谁执行 |
-|------|--------|--------|
-| 卡牌效果 | 卡牌所在机器的玩家 | 所有者本地执行，触发本地钩子 |
-| 遗物被动效果 | 遗物所在机器的玩家 | 所有者本地执行 |
-| 怪物行为（AI、伤害） | 图主 | 图主本地执行（怪物所有者=图主） |
-| 地图/事件 | 图主 | 图主本地执行 |
-| 药水效果 | 药水所在机器的玩家 | 所有者本地执行 |
-| RNG 抽取 | 图主 | 图主用共享种子执行 |
-
-### 调用链优化
-
-当调用方和被调用方是同一实体时（例如图主打出自己拥有的卡牌），"网络调用"退化为纯本地操作，零延迟走最短路径。这是就近原则的自然延伸。
-
-### 分层同步
-
-卡牌所有者执行完毕后，图主将结果同步给其他玩家时采用分层策略：
+引用系统自动保证就近执行：
 
 ```
-接收方本地有该卡牌定义？
-  ├─ 是 → 操作重放（接收方用本地引擎重放卡牌，引擎自动产生 VFX、动画等）
-  │       suppressEvents 包裹，不触发钩子
-  └─ 否 → 纯数值同步（应用 fallback 效果数值 + 手动渲染通用 VFX）
-          接收方只需要理解效果类型（damage/block/power 等），不需要理解原卡牌
+解引用路径选择:
+
+  reference.dereference()
+    │
+    ├─ 对象在本地且内容校验通过 → 本地引用 → 直接执行
+    │   例: A 打出自己拥有的 Strike_R
+    │
+    ├─ 对象在远端 → 远程引用 → 网络调用所有者
+    │   例: A 打出 B 的 Mod 卡牌 → 调用 B 执行
+    │
+    └─ 远程引用不可达 → 空引用
+         ├─ 尝试引用退化 (本地是否已有完整定义?)
+         └─ 尝试引用转移 (是否有备份源?)
 ```
 
-这与现有 fallback 系统一致，只在同步时机上做了分层决策。
+交叉引用就近执行优势：
+- B 的远程卡牌触发 A 的本地遗物 → A 本地遗物是本地引用 → A 直接生效，无网络往返
+- A 打出 B 的远程卡牌 → 解引用 → 调用 B → B 本地钩子触发（B 的 Mod 正常运作）
+- 引用的所有者就是执行者：计算永远发生在所有者的机器上
 
 ## 图主权威模型
 
-图主不是固定的"房主"，而是按**阶段(Stage)** 选定的逻辑角色。每进入一个新阶段时，所有成员投票选定图主。被选中的玩家成为当前阶段的**地图、怪物和事件的所有者**。
+图主按阶段投票选定，仅掌管三类对象：**地图、事件、怪物**。
 
-### 图主的三重职责
+### 图主职责
 
 ```
 1. 地图权威
-   • 生成当前阶段地图（用共享种子）→ 同步给所有人覆盖其原有地图
-   • 进入房间时，由图主的决定房间函数确定房间类型及内容：
+   • 用共享种子生成当前阶段地图 → 广播给所有人
+   • 进入房间时决定房间类型和内容
      - 战斗 → 图主统一怪物配置
      - 事件 → 图主决定具体事件
 
-2. 战斗编排
-   • 维护待打出队列 (FIFO)
-   • 逐个调度队列中的牌：调用卡牌所有者 → 接收结果 → 同步全员
-   • 怪物回合：遍历怪物 → 执行 AI → 同步伤害/意图结果
+2. 怪物权威
+   • 怪物初始状态由图主提供
+   • 怪物 AI/意图/行为由图主解引用（图主=怪物所有者，始终本地执行）
+   • 其他人对怪物只能建立远程引用 → 渲染走 fallback 或操作重放
 
-3. RNG 管理
-   • 用共享种子统一生成所有随机抽取
-   • 怪物意图/目标、在线角色抽牌结果均由 RNG 确定后推送
+3. 事件权威
+   • 图主决定事件选项（未来可扩展投票）
 ```
 
-### 图主调用协议
+### 强所有权
+
+图主持有的对象**只允许远程引用**，其他玩家不允许建立本地引用：
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│                    图主 (调度者)                           │
-│                                                          │
-│  待打出队列: [Strike_R(A), Defend_G(B), ...]              │
-│                                                          │
-│  取出 Strike_R(A) → invoke_card → Player A (所有者)       │
-│    │                                                     │
-│    │  Player A 本地执行 Strike_R，触发钩子，计算效果       │
-│    │  Player A 回传 invoke_result 给图主                  │
-│    │                                                     │
-│  ← 图主接收结果，更新怪物状态                             │
-│  ← 图主广播 state_sync 给其他玩家：                       │
-│       • 有该卡牌者：操作重放 + suppressEvents             │
-│       • 无该卡牌者：fallback 数值 + 通用渲染              │
-│                                                          │
-│  重复处理下一张牌...                                       │
-└──────────────────────────────────────────────────────────┘
+其他玩家想渲染图主的怪物:
+  → 建立远程引用指向图主
+  → 本地卡池有该怪物? → 用本地引擎操作重放 + suppressEvents
+  → 本地卡池无该怪物? → 用 fallback 数值渲染
 ```
+
+图主作为怪物所有者，解引用怪物时始终走本地路径（图主机器上有怪物完整定义）。
 
 ### 图主掉线
 
-图主掉线时：
-- 自动保存多人进度，等待图主重新上线
-- 若等待超时放弃该局——不实现在线迁移
-- 在线角色保持最后一刻状态，界面显示"等待图主..."
+图主掉线 → 图主持有的所有引用变为空引用：
+- 自动保存进度，等待图主重连
+- 可尝试引用转移到下一轮投票次高票者（暂不实现）
+- 界面显示"等待图主..."
 
-## 待打出队列：战斗流程
+## 分布式广播队列：战斗流程
+
+### 核心设计
+
+无中心化调度者。每个人本地维护相同的有序队列，只执行自己是所有者的项。
+
+```
+1. 玩家提交卡牌 → 封装为标准包 → 广播 (broadcast)
+2. 所有人收到标准包 → 插入本地队列 → 排序 (timestamp, sender_id 打破平局)
+3. 每个人检查队列头部：
+   - 头部包.owner_id == 自己 → 解引用（本地执行）→ 广播 "完成" (broadcast)
+   - 头部包.owner_id != 自己 → 等待 "完成" 广播
+4. 收到 "完成" 广播 → 移除头部 → 检查下一个
+5. 队列清空后才可结束回合
+```
+
+### 标准包结构
+
+```typescript
+interface QueuePacket {
+  type: "queue_packet";
+  packet_id: string;       // 唯一ID (sender_id + seq)
+  sender_id: string;       // 提交者（打出卡牌的玩家）
+  owner_id: string;        // 卡牌所有者（谁负责解引用）
+  timestamp: number;       // 出牌时间戳
+  card_id: string;         // 卡牌 ID
+  resource_hash: string;   // 内容校验用哈希
+  target: string;          // 游戏内目标 "monster_0" | "player_b" | "self"
+}
+```
+
+### 排序规则
+
+按 `timestamp` 升序；同 `timestamp` 按 `sender_id` 字典序升序。由于 sender_id 唯一且各节点按相同算法排序，结果一致。
 
 ### 玩家视角
 
-1. **提交卡牌**：玩家打出一张牌 → 卡牌从手牌悬浮至队列区域 → 本地卡牌阻塞，不触发本地钩子
-2. **继续操作**：卡牌已从手牌移除，玩家可以继续打牌，新牌也进入队列
-3. **等待处理**：队列中的牌由远端处理，处理到自己的牌时播放动画/效果
-4. **回合结束**：待打出队列清空后，玩家才可以结束回合
+1. **提交卡牌**：卡牌从手牌悬浮至队列区域 → 本地卡牌阻塞 → 广播标准包
+2. **继续操作**：卡牌已离手，可继续打牌加入队列
+3. **等待执行**：队列中的项由所有者执行，处理到自己的项时播放动画
+4. **回合结束**：队列全部完成（所有项 broadcast 过 "完成"）方可结束回合
 
-### 图主视角
+### 队列可视化
 
-```
-待打出队列 (FIFO)
-
-  ┌───────────────────────────────────────────────────────┐
-  │  queue_entry 1: { card: Strike_R, source: A, target: Monster_0 }  │
-  │  queue_entry 2: { card: Defend_G, source: B, target: self }       │
-  └───────────────────────────────────────────────────────┘
-
-  图主处理流程：
-
-  1. 从队列头部取出一项
-  2. invoke_card → 卡牌所有者 (可能是图主自己)
-     如果所有者=图主 → 直接本地执行，跳过网络
-     如果所有者≠图主 → 网络调用，等待回复
-  3. 所有者执行卡牌，计算完整效果，触发本地钩子
-  4. 所有者回传 invoke_result（效果数值 + 操作描述）
-  5. 图主应用结果到共享状态（怪物HP等）
-  6. 图主广播 state_sync 给全员：
-     - 分层同步（有卡牌→操作重放，无卡牌→fallback数值）
-  7. 重复直到队列为空
-```
-
-### 队列协议消息
-
-```typescript
-// 玩家提交卡牌到队列 → 图主
-interface QueueSubmit {
-  type: "queue_submit";
-  source: string;
-  seq: number;
-  card_id: string;
-  upgraded: boolean;
-  target: string;         // "monster_0" | "player_b" | "self"
-  energy_cost: number;
-}
-
-// 图主广播队列当前状态 → 全员
-interface QueueUpdate {
-  type: "queue_update";
-  source: string;         // stage_host id
-  seq: number;
-  entries: QueueEntry[];  // 完整队列快照
-}
-
-// 图主调用卡牌所有者
-interface InvokeCard {
-  type: "invoke_card";
-  source: string;         // stage_host id
-  target: string;         // card owner id
-  seq: number;
-  request_id: string;     // 唯一请求ID，用于关联 invoke_result
-  card_id: string;
-  upgraded: boolean;
-  game_target: string;    // 游戏内目标：monster_0, player_b, self
-}
-
-// 卡牌所有者回传结果
-interface InvokeResult {
-  type: "invoke_result";
-  source: string;         // card owner id
-  target: string;         // stage_host id
-  seq: number;
-  request_id: string;     // 对应 invoke_card.request_id
-  effects: EffectDescription[];   // 纯数值效果
-  operation_sequence: OperationStep[];  // 用于操作重放
-}
-```
+每个玩家处显示相同队列 UI：
+- 队列项按顺序排列，显示提交者、卡牌名、状态（等待中/执行中/已完成）
+- 执行中的项高亮
+- 自己的项排队时可以看自己在第几个
 
 ## 怪物回合
 
-怪物由图主拥有。怪物回合流程如下：
+怪物由图主持有（所有者 = 图主），处理流程：
 
 ```
-图主遍历所有怪物：
-
-1. 对每个未死亡的怪物：
-   a. 图主用共享种子RNG确定怪物意图 (intent)
-   b. 广播 monster_intent → 全员（显示意图图标）
-   c. 图主在本地执行怪物动作（AI 逻辑，触发必要钩子）
-   d. 收集效果结果（对谁造成多少伤害，施加什么能力等）
-   e. 广播 state_sync → 全员
-      - 有该怪物定义者：操作重放 + suppressEvents
-      - 无该怪物定义者：fallback 数值
-
-2. 所有怪物动作完成后，回合结束
+1. 图主本地遍历所有未死亡怪物
+2. 对每个怪物:
+   a. 图主用共享种子 RNG 确定怪物意图
+   b. 图主对自己的怪物引用解引用（始终本地，图主有怪物完整定义）
+   c. 广播 monster_intent（意图图标）→ 全员渲染
+   d. 怪物执行动作（AI 逻辑，触发图主本地钩子）
+   e. 收集效果结果 → 广播 combat_result → 全员同步:
+      - 有该怪物定义者 → 操作重放 + suppressEvents
+      - 无该怪物定义者 → fallback 数值渲染
+3. 所有怪物动作完成后，回合结束
 ```
 
-怪物操作由于所有者 = 图主，此时"调用"退化为图主本地执行，无需网络往返。只有最终结果需要同步。
+怪物动作由图主解引用 → 始终本地执行，无网络往返。只有最终结果需要广播。
 
 ## 事件处理
 
-事件由图主拥有和主持：
-
-- **投票模式**（兼容塔2）：图主展示事件选项 → 所有玩家投票 → 图主裁定结果 → 同步全员
-- **不投票模式**：图主直接选择选项（当前设计暂不实现投票，留作将来扩展）
+事件由图主持有：
 
 ```
-图主进事件 → 图主决定事件类型 + 选项 → 图主本地执行 → 广播 state_sync → 全员同步事件结果
+1. 图主决定事件类型和选项
+2. 图主本地执行事件逻辑
+3. 广播事件结果 → 全员同步
 ```
 
-## 双通道协议：Invoke / Sync
+未来可扩展投票模式（兼容塔2），当前版本暂不实现。
 
-协议消息分为两种通道，差异在于**接收方是否触发钩子**：
+## Mod 兼容性设计：内容校验与分层引用
 
-### Invoke（调用消息）— 触发钩子
+### 内容校验
 
-图主调用卡牌所有者执行卡牌。被调用方在自身上执行，正常触发本地钩子：
+同名类/方法不等同于相同类/方法。通过内容哈希比对判定两个实体是否真正一致：
 
-```json
-{
-  "type": "invoke_card",
-  "source": "stage_host",
-  "target": "player_a",
-  "seq": 42,
-  "request_id": "req_abc123",
-  "card_id": "Strike_R",
-  "upgraded": false,
-  "game_target": "monster_0"
+```
+A 有 Mod v1.0 的 Strike_P
+B 有 Mod v1.1 的 Strike_P  (同一 card_id，但效果被改过)
+  → 内容校验：resource_hash 不同
+  → B 不能建立本地引用（不认为这是"相同卡牌"）
+  → B 使用远程引用 → 解引用时调用 A 执行
+```
+
+```typescript
+// 内容校验
+function validateResource(resourceId: string, remoteHash: string): boolean {
+  const localHash = sha256(loadResourceBytes(resourceId));
+  return localHash === remoteHash;
 }
 ```
 
-Invoke 是**明确的目标指令**："请你执行这张卡牌"。只有被调用方触发钩子。调用方和第三方只接收 sync 结果。
+校验应用于所有可执行对象：卡牌类、遗物类、能力类、怪物类、Map 生成函数、事件类等。
 
-### Sync（同步消息）— 不触发钩子
+### 分层引用策略
 
-表示状态数据的被动镜像。接收方通过 `@SpirePatch` 抑制事件发布后直接写入或重放：
+```
+收到远程卡牌标准包:
 
-```json
-{
-  "type": "state_sync",
-  "subtype": "combat_result",
-  "source": "stage_host",
-  "seq": 48,
-  "request_id": "req_abc123",
-  "card_id": "Strike_R",
-  "effects": [
-    { "kind": "damage", "target": "monster_0", "amount": 15 }
-  ],
-  "operation_sequence": [
-    { "step": "play_card", "card_id": "Strike_R", "source": "player_a", "target": "monster_0" },
-    { "step": "damage", "target": "monster_0", "amount": 15 }
-  ]
-}
+  1. 提取 resource_hash
+  2. 本地按 card_id 查找类定义
+  3. 内容校验（hash 比对）:
+     ├─ 校验通过 → 本地引用（引擎执行，触发本地钩子，引擎自动产 VFX）
+     └─ 校验失败/无本地定义 → 远程引用（解引用时网络调用所有者）
+         → 结果用 fallback 数值渲染
 ```
 
-同步采用分层策略：
-- **接收方有该卡牌** → 使用 `operation_sequence` 进行操作重放，suppressEvents 包裹，引擎自动产生 VFX
-- **接收方无该卡牌** → 使用 `effects` 纯数值同步，手动渲染通用效果
+### 交叉引用
 
-| 消息类型 | 语义 | 触发钩子 | 举例 |
-|----------|------|----------|------|
-| **Invoke** | 远程调用，交付执行权 | **是（仅被调用方）** | 图主调卡牌所有者执行卡牌 |
-| **Sync** | 被动状态镜像/结果广播 | **否** | 战斗结果同步、怪物HP变更、在线角色属性更新 |
+引用系统使交叉所有权变得自然：
 
-### 状态同步子类型
+```
+A 打出 B 的远程卡牌 Strike_P:
+  A 的队列中 head.owner_id = B
+  B 对其解引用（B 本地执行 Strike_P）
+  Strike_P 的效果触发"对所有玩家施加能力"
+    → B 持有对 A 远程角色的引用
+    → 解引用：调用 A 的远程角色 → A 执行施加逻辑 → A 触发本地钩子
 
-| subtype | 说明 | 关键字段 |
-|---------|------|----------|
-| `remote_player` | 在线角色属性更新 | `player: RemotePlayerState` |
-| `combat_result` | 卡牌/怪物动作执行结果 | `effects`, `operation_sequence`, `card_id?` |
-| `monster_intent` | 怪物意图变更 | `monster_id`, `intent` |
-| `monster_state` | 怪物状态变更 | `monsters: Record<monster_id, MonsterState>` |
-| `full_snapshot` | 完整状态快照 | `players`, `monsters`, `floor`, `act`, `seed` |
+B 的远程卡牌触发 A 的本地遗物 Vajra:
+  B 执行卡牌时发出 BaseMod.publishOnCardUse()
+  A 本地遗物 Vajra 订阅了 onCardUse 事件
+    → Vajra 是本地引用 → A 直接执行遗物逻辑 → 触发 A 本地钩子
+```
+
+远程遗物可以被本地卡牌触发（本地卡牌发出事件 → 远程遗物的引用订阅了该事件 → 网络调用所有者执行）。远程卡牌也可以触发仅在本地存在的遗物（遗物在本地 → 本地引用 → 直接在本地生效）。
+
+### Fallback 效果类型（保持原有）
+
+| kind | 说明 | 关键字段 |
+|------|------|----------|
+| `damage` | 造成伤害 | `target`, `amount`, `damage_type` |
+| `gain_block` | 获得格挡 | `target`, `amount` |
+| `apply_power` | 施加能力 | `target`, `power_id`, `amount` |
+| `remove_power` | 移除能力 | `target`, `power_id` |
+| `heal` | 治疗 | `target`, `amount` |
+| `gain_energy` | 获得能量 | `target`, `amount` |
+| `draw_card` | 抽牌 | `target`, `amount` |
+| `discard_card` | 弃牌 | `target`, `amount` |
+| `exhaust_card` | 消耗卡牌 | `target`, `card_id` |
+| `gain_gold` | 获得金币 | `target`, `amount` |
+| `obtain_relic` | 获得遗物 | `target`, `relic_id` |
+| `obtain_potion` | 获得药水 | `target`, `potion_id` |
+| `lose_hp` | 失去生命 | `target`, `amount` |
 
 ## BaseMod 事件抑制机制
 
@@ -347,7 +391,7 @@ BaseMod 的事件系统基于 `@SpirePatch` 注入游戏方法 → `BaseMod.publ
 CrossSpire 通过 **`@SpirePatch` 拦截 `BaseMod.publishXxx()` 方法**来实现开关控制：
 
 ```java
-// OpenTogetherMod.java — 全局开关
+// CrossSpireMod.java — 全局开关
 public class CrossSpireMod {
     public static final AtomicInteger eventSuppression = new AtomicInteger(0);
 
@@ -357,94 +401,41 @@ public class CrossSpireMod {
         finally { eventSuppression.decrementAndGet(); }
     }
 }
-
-// SuppressBaseModPatches.java — 拦截 publish 方法
-@SpirePatch(clz = BaseMod.class, method = "publishPostBattle")
-public static class SuppressPostBattle {
-    @SpirePrefixPatch
-    public static SpireReturn<Void> Prefix(AbstractRoom battleRoom) {
-        if (CrossSpireMod.eventSuppression.get() > 0) {
-            return SpireReturn.Return(null);
-        }
-        return SpireReturn.Continue();
-    }
-}
 ```
 
-需要拦截的 BaseMod.publish* 方法列表：
-- `publishPostBattle` — 战斗结束
-- `publishOnPlayerDamaged` — 玩家受伤
-- `publishOnPlayerLoseBlock` — 玩家失去格挡
-- `publishRelicGet` — 获得遗物
-- `publishPotionGet` — 获得药水
-- `publishPostPotionUse` — 使用药水
-- `publishOnCardUse` — 卡牌使用
-- `publishPostPowerApply` — 能力应用
-- `publishPostDraw` — 抽牌
-- `publishPostExhaust` — 消耗
-- `publishOnPlayerTurnStart` — 回合开始
-- `publishPostEnergyRecharge` — 能量恢复
+抑制的触发场景：
+- 非所有者收到 `combat_result` → 操作重放时 suppressEvents 包裹（结果已由所有者触发过一次钩子，不能重复触发）
+- 在线角色状态写入（HP 变化、遗物获取等）时 suppressEvents 包裹
+
+引用的 `dereference()` 内部已经处理了 suppressEvents：远程引用解引用 → 所有者在远端触发钩子 → 结果同步回来 → 本地 suppressEvents 渲染。
+
+### 引用中的钩子触发规则
+
+| 场景 | 是否触发钩子 | 原因 |
+|------|-------------|------|
+| 所有者解引用自己的对象 | 是 | 计算源点，钩子应触发 |
+| 非所有者收到结果同步 | 否（suppressEvents） | 结果已在所有者处触发过一次 |
+| 交叉引用中本地遗物被远程卡牌触发 | 是 | 遗物是本地引用，在本地直接执行 |
 
 由于 BaseMod 没有 gold change hook，金币同步需要通过自定义 `@SpirePatch` 直接拦截 `AbstractPlayer.gainGold()` / `loseGold()` 方法。
-
-## Mod 兼容性设计：Fallback 效果系统与分层同步
-
-这是实现跨Mod、跨游戏兼容性的核心机制。
-
-### 分层同步
-
-```
-图主广播战斗结果:
-
-  接收方收到 state_sync(combat_result):
-    │
-    ├─ 1. 本地卡池有该卡牌定义
-    │     → 用 operation_sequence 操作重放
-    │     → 本地引擎执行，引擎自动产 VFX/动画
-    │     → suppressEvents 包裹，不触发钩子
-    │
-    ├─ 2. 本地卡池无该卡牌定义
-    │     → 用 effects 纯数值同步
-    │     → 手动渲染通用效果（伤害数字、格挡条等）
-    │     → suppressEvents 包裹
-    │
-    └─ 3. 跨游戏（塔1→塔2或反向）
-          → 永远走 effects 数值通道
-          → 实体映射表翻译 card_id / relic_id
-```
-
-### Fallback 效果类型
-
-同原有设计，效果类型保持不变：damage / gain_block / apply_power / remove_power / heal / gain_energy / draw_card / discard_card / exhaust_card / gain_gold / obtain_relic / obtain_potion / lose_hp。
-
-### OperationSequence 结构
-
-```typescript
-interface OperationStep {
-  step: "play_card" | "damage" | "gain_block" | "apply_power" | "remove_power"
-      | "heal" | "gain_energy" | "draw_card" | "discard_card" | "exhaust_card"
-      | "gain_gold" | "obtain_relic" | "obtain_potion" | "lose_hp"
-      | "monster_move";     // 怪物动作
-  // step-specific fields
-  card_id?: string;        // for play_card
-  source: string;          // 操作发起方 player_id
-  target: string;          // 操作目标
-  amount?: number;
-  // ...
-}
-```
 
 ## 素材传递系统
 
 > 能本地渲染就本地渲染。就地原则，懒加载，按需传输。
+
+### 素材与引用的关系
+
+素材传递与引用系统协同工作：
+- 远程引用解引用 → 需要渲染 → 检查素材
+- 本地引用 → 素材已在本地，直接使用
 
 ### 三层就近查找
 
 ```
 渲染远端卡 "Strike_P" 的素材:
    │
-   ├─ 1. 本地卡池找到该卡牌
-   │     → 零传输 — 远端和本地用同一 Mod，素材已在内存中
+   ├─ 1. 本地卡池找到该卡牌 + 内容校验通过
+   │     → 本地引用 → 零传输 — 远端和本地用同一 Mod 版本
    │
    ├─ 2. 本地磁盘缓存命中
    │     → 零网络 — 之前缓存过，从 {cache_dir}/{source_player}/{card_id}/ 加载
@@ -455,187 +446,36 @@ interface OperationStep {
          → 收到 resource_response 后写入磁盘缓存 → 内存加载 → 替换占位
 ```
 
-### 运行时素材拦截
+### 运行时素材拦截与远程素材类层次（保持原有）
 
-游戏将 Spine 骨骼数据和纹理存储在 `AbstractCreature` 的实例字段中，已在内存中，无需从磁盘重新读取：
+详见 §12 原素材传递系统内容。
 
-```java
-// AbstractCreature.class (desktop-1.0.jar 确认)
-protected TextureAtlas atlas;
-protected Skeleton skeleton;
-public AnimationState state;               // ← 公开字段
-protected AnimationStateData stateData;
-public static SkeletonMeshRenderer sr;     // ← 静态共享渲染器
-
-// AbstractPlayer — 角色纹理 (公开字段)
-public Texture shoulderImg;
-public Texture shoulder2Img;
-public Texture corpseImg;
-public Texture img;                        // 半身像 (原版角色为 null，使用 Spine)
-```
-
-通过 `basemod.ReflectionHacks` 即可提取：
-
-```java
-TextureAtlas atlas = ReflectionHacks.getPrivate(
-    player, AbstractCreature.class, "atlas");
-Skeleton skeleton = ReflectionHacks.getPrivate(
-    player, AbstractCreature.class, "skeleton");
-SkeletonData data = skeleton.getData(); // 含全部骨骼、插槽、动画定义
-```
-
-素材发送方**保留原始文件路径引用**（如 `images/characters/ironclad/idle/skeleton.json`），按路径读取原始字节进行传输。纹理数据通过 `Texture.getTextureData()` 提取像素后编码为 PNG。
-
-### 远程素材类层次
-
-所有远程素材类**不继承游戏基类**（避免副作用，不污染卡池/遗物池），自行实现渲染：
-
-```
-RemoteCardResource                  ← 卡牌素材投影
-  ├── cardId, cardName
-  ├── cardType, cardRarity          ← 决定外框样式
-  ├── energyCost, description
-  ├── largeTexture: Texture         ← 大图 (SingleCardView, 250×190)
-  ├── smallTexture: Texture         ← 小图 (手牌, 128×128)
-  └── render(sb, x, y, scale)       ← 绘制卡牌外框 + 素材
-
-RemoteRelicResource                 ← 遗物素材投影
-  ├── relicId, relicName
-  ├── texture: Texture              ← 48×48 图标
-  ├── description: String
-  └── renderOnPlayerBar(sb, x, y)   ← 在玩家状态栏渲染遗物
-
-RemotePowerResource                 ← 能力素材投影
-  ├── powerId, powerName
-  ├── icon48: Texture               ← 小图标 (能力槽位, 48×48)
-  ├── icon84: Texture               ← 大图标 (悬停提示, 84×84)
-  ├── description: String
-  └── renderOnCombatHud(sb, x, y)
-
-RemoteCharacterResource             ← 角色骨骼素材投影
-  ├── characterId                   ← e.g. "IRONCLAD"
-  ├── skeletonData: SkeletonData
-  ├── atlas: TextureAtlas
-  ├── [动态] currentAnimation / animationTime
-  ├── [动态] drawX, drawY, scaleX, scaleY
-  └── render(sb)                    ← 委托给 SkeletonRenderer
-
-RemoteMonsterResource               ← 怪物素材投影 (未来)
-RemotePotionResource                ← 药水素材投影 (未来)
-```
-
-### 缓存系统
+### 缓存系统（保持原有）
 
 ```
 RemoteAssetCache
-  ├── L1 内存缓存
-  │   Map<CacheKey, WeakReference<Texture>>
-  │   Map<CacheKey, SkeletonData>
-  │   上限: 128MB → LRU 淘汰
-  │
-  ├── L2 磁盘缓存
-  │   路径: {game_dir}/crossspire_cache/
-  │         ├── {source_player_id}/
-  │         │   ├── cards/{card_id}/
-  │         │   │   ├── large.png
-  │         │   │   ├── small.png
-  │         │   │   └── meta.json        ← name, type, rarity, cost, description
-  │         │   ├── relics/{relic_id}.png
-  │         │   ├── powers/{power_id}/
-  │         │   │   ├── icon48.png
-  │         │   │   └── icon84.png
-  │         │   ├── potions/{potion_id}.png
-  │         │   ├── characters/{character_id}/
-  │         │   │   ├── skeleton.json
-  │         │   │   ├── skeleton.atlas
-  │         │   │   └── skeleton.png
-  │         │   └── monsters/{monster_id}/...
-  │         └── manifest.json            ← 所有缓存素材的 checksum
-  │
-  ├── CacheKey = sha256(resource_type + resource_id + variant)[0:16]
-  ├── 校验: response.checksum vs 磁盘 checksum → 不匹配则重新下载
+  ├── L1 内存缓存: Map<CacheKey, WeakReference<Texture>>, Map<CacheKey, SkeletonData>
+  ├── L2 磁盘缓存: {game_dir}/crossspire_cache/{source_player_id}/...
+  ├── 校验: response.checksum vs 磁盘 checksum
   └── 过期: 上次访问 > 30 天自动清理
 ```
 
-### 素材协议消息
-
-素材消息是独立的顶层 `type`，用于在玩家之间传递 Mod 卡牌/遗物/角色等视觉素材。
-
-| 消息类型 | 方向 | 说明 |
-|----------|------|------|
-| `resource_registry` | C→房间 | 连接时发送本地拥有的素材清单 |
-| `resource_request` | C→特定C | 请求特定素材 (由 `target` 字段指定接收方) |
-| `resource_response` | 特定C→请求方 | 素材数据响应 |
-| `animation_sync` | C→房间 | 角色动画切换通知 |
-
-```typescript
-// 素材注册 — 连接时交换一次
-interface ResourceRegistry {
-  type: "resource_registry";
-  source: string;
-  cards: string[];        // 本地 CardLibrary 拥有的 card_id
-  relics: string[];       // 本地 RelicLibrary 拥有的 relic_id
-  powers: string[];       // 本地拥有的 power_id
-  potions: string[];      // 本地拥有的 potion_id
-  characters: string[];   // 本地拥有的角色骨架
-}
-
-// 素材请求 — 懒加载触发，点对点定向
-interface ResourceRequest {
-  type: "resource_request";
-  source: string;
-  target: string;         // 素材来源方 player_id
-  resource_type: "card_texture" | "card_large" | "card_small"
-               | "relic_texture" | "power_icon48" | "power_icon84"
-               | "potion_texture" | "character_skeleton"
-               | "character_atlas" | "character_png";
-  resource_id: string;    // 如 "Strike_R" 或 "IRONCLAD"
-}
-
-// 素材响应 — 包含 base64 编码的素材数据
-interface ResourceResponse {
-  type: "resource_response";
-  source: string;
-  target: string;
-  resource_type: string;
-  resource_id: string;
-  mime: string;           // "image/png" | "application/json" | "text/plain"
-  data_base64: string;
-  checksum: string;       // SHA-256，用于缓存校验
-}
-
-// 动画同步 — 仅在动画切换时推送
-interface AnimationSync {
-  type: "animation_sync";
-  source: string;
-  animation: string;      // "Idle", "Attack", "Hit" 等 Spine 动画名
-  track: number;          // track index
-  loop: boolean;
-  mix_duration: number;   // 过渡时间 (秒)
-}
-```
-
-素材请求为**点对点**消息 —— 接收方根据 `target` 字段识别消息目标。这需要服务端支持定向转发（当前服务端为广播模式，需扩展一条路径：`broadcast` 时检查 `target` 字段，存在则只发给目标玩家）。
-
 ## 在线角色：独立 AbstractPlayer 实例与渲染集成
 
-在线角色继承 `AbstractPlayer`，但角色定位已从"有执行权的本地角色投影"变为"纯渲染+状态镜像"：
+在线角色是纯渲染和状态镜像，状态通过解引用写入：
 
 ```
 RemotePlayer extends AbstractPlayer:
-  • drawPile / hand / discardPile / exhaustPile — 卡组镜像
-  • relics — 遗物列表镜像（含计数器）
-  • potions — 药水槽镜像
-  • powers — 能力/Buff/Debuff镜像
-  • currentHealth / maxHealth / currentBlock — 战斗数值镜像
-  • energy / energyPerTurn — 能量系统镜像
-
-所有状态通过 StateSync 写入，写入时 suppressEvents 包裹。
-在线角色不执行卡牌逻辑、不触发钩子。
-执行权属于所有权机器，在线角色只负责渲染。
+  • 卡组/遗物/药水/能力/HP/格挡/能量 — 状态镜像
+  • 所有状态写入 suppressEvents 包裹
+  • 不持有可执行对象的本地引用（除非内容校验通过且角色切换）
+  • 渲染集成通过 BaseMod RenderSubscriber（保持原有设计）
 ```
 
-渲染集成保持原有设计（BaseMod RenderSubscriber）。
+在线角色的引用持有：
+- 对自己远端角色的远程引用（状态写入的路径）
+- 对图主怪物/事件的远程引用（渲染用）
+- 对自身遗物/能力的远程引用（被动效果触发用）
 
 ## RNG 同步策略
 
@@ -644,122 +484,195 @@ RemotePlayer extends AbstractPlayer:
 ### 策略
 
 ```
-1. 游戏开始时生成共享种子 → 所有玩家使用同一种子
-2. 图主管理所有关键随机抽取：
-   - 地图生成 → 图主用种子RNG计算 → 同步给所有人
-   - 怪物意图选择 → 图主用种子RNG计算 → 广播 intent
-   - 怪物攻击目标选择 → 图主用种子RNG计算
-   - 卡牌奖励生成 → 图主用种子RNG计算 → 广播
-3. 在线角色的**抽牌由图主推送**：
-   - 在线角色不自己做RNG抽取
-   - 图主依照远端角色所有者机器的卡组状态
-   - 图主计算抽牌结果 → 推送 card_id 列表
-4. 本地角色的**玩家决策RNG**由本地处理：
-   - 随机遗物效果（如 Dead Branch）→ 本地RNG → 结果同步给其他人
+1. 游戏开始时所有玩家协商共享种子 → 全员使用同一种子
+2. 共享 RNG（确定性随机）:
+   - 地图生成 → 图主用种子 RNG 计算 → 广播
+   - 怪物意图选择 → 图主用种子 RNG 计算 → 广播
+   - 怪物攻击目标选择 → 图主用种子 RNG 计算 → 广播
+   - 在线角色抽牌 → 图主用种子 RNG + 远端角色卡组状态计算 → 推送
+3. 本地 RNG（非共享，玩家决策）:
+   - 随机遗物效果 (Dead Branch 等) → 本地 RNG → 结果同步给其他人
+4. 不要求所有节点 RNG 完全同步 — 只要求共享部分的 RNG 一致
 ```
-
-### 为什么不在线角色自己做RNG
-
-若在线角色自己用共享种子做RNG，需保证两端卡组状态**完全相同**——若某玩家使用Mod导致卡组差异，RNG立即分叉。由所有者机器执行，避免了此问题。
 
 ## 网络拓扑
 
+### 去中心化 P2P 虚拟网络
+
 ```
-┌─────────────────────────────────────────────────────┐
-│              Cross Spire Relay Server               │
-│              (Node.js / TypeScript)                  │
-│                                                     │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐ │
-│  │  REST API    │  │  WebSocket  │  │  UDP Relay  │ │
-│  │  • 房间 CRUD  │  │  • 消息路由  │  │  (未来)      │ │
-│  │  • 心跳      │  │  • 控制通道  │  │  NAT穿透     │ │
-│  └─────────────┘  └─────────────┘  └─────────────┘ │
-│                                                     │
-│  消息 = 透传。服务器不解析游戏逻辑。                    │
-│  只保证有序投递。                                     │
-└──────────┬───────────────────────────────┬──────────┘
-           │  WebSocket + JSON             │  WebSocket + JSON
-    ┌──────┴──────┐                 ┌──────┴──────┐
-    │  塔1 Client  │                 │  塔2 Client  │
-    │  (Java)      │                 │  (C#/Godot)  │
-    │              │                 │  [未来实现]   │
-    │ 本地角色+在线 │                 │ 本地角色+在线  │
-    └─────────────┘                 └─────────────┘
+┌─────────────────────────────────────────────────┐
+│             去中心化 P2P 虚拟网络                  │
+│                                                 │
+│    ┌──────────┐        ┌──────────┐            │
+│    │ Player A │◄──P2P──►│ Player B │            │
+│    └────┬─────┘        └────┬─────┘            │
+│         │   ┌──────────┐    │                  │
+│         └───│ Player C │────┘                  │
+│             └──────────┘                       │
+│  • 每个节点有持久唯一 ID                         │
+│  • 全互联 P2P，无中心节点                        │
+│  • 中继服务器仅作为备用信令/转发                  │
+└─────────────────────────────────────────────────┘
 ```
 
-### 连接拓扑选择
+### 加入流程
 
-- **当前阶段**：中继全透传。服务器路由消息到房间内所有人。简单、可靠。
-- **未来可选**：客户端间直连（WebSocket P2P 或 WebRTC），中继仅做信令服务器。
+```
+1. B 输入 A 的 IP:port:password → 连接 A
+2. B → A: hello (B 的 ID, IP, port)
+3. A → B: room_info {
+     name, password_hash,
+     members: [{id, ip, port}],  // A 记录的全体成员
+     stage_host: {id, ip, port}
+   }
+4. B 遍历 members，尝试与每个其他成员建立直连 (P2P)
+   ├─ 直连成功 → 建立本地引用（P2P 通道）
+   └─ 直连失败 → 回退为通过 A 转发（远程引用指向 A → A 代为转发）
+5. A 广播 "player_joined" → 所有人知晓 B → 其他人也尝试与 B 直连
+```
 
-### 协议传输
+### 转发回退
 
-- 传输层：WebSocket（全双工、低延迟、防火墙友好）
-- 编码：JSON（语言无关、可调试）
-- 消息格式：见下文[协议消息定义](#协议消息定义)
-- 控制通道和游戏数据通道复用同一个 WebSocket 连接
+```
+B 与 C 无法直连:
+  B → A (转发) → C
+
+B 对 C 的引用:
+  type: REMOTE
+  remoteTarget: A.ip:port + forwardTarget: C.id
+
+B.dereference(cardFromC):
+  → 发往 A，A 转发给 C
+  → C 执行
+  → C 回复 A，A 转发给 B
+  → B 渲染结果
+```
+
+### 掉线与引用恢复
+
+```
+A 掉线:
+  1. 心跳超时 → 所有节点检测到
+  2. A 相关的所有远程引用 → 空引用
+  3. 以 A 为转发者的引用 → 需要引用转移:
+     B.forwardTarget 可选列表: [C, D, E...]
+     尝试连接 → 找到可直连的 → reference.tryMigrate()
+  4. 若 A = 图主 → 图主对象全部空引用 → 等待 A 重连 / 投票新图主 (暂不实现)
+```
+
+### 中继服务器回退
+
+如果 NAT 环境导致完全无法 P2P，全部走中继服务器转发。中继服务器此时充当作广播通道和消息路由，不解释游戏逻辑。
 
 ## 协议消息定义
 
 ### 顶层信封
 
 ```typescript
-interface GameMessage {
-  type: "invoke_card" | "invoke_result" | "state_sync"
-     | "queue_submit" | "queue_update"
-     | "stage_host_election" | "stage_host_result"
-     | "resource_registry" | "resource_request" | "resource_response"
-     | "animation_sync"
-     | "control";
-  subtype?: string;
-  source: string;      // 发送方 player_id
-  seq: number;         // 单调递增序列号，用于有序投递和去重
-  target?: string;     // 定向消息目标
+interface Message {
+  type: string;          // 消息类型
+  source: string;        // 发送方 ID
+  seq: number;           // 单调序列号
+  target?: string;       // 定向目标 ID（为空则广播）
+  timestamp: number;     // 发送时间戳
   // ... type-specific fields
 }
 ```
 
-### Invoke 消息
-
-| subtype | 说明 | 方向 | 关键字段 |
-|---------|------|------|----------|
-| `invoke_card` | 图主调卡牌所有者执行 | Host→Owner | `card_id`, `upgraded`, `game_target`, `request_id` |
-| `invoke_result` | 所有者回传执行结果 | Owner→Host | `request_id`, `effects`, `operation_sequence` |
-
-### StateSync 消息
-
-| subtype | 说明 | 方向 | 关键字段 |
-|---------|------|------|----------|
-| `combat_result` | 卡牌/怪物执行结果广播 | Host→All | `request_id`, `effects`, `operation_sequence` |
-| `remote_player` | 在线角色属性 | Owner→All | `player: RemotePlayerState` |
-| `monster_intent` | 怪物意图 | Host→All | `monster_id`, `intent` |
-| `monster_state` | 怪物状态变更 | Host→All | `monsters: Record<monster_id, MonsterState>` |
-| `full_snapshot` | 完整状态快照 | Host→All | `players`, `monsters`, `floor`, `act`, `seed` |
-
 ### 队列消息
 
-| subtype | 说明 | 方向 | 关键字段 |
-|---------|------|------|----------|
-| `queue_submit` | 玩家提交卡牌到队列 | Player→Host | `card_id`, `upgraded`, `target`, `energy_cost` |
-| `queue_update` | 图主广播队列状态 | Host→All | `entries: QueueEntry[]` |
-
-### 阶段控制消息
-
-| subtype | 说明 | 方向 | 关键字段 |
-|---------|------|------|----------|
-| `stage_host_election` | 新阶段开始时发起图主投票 | Server→All | `candidates`, `stage_info` |
-| `stage_host_result` | 投票结果 | Server→All | `host_id`, `stage_info` |
-
-### QueueEntry 结构
+| type | 方向 | 说明 |
+|------|------|------|
+| `queue_packet` | 广播 | 提交卡牌到分布式队列 |
+| `queue_complete` | 广播 | 卡牌执行完毕，所有人移除该项 |
 
 ```typescript
-interface QueueEntry {
-  entry_id: string;      // 队列项唯一ID
-  source: string;        // 提交者 player_id
+// 提交卡牌
+interface QueuePacketMessage extends Message {
+  type: "queue_packet";
+  packet_id: string;
+  sender_id: string;
+  owner_id: string;
   card_id: string;
-  upgraded: boolean;
-  target: string;        // 游戏内目标
-  status: "pending" | "executing" | "done";
+  resource_hash: string;
+  target: string;
+}
+
+// 执行完成
+interface QueueCompleteMessage extends Message {
+  type: "queue_complete";
+  packet_id: string;       // 对应的 queue_packet.packet_id
+  effects: EffectDescription[];        // 纯数值效果
+  operation_sequence: OperationStep[];  // 操作序列（用于操作重放）
+}
+```
+
+### 引用相关消息
+
+| type | 方向 | 说明 |
+|------|------|------|
+| `invoke` | 定向 | 远程引用解引用时的网络调用 |
+| `invoke_result` | 定向 | 远程执行结果回传 |
+| `reference_register` | 广播 | 宣告自己可提供的引用对象清单 |
+| `reference_migrate` | 定向 | 引用转移请求（寻备份源） |
+
+```typescript
+interface InvokeMessage extends Message {
+  type: "invoke";
+  target: string;          // 所有者 ID
+  ref_id: string;          // 引用 ID
+  trigger: string;         // 触发接口 (onCardUse / atBattleStart / ...)
+  args: any;               // 调用参数
+}
+
+interface InvokeResultMessage extends Message {
+  type: "invoke_result";
+  target: string;          // 原调用方 ID
+  ref_id: string;
+  effects: EffectDescription[];
+  operation_sequence: OperationStep[];
+}
+```
+
+### 战斗/状态消息
+
+| type | 方向 | 说明 |
+|------|------|------|
+| `combat_result` | 图主→广播 | 怪物动作/卡牌执行结果 |
+| `monster_intent` | 图主→广播 | 怪物意图变更 |
+| `player_state` | 所有者→广播 | 在线角色属性更新 |
+| `stage_sync` | 图主→广播 | 地图/事件/怪物状态推送 |
+| `full_snapshot` | 图主→广播 | 完整阶段状态快照 |
+
+### 控制消息
+
+| type | 方向 | 说明 |
+|------|------|------|
+| `hello` | 单向 | 加入时宣告身份和网络信息 |
+| `ping` / `pong` | 广播 | 心跳保活 |
+| `player_joined` / `player_left` | 广播 | 玩家进出通知 |
+| `room_info` | 定向 | 响应 hello，返回房间完整信息 |
+| `stage_host_election` | 广播 | 新阶段投票发起 |
+| `stage_host_result` | 广播 | 投票结果 |
+
+### 素材消息（保持原有）
+
+| type | 方向 | 说明 |
+|------|------|------|
+| `resource_registry` | 广播 | 本地素材清单 |
+| `resource_request` | 定向 | 请求特定素材 |
+| `resource_response` | 定向 | 素材数据 |
+| `animation_sync` | 广播 | 角色动画切换 |
+
+### 内容校验哈希
+
+```typescript
+// 附加在引用注册和标准包中
+interface ResourceHash {
+  resource_type: "card" | "relic" | "power" | "monster" | "event" | "potion";
+  resource_id: string;
+  hash: string;           // SHA-256 of resource bytecode
+  version?: string;       // Mod 版本号（可选）
 }
 ```
 
@@ -770,13 +683,13 @@ CrossSpire/
 ├── ARCHITECTURE.md              # 本文档
 ├── AGENTS.md                    # 仓库规则 + AI Agent 准则
 ├── .gitignore
-├── cross-spire-server/          # 中继服务器 (Node.js/TypeScript)
+├── cross-spire-server/          # 备选中继服务器 (Node.js/TypeScript)
 │   ├── package.json
 │   ├── tsconfig.json
 │   └── src/
 │       ├── server.ts            # Express + WebSocket 主入口
 │       ├── store.ts             # 房间/票据 内存存储
-│       ├── sequence.ts          # 序列号管理 + 有序保证
+│       ├── sequence.ts          # 序列号管理
 │       └── protocol.ts          # TypeScript 协议类型
 ├── shared/                       # 跨语言共享定义
 │   └── cross-spire-protocol/
@@ -790,37 +703,43 @@ CrossSpire/
             ├── EventSuppression.java            # 全局抑制开关
             ├── SuppressBaseModPatches.java      # @SpirePatch 拦截 BaseMod.publish*
             ├── network/
-            │   ├── RelayClient.java             # WebSocket 客户端
-            │   ├── LobbyApiClient.java          # HTTP REST 客户端
-            │   ├── MessageRouter.java           # 消息分发
-            │   └── Protocol.java                # 消息 POJO + JSON 序列化
+            │   ├── P2PNetwork.java              # P2P 连接管理
+            │   ├── BroadcastManager.java        # 广播消息收发
+            │   ├── HeartbeatManager.java        # 心跳检测
+            │   ├── RelayClient.java             # 中继服务器回退
+            │   └── Protocol.java                # 消息 POJO + 序列化
+            ├── reference/
+            │   ├── Reference.java               # 引用抽象基类
+            │   ├── LocalReference.java          # 本地引用
+            │   ├── RemoteReference.java         # 远程引用（网络调用）
+            │   ├── NullReference.java           # 空引用
+            │   ├── ReferenceFactory.java        # 引用工厂（决定走哪种引用）
+            │   └── ContentValidator.java        # 内容校验（字节码哈希比对）
             ├── resource/
-            │   ├── RemoteResourceManager.java   # 素材总控 (本地→缓存→请求)
-            │   ├── RemoteAssetCache.java        # L1 内存 + L2 磁盘缓存
+            │   ├── RemoteResourceManager.java   # 素材总控
+            │   ├── RemoteAssetCache.java        # L1 + L2 缓存
             │   ├── RemoteAssetServer.java       # 响应素材请求
-            │   ├── ResourceRegistryTracker.java # 远端素材清单管理
+            │   ├── ResourceRegistryTracker.java # 远端素材清单
             │   ├── RemoteCardResource.java      # 远程卡牌素材投影
             │   ├── RemoteRelicResource.java     # 远程遗物素材投影
             │   ├── RemotePowerResource.java     # 远程能力素材投影
             │   ├── RemotePotionResource.java    # 远程药水素材投影
-            │   └── RemoteCharacterResource.java # 远程角色骨骼素材投影
+            │   └── RemoteCharacterResource.java # 远程角色素材投影
             ├── remote/
             │   ├── RemotePlayer.java           # extends AbstractPlayer
             │   ├── RemotePlayerRegistry.java   # 在线角色注册表
-            │   ├── RemoteRenderer.java         # 实现 RenderSubscriber, 战斗渲染
-            │   └── StageHost.java              # 图主：阶段权威、队列编排、战斗主持
-            ├── sync/
-            │   ├── LocalCapturePatches.java    # 捕获本地操作 → 生成 queue_submit
-            │   ├── InvokeExecutor.java         # 处理 Invoke 消息
-            │   ├── SyncExecutor.java           # 处理 StateSync 消息 (分层同步)
-            │   ├── SequenceTracker.java        # seq 序列号追踪
-            │   └── RngSync.java               # RNG 种子同步 + 共享抽取
+            │   ├── RemoteRenderer.java         # 实现 RenderSubscriber
+            │   └── StageHost.java              # 图主：地图/事件/怪物权威
+            ├── combat/
+            │   ├── QueueManager.java           # 分布式广播队列
+            │   ├── LocalCapturePatches.java    # 捕获本地操作 → 广播标准包
+            │   └── CombatResultReplayer.java   # 操作重放 + suppressEvents
             └── ui/
-                ├── LobbyScreen.java            # 创建/加入房间界面
-                ├── ServerPicker.java           # 服务器地址输入
+                ├── LobbyScreen.java            # 加入房间界面
+                ├── ServerPicker.java           # IP:port:password 输入
                 ├── RoomPanel.java              # 房间内界面
                 ├── RoomChat.java               # 聊天
-                ├── QueueDisplay.java           # 待打出队列可视化
+                ├── QueueDisplay.java           # 分布式队列可视化
                 └── RemoteStatsOverlay.java     # 在线角色状态覆盖层
 ```
 
@@ -837,9 +756,9 @@ CrossSpire/
 
 ### 预留设计
 
-1. **协议语言无关**：所有消息使用 JSON + WebSocket，Java 和 C# 均可处理
-2. **Fallback 系统即跨游戏桥梁**：塔1 Mod卡牌的效果通过 fallback 传到塔2，无需塔2安装对应Mod
-3. **实体映射表**：`shared/cross-spire-protocol/entity-mappings/` 维护塔1→塔2的 card_id / relic_id / character_id 映射
+1. **引用系统语言无关**：Reference<T> 是协议层抽象，Java 和 C# 均可实现
+2. **内容校验跨游戏**：相同 resource_hash 的实体在塔1和塔2应效果一致，可直接本地引用；否则走远程引用+fallback
+3. **实体映射表**：`shared/cross-spire-protocol/entity-mappings/` 维护塔1↔塔2的 card_id / relic_id / character_id 映射
 4. **中继服务器不关心游戏版本**：协议上层转发，不做游戏逻辑
 5. **塔2 Mod 预留相同的模块结构**：C# 实现 `crossspire` 命名空间，复用相同的协议定义
 
@@ -871,4 +790,4 @@ CrossSpire/
 }
 ```
 
-未映射的实体永远走 fallback 效果通道。
+未映射的实体永远走远程引用 + fallback 效果通道。
