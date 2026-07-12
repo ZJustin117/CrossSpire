@@ -3,12 +3,16 @@ package crossspire.ui;
 import basemod.BaseMod;
 import basemod.DevConsole;
 import basemod.devcommands.ConsoleCommand;
-import com.google.gson.JsonObject;
+import com.megacrit.cardcrawl.actions.utility.UseCardAction;
+import com.megacrit.cardcrawl.cards.AbstractCard;
+import com.megacrit.cardcrawl.core.AbstractCreature;
+import com.megacrit.cardcrawl.dungeons.AbstractDungeon;
+import com.megacrit.cardcrawl.helpers.CardLibrary;
+import com.megacrit.cardcrawl.monsters.AbstractMonster;
 import crossspire.CrossSpireMod;
 import crossspire.network.Protocol;
 import crossspire.remote.RemotePlayerRegistry;
 import crossspire.remote.RemotePlayerState;
-import crossspire.ui.QueueDisplay;
 
 public class CrossSpireCommand extends ConsoleCommand {
 
@@ -29,6 +33,8 @@ public class CrossSpireCommand extends ConsoleCommand {
             cmdStart(tokens, depth);
         } else if ("queue".equals(sub)) {
             QueueDisplay.show();
+        } else if ("play".equals(sub)) {
+            cmdPlay(tokens, depth);
         } else {
             errorMsg();
         }
@@ -87,6 +93,46 @@ public class CrossSpireCommand extends ConsoleCommand {
         CrossSpireMod.lobbyState.markLocalReady(charName);
     }
 
+    private void cmdPlay(String[] tokens, int depth) {
+        if (tokens.length < depth + 2) {
+            DevConsole.log("Usage: crossspire play <card_id> [target_monster_id]");
+            return;
+        }
+        String cardId = tokens[depth + 1];
+        String targetId = tokens.length > depth + 2 ? tokens[depth + 2] : "self";
+
+        if (AbstractDungeon.player == null || AbstractDungeon.actionManager == null) {
+            DevConsole.log("Not in combat. Use crossspire start first.");
+            return;
+        }
+
+        AbstractCard card = CardLibrary.getCard(cardId);
+        if (card == null) {
+            DevConsole.log("Card not found: " + cardId);
+            return;
+        }
+
+        AbstractCreature target;
+        if ("self".equals(targetId)) {
+            target = AbstractDungeon.player;
+        } else {
+            AbstractMonster m = AbstractDungeon.getCurrRoom().monsters.getMonster(targetId);
+            if (m == null || m.isDeadOrEscaped()) {
+                DevConsole.log("Target not found: " + targetId);
+                return;
+            }
+            target = m;
+        }
+
+        AbstractCard copy = card.makeCopy();
+        copy.current_x = AbstractDungeon.player.hb.cX;
+        copy.current_y = AbstractDungeon.player.hb.cY;
+
+        AbstractDungeon.actionManager.addToBottom(new UseCardAction(copy, target));
+        CrossSpireMod.queueManager.enqueueOwnCard(cardId, targetId);
+        DevConsole.log("Playing " + cardId + " → " + targetId);
+    }
+
     private void broadcastBattleStart(String charName, String seed) {
         if (CrossSpireMod.relayClient == null || !CrossSpireMod.relayClient.isOpen()) return;
         Protocol.StageSync msg = new Protocol.StageSync();
@@ -101,6 +147,6 @@ public class CrossSpireCommand extends ConsoleCommand {
 
     @Override
     public void errorMsg() {
-        DevConsole.log("crossspire: connect <url> <room> | ready [char] | status | start [char] [seed]");
+        DevConsole.log("crossspire: connect <url> <room> | ready [char] | status | start [char] [seed] | play <card> [target] | queue");
     }
 }
