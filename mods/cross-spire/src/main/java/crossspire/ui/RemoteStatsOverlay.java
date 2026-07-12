@@ -47,8 +47,13 @@ public class RemoteStatsOverlay implements PostRenderSubscriber {
 
     @Override
     public void receivePostRender(SpriteBatch sb) {
-        if (AbstractDungeon.getCurrRoom() == null) return;
-        if (AbstractDungeon.getCurrRoom().phase != AbstractRoom.RoomPhase.COMBAT) return;
+        try {
+            if (AbstractDungeon.player == null) return;
+            if (AbstractDungeon.getCurrRoom() == null) return;
+            if (AbstractDungeon.getCurrRoom().phase != AbstractRoom.RoomPhase.COMBAT) return;
+        } catch (Exception e) {
+            return;
+        }
         int count = RemotePlayerRegistry.count();
         if (count == 0) return;
 
