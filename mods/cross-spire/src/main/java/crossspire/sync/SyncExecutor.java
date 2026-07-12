@@ -12,7 +12,6 @@ import crossspire.CrossSpireMod;
 import crossspire.network.Protocol;
 import crossspire.remote.RemotePlayerRegistry;
 import crossspire.remote.RemotePlayerState;
-import crossspire.remote.GameStarter;
 
 public class SyncExecutor {
 
@@ -37,11 +36,6 @@ public class SyncExecutor {
         if (source.equals(CrossSpireMod.playerId)) return;
 
         BaseMod.logger.info("SyncExecutor battle_start from " + source.substring(0, 8) + " char=" + charName + " seed=" + seed);
-        try {
-            GameStarter.start(charName, seed);
-        } catch (Exception e) {
-            BaseMod.logger.error("SyncExecutor battle_start failed: " + e.getClass().getSimpleName() + " " + e.getMessage());
-        }
     }
 
     private void handleRemotePlayerSync(String rawMessage) {

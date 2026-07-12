@@ -85,29 +85,33 @@ public class LobbyState {
         if (readyPlayers.size() < roomSize) return;
 
         started = true;
-        BaseMod.logger.info("LobbyState ALL READY! Starting game...");
+        BaseMod.logger.info("LobbyState ALL READY!");
 
-        String myChar = characterChoices.get(CrossSpireMod.playerId);
-        if (myChar == null) myChar = "IRONCLAD";
+        if (ServerPicker.isStageHost) {
+            String myChar = characterChoices.get(CrossSpireMod.playerId);
+            if (myChar == null) myChar = "IRONCLAD";
 
-        String seed = String.valueOf(System.currentTimeMillis() % 900000 + 100000);
-        Protocol.StageSync sync = new Protocol.StageSync();
-        sync.character = myChar;
-        sync.seed = seed;
-        sync.source = CrossSpireMod.playerId;
-        sync.seq = 1;
-        sync.act = 1;
+            String seed = String.valueOf(System.currentTimeMillis() % 900000 + 100000);
+            Protocol.StageSync sync = new Protocol.StageSync();
+            sync.character = myChar;
+            sync.seed = seed;
+            sync.source = CrossSpireMod.playerId;
+            sync.seq = 1;
+            sync.act = 1;
 
-        if (CrossSpireMod.relayClient != null && CrossSpireMod.relayClient.isOpen()) {
-            CrossSpireMod.relayClient.send(Protocol.GSON.toJson(sync));
-            BaseMod.logger.info("LobbyState broadcast stage_sync: " + myChar + " seed=" + seed);
-        }
+            if (CrossSpireMod.relayClient != null && CrossSpireMod.relayClient.isOpen()) {
+                CrossSpireMod.relayClient.send(Protocol.GSON.toJson(sync));
+                BaseMod.logger.info("LobbyState broadcast stage_sync: " + myChar + " seed=" + seed);
+            }
 
-        String usedSeed = crossspire.remote.GameStarter.start(myChar, seed);
-        if (usedSeed != null) {
-            CrossSpireMod.lastStartedChar = myChar;
-            CrossSpireMod.lastStartedSeed = usedSeed;
-            CrossSpireMod.startedGame = true;
+            String usedSeed = crossspire.remote.GameStarter.start(myChar, seed);
+            if (usedSeed != null) {
+                CrossSpireMod.lastStartedChar = myChar;
+                CrossSpireMod.lastStartedSeed = usedSeed;
+                CrossSpireMod.startedGame = true;
+            }
+        } else {
+            BaseMod.logger.info("LobbyState non-host, waiting for stage_sync from host");
         }
     }
 }
