@@ -5,6 +5,7 @@ import basemod.DevConsole;
 import basemod.devcommands.ConsoleCommand;
 import com.google.gson.JsonObject;
 import crossspire.CrossSpireMod;
+import crossspire.network.Protocol;
 import crossspire.remote.RemotePlayerRegistry;
 import crossspire.remote.RemotePlayerState;
 
@@ -77,15 +78,14 @@ public class CrossSpireCommand extends ConsoleCommand {
 
     private void broadcastBattleStart(String charName, String seed) {
         if (CrossSpireMod.relayClient == null || !CrossSpireMod.relayClient.isOpen()) return;
-        JsonObject msg = new JsonObject();
-        msg.addProperty("type", "state_sync");
-        msg.addProperty("subtype", "battle_start");
-        msg.addProperty("source", CrossSpireMod.playerId);
-        msg.addProperty("seq", 1);
-        msg.addProperty("character", charName);
-        msg.addProperty("seed", seed);
-        CrossSpireMod.relayClient.send(msg.toString());
-        BaseMod.logger.info("CrossSpireCommand broadcast battle_start: " + charName + " seed=" + seed);
+        Protocol.StageSync msg = new Protocol.StageSync();
+        msg.character = charName;
+        msg.seed = seed;
+        msg.source = CrossSpireMod.playerId;
+        msg.seq = 1;
+        msg.act = 1;
+        CrossSpireMod.relayClient.send(Protocol.GSON.toJson(msg));
+        BaseMod.logger.info("CrossSpireCommand broadcast stage_sync: " + charName + " seed=" + seed);
     }
 
     @Override

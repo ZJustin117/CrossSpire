@@ -17,19 +17,22 @@ public class LocalCapturePatches {
     public static class OnUseCard {
         @SpirePostfixPatch
         public static void Postfix(AbstractPlayer __instance, AbstractCard card, AbstractMonster target, int energyOnUse) {
-            if (CrossSpireMod.relayClient == null) return;
+            if (CrossSpireMod.relayClient == null || !CrossSpireMod.relayClient.isOpen()) return;
+            if (CrossSpireMod.playerId.isEmpty()) return;
 
-            Protocol.QueueSubmit submit = new Protocol.QueueSubmit();
-            submit.source = CrossSpireMod.playerId.isEmpty() ? "unknown" : CrossSpireMod.playerId;
-            submit.seq = 1;
-            submit.cardId = card.cardID;
-            submit.upgraded = card.upgraded;
-            submit.target = target != null ? target.id : "self";
-            submit.energyCost = energyOnUse;
+            Protocol.QueuePacket pkt = new Protocol.QueuePacket();
+            pkt.packetId = CrossSpireMod.playerId + "/" + UUID.randomUUID().toString().substring(0, 8);
+            pkt.senderId = CrossSpireMod.playerId;
+            pkt.ownerId = CrossSpireMod.playerId;
+            pkt.timestamp = System.currentTimeMillis();
+            pkt.cardId = card.cardID;
+            pkt.resourceHash = "";
+            pkt.target = target != null ? target.id : "self";
+            pkt.source = CrossSpireMod.playerId;
+            pkt.seq = 1;
 
-            String json = Protocol.GSON.toJson(submit);
-            CrossSpireMod.relayClient.send(json);
-            BaseMod.logger.info("CapturePatches queue_submit: " + json);
+            CrossSpireMod.relayClient.send(Protocol.GSON.toJson(pkt));
+            BaseMod.logger.info("CapturePatches queue_packet: " + card.cardID);
         }
     }
 }

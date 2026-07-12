@@ -5,10 +5,10 @@ import basemod.devcommands.ConsoleCommand;
 import com.evacipated.cardcrawl.modthespire.lib.SpireInitializer;
 import crossspire.network.RelayClient;
 import crossspire.remote.RemoteRenderer;
-import crossspire.remote.StageHost;
-import crossspire.sync.InvokeExecutor;
 import crossspire.sync.MessageRouter;
 import crossspire.sync.SyncExecutor;
+import crossspire.combat.QueueManager;
+import crossspire.network.Protocol;
 import crossspire.ui.CrossSpireCommand;
 import crossspire.ui.LobbyScreen;
 import crossspire.ui.ServerPicker;
@@ -21,7 +21,7 @@ public class CrossSpireMod {
     public static RelayClient relayClient;
     public static MessageRouter messageRouter;
     public static LobbyScreen lobbyScreen;
-    public static StageHost stageHost;
+    public static QueueManager queueManager;
     public static String playerId = "";
     public static boolean startedGame = false;
     public static String lastStartedChar = "IRONCLAD";
@@ -31,8 +31,8 @@ public class CrossSpireMod {
         BaseMod.logger.info("CrossSpire mod initialized");
         BaseMod.logger.info("CrossSpire EventSuppression ready, current value=" + EventSuppression.SUPPRESSION.get());
 
-        stageHost = new StageHost();
-        messageRouter = new MessageRouter(new InvokeExecutor(), new SyncExecutor(), stageHost);
+        queueManager = new QueueManager();
+        messageRouter = new MessageRouter(new SyncExecutor(), queueManager);
         lobbyScreen = new LobbyScreen();
         lobbyScreen.hide();
         ConsoleCommand.addCommand("crossspire", CrossSpireCommand.class);
@@ -91,14 +91,13 @@ public class CrossSpireMod {
 
     public static void resendBattleStart() {
         if (relayClient == null || !relayClient.isOpen() || !startedGame) return;
-        JsonObject msg = new JsonObject();
-        msg.addProperty("type", "state_sync");
-        msg.addProperty("subtype", "battle_start");
-        msg.addProperty("source", playerId);
-        msg.addProperty("seq", 1);
-        msg.addProperty("character", lastStartedChar);
-        msg.addProperty("seed", lastStartedSeed);
-        relayClient.send(msg.toString());
-        BaseMod.logger.info("CrossSpire resend battle_start: " + lastStartedChar + " seed=" + lastStartedSeed);
+        Protocol.StageSync msg = new Protocol.StageSync();
+        msg.character = lastStartedChar;
+        msg.seed = lastStartedSeed;
+        msg.source = playerId;
+        msg.seq = 1;
+        msg.act = 1;
+        relayClient.send(Protocol.GSON.toJson(msg));
+        BaseMod.logger.info("CrossSpire resend stage_sync: " + lastStartedChar + " seed=" + lastStartedSeed);
     }
 }
