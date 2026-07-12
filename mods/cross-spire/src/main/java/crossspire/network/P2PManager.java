@@ -66,15 +66,39 @@ public class P2PManager {
         }
     }
 
+    private boolean isDirect(String peerId) {
+        Socket s = connections.get(peerId);
+        return s != null && !s.isClosed();
+    }
+
+    public void sendOrRelay(String peerId, String message) {
+        if (isDirect(peerId)) {
+            send(peerId, message);
+        } else {
+            relayViaServer(message);
+        }
+    }
+
+    public void relayViaServer(String message) {
+        if (CrossSpireMod.relayClient != null && CrossSpireMod.relayClient.isOpen()) {
+            CrossSpireMod.relayClient.send(message);
+        }
+    }
+
     public void send(String peerId, String message) {
         Socket s = connections.get(peerId);
-        if (s == null || s.isClosed()) return;
+        if (s == null || s.isClosed()) {
+            relayViaServer(message);
+            return;
+        }
         try {
             BufferedWriter w = new BufferedWriter(new OutputStreamWriter(s.getOutputStream(), "UTF-8"));
             w.write(message + "\n");
             w.flush();
         } catch (IOException e) {
-            BaseMod.logger.error("P2PManager send error: " + e.getMessage());
+            BaseMod.logger.error("P2PManager send error, falling back to relay: " + e.getMessage());
+            connections.remove(peerId);
+            relayViaServer(message);
         }
     }
 
@@ -121,7 +145,7 @@ public class P2PManager {
                     BufferedReader r = new BufferedReader(new InputStreamReader(socket.getInputStream(), "UTF-8"));
                     String line;
                     while ((line = r.readLine()) != null) {
-                        BaseMod.logger.info("P2PManager recv from " + peerId.substring(0, 8) + ": " + line);
+                        routeP2pMessage(line);
                     }
                 } catch (IOException e) {
                     BaseMod.logger.info("P2PManager " + peerId.substring(0, 8) + " disconnected");
@@ -131,6 +155,14 @@ public class P2PManager {
                 }
             }
         }, "P2P-Reader-" + peerId.substring(0, 8)).start();
+    }
+
+    private void routeP2pMessage(String line) {
+        try {
+            CrossSpireMod.messageRouter.route(line);
+        } catch (Exception e) {
+            BaseMod.logger.error("P2PManager route error: " + e.getMessage());
+        }
     }
 
     public void stop() {

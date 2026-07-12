@@ -49,12 +49,8 @@ public class LobbyState {
 
         if (source.isEmpty() || source.equals(CrossSpireMod.playerId)) return;
 
-        boolean isNew = readyPlayers.add(source);
+        readyPlayers.add(source);
         characterChoices.put(source, character.toUpperCase());
-
-        if (isNew && readyPlayers.size() > roomSize - 1) {
-            roomSize = readyPlayers.size() + 1;
-        }
 
         BaseMod.logger.info("LobbyState " + source.substring(0, 8) + " ready as " + character
             + " ready=" + readyPlayers.size() + "/" + roomSize);
