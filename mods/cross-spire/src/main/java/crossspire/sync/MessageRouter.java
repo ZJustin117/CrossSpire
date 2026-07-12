@@ -2,6 +2,7 @@ package crossspire.sync;
 
 import basemod.BaseMod;
 import com.google.gson.JsonObject;
+import crossspire.CrossSpireMod;
 import crossspire.combat.QueueManager;
 import crossspire.network.Protocol;
 import crossspire.resource.RemoteResourceManager;
@@ -52,6 +53,8 @@ public class MessageRouter {
             BaseMod.logger.info("MessageRouter resource_request ignored");
         } else if ("resource_response".equals(type)) {
             RemoteResourceManager.onResourceResponse(rawMessage);
+        } else if ("hello".equals(type)) {
+            CrossSpireMod.p2pManager.onHelloReceived(rawMessage);
         }
     }
 }

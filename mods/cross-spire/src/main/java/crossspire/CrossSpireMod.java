@@ -8,6 +8,7 @@ import crossspire.remote.RemoteRenderer;
 import crossspire.sync.MessageRouter;
 import crossspire.sync.SyncExecutor;
 import crossspire.combat.QueueManager;
+import crossspire.network.P2PManager;
 import crossspire.network.Protocol;
 import crossspire.ui.CrossSpireCommand;
 import crossspire.ui.LobbyScreen;
@@ -22,6 +23,7 @@ public class CrossSpireMod {
     public static MessageRouter messageRouter;
     public static LobbyScreen lobbyScreen;
     public static QueueManager queueManager;
+    public static P2PManager p2pManager;
     public static String playerId = "";
     public static boolean startedGame = false;
     public static String lastStartedChar = "IRONCLAD";
@@ -32,6 +34,7 @@ public class CrossSpireMod {
         BaseMod.logger.info("CrossSpire EventSuppression ready, current value=" + EventSuppression.SUPPRESSION.get());
 
         queueManager = new QueueManager();
+        p2pManager = new P2PManager();
         messageRouter = new MessageRouter(new SyncExecutor(), queueManager);
         lobbyScreen = new LobbyScreen();
         lobbyScreen.hide();

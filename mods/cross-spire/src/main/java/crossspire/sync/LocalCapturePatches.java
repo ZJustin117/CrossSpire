@@ -17,6 +17,7 @@ public class LocalCapturePatches {
     public static class OnUseCard {
         @SpirePostfixPatch
         public static void Postfix(AbstractPlayer __instance, AbstractCard card, AbstractMonster target, int energyOnUse) {
+            BaseMod.logger.info("CapturePatches useCard: " + card.cardID + " connected=" + (CrossSpireMod.relayClient != null && CrossSpireMod.relayClient.isOpen()));
             if (CrossSpireMod.relayClient == null || !CrossSpireMod.relayClient.isOpen()) return;
             if (CrossSpireMod.playerId.isEmpty()) return;
 
