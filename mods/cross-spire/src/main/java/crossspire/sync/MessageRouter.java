@@ -50,7 +50,7 @@ public class MessageRouter {
         } else if ("player_state".equals(type)) {
             syncExecutor.handleSync("remote_player", null, 1, rawMessage);
         } else if ("stage_sync".equals(type)) {
-            syncExecutor.handleSync("battle_start", null, 1, rawMessage);
+            syncExecutor.handleSync(subtype.isEmpty() ? "battle_start" : subtype, null, 1, rawMessage);
         } else if ("state_sync".equals(type)) {
             syncExecutor.handleSync(subtype, null, 1, rawMessage);
         } else if ("resource_registry".equals(type)) {
