@@ -4,6 +4,8 @@ import basemod.BaseMod;
 import crossspire.CrossSpireMod;
 import crossspire.EventSuppression;
 import crossspire.network.Protocol;
+import crossspire.reference.Reference;
+import crossspire.reference.ReferenceFactory;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -64,44 +66,58 @@ public class QueueManager {
             head = packets.get(0);
         }
 
-        if (!head.ownerId.equals(CrossSpireMod.playerId)) return;
+        Reference<Object> ref = ReferenceFactory.createCardRef(head.cardId, head.ownerId, head.resourceHash);
+        BaseMod.logger.info("QueueManager checkHead: " + head.cardId + " refType=" + ref.type + " owner=" + head.ownerId.substring(0, 8));
 
-        executing = true;
+        if (ref.type == Reference.Type.LOCAL) {
+            executing = true;
+            String pid = head.packetId;
+            BaseMod.logger.info("QueueManager LOCAL dereference: " + head.cardId + " (" + pid + ")");
 
-        String pid = head.packetId;
-        BaseMod.logger.info("QueueManager executing own packet: " + head.cardId + " (" + pid + ")");
+            synchronized (packets) {
+                for (int i = 0; i < packets.size(); i++) {
+                    if (packets.get(i).packetId.equals(pid)) {
+                        packets.remove(i);
+                        break;
+                    }
+                }
+            }
 
-        Protocol.EffectDescription dmg = new Protocol.EffectDescription();
-        dmg.kind = "damage";
-        dmg.target = head.target;
-        dmg.amount = 6;
+            ref.dereference(head.target);
 
-        EventSuppression.suppressEvents(() -> {
-            BaseMod.logger.info("QueueManager executed (suppressed): " + head.cardId);
-        });
+            executing = false;
+            checkHead();
 
-        synchronized (packets) {
-            for (int i = 0; i < packets.size(); i++) {
-                if (packets.get(i).packetId.equals(pid)) {
-                    packets.remove(i);
-                    break;
+        } else if (ref.type == Reference.Type.REMOTE) {
+            executing = true;
+            String pid = head.packetId;
+            BaseMod.logger.info("QueueManager REMOTE dereference: " + head.cardId + " → " + head.ownerId.substring(0, 8));
+
+            synchronized (packets) {
+                for (int i = 0; i < packets.size(); i++) {
+                    if (packets.get(i).packetId.equals(pid)) {
+                        packets.remove(i);
+                        break;
+                    }
+                }
+            }
+
+            ref.dereference(head.target);
+
+            executing = false;
+            checkHead();
+
+        } else {
+            BaseMod.logger.info("QueueManager NULL reference for " + head.cardId + " — dequeuing");
+            synchronized (packets) {
+                for (int i = 0; i < packets.size(); i++) {
+                    if (packets.get(i).packetId.equals(head.packetId)) {
+                        packets.remove(i);
+                        break;
+                    }
                 }
             }
         }
-
-        Protocol.QueueComplete complete = new Protocol.QueueComplete();
-        complete.source = CrossSpireMod.playerId;
-        complete.seq = 1;
-        complete.packetId = pid;
-        complete.effects = new Protocol.EffectDescription[] { dmg };
-        complete.operationSequence = new Protocol.OperationStep[0];
-
-        if (CrossSpireMod.relayClient != null && CrossSpireMod.relayClient.isOpen()) {
-            CrossSpireMod.relayClient.send(Protocol.GSON.toJson(complete));
-        }
-
-        executing = false;
-        checkHead();
     }
 
     public void enqueueOwnCard(String cardId, String target) {

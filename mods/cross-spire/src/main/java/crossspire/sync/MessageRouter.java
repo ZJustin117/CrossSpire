@@ -6,6 +6,7 @@ import crossspire.CrossSpireMod;
 import crossspire.combat.CombatResultReplayer;
 import crossspire.combat.QueueManager;
 import crossspire.network.Protocol;
+import crossspire.reference.RemoteReference;
 import crossspire.ui.QueueDisplay;
 import crossspire.resource.RemoteResourceManager;
 import crossspire.resource.ResourceRegistryTracker;
@@ -63,6 +64,38 @@ public class MessageRouter {
             CrossSpireMod.p2pManager.onHelloReceived(rawMessage);
         } else if ("player_ready".equals(type)) {
             CrossSpireMod.lobbyState.onPlayerReady(rawMessage);
+        } else if ("invoke".equals(type)) {
+            handleInvoke(rawMessage);
+        } else if ("invoke_result".equals(type)) {
+            Protocol.InvokeResultMessage result = Protocol.GSON.fromJson(rawMessage, Protocol.InvokeResultMessage.class);
+            RemoteReference.onInvokeResult(result);
+        }
+    }
+
+    private void handleInvoke(String rawMessage) {
+        Protocol.InvokeMessage inv = Protocol.GSON.fromJson(rawMessage, Protocol.InvokeMessage.class);
+        BaseMod.logger.info("MessageRouter invoke: " + inv.refId + " trigger=" + inv.trigger);
+        crossspire.reference.Reference<Object> ref = new crossspire.reference.LocalReference<Object>(
+            inv.refId.contains("@") ? inv.refId.split(":")[1].split("@")[0] : "unknown",
+            CrossSpireMod.playerId
+        );
+        ref.dereference(inv.args);
+
+        Protocol.EffectDescription dmg = new Protocol.EffectDescription();
+        dmg.kind = "damage";
+        dmg.target = "self";
+        dmg.amount = 6;
+
+        Protocol.InvokeResultMessage result = new Protocol.InvokeResultMessage();
+        result.source = CrossSpireMod.playerId;
+        result.seq = 1;
+        result.refId = inv.refId;
+        result.effects = new Protocol.EffectDescription[] { dmg };
+        result.operationSequence = new Protocol.OperationStep[0];
+
+        if (CrossSpireMod.relayClient != null && CrossSpireMod.relayClient.isOpen()) {
+            CrossSpireMod.relayClient.send(Protocol.GSON.toJson(result));
+            BaseMod.logger.info("MessageRouter sent invoke_result: " + inv.refId);
         }
     }
 }

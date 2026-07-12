@@ -8,6 +8,7 @@ import com.megacrit.cardcrawl.characters.AbstractPlayer;
 import com.megacrit.cardcrawl.monsters.AbstractMonster;
 import crossspire.CrossSpireMod;
 import crossspire.network.Protocol;
+import crossspire.reference.ContentValidator;
 import java.util.UUID;
 
 @SuppressWarnings("unused")
@@ -27,7 +28,7 @@ public class LocalCapturePatches {
             pkt.ownerId = CrossSpireMod.playerId;
             pkt.timestamp = System.currentTimeMillis();
             pkt.cardId = card.cardID;
-            pkt.resourceHash = "";
+            pkt.resourceHash = ContentValidator.hashResource("card", card.cardID);
             pkt.target = target != null ? target.id : "self";
             pkt.source = CrossSpireMod.playerId;
             pkt.seq = 1;

@@ -165,6 +165,10 @@ public class P2PManager {
         }
     }
 
+    public boolean hasDirectConnection(String peerId) {
+        return isDirect(peerId);
+    }
+
     public void stop() {
         running = false;
         for (Socket s : connections.values()) {
