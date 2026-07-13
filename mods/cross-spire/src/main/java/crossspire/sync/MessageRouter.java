@@ -65,7 +65,7 @@ public class MessageRouter {
         } else if ("resource_registry".equals(type)) {
             ResourceRegistryTracker.onRegistryReceived(rawMessage);
         } else if ("resource_request".equals(type)) {
-            BaseMod.logger.info("MessageRouter resource_request ignored");
+            RemoteResourceManager.serveResource(rawMessage);
         } else if ("resource_response".equals(type)) {
             RemoteResourceManager.onResourceResponse(rawMessage);
         } else if ("hello".equals(type)) {
