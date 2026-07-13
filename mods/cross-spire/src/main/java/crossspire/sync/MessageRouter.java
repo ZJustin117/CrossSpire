@@ -152,7 +152,13 @@ public class MessageRouter {
 
         if (CrossSpireMod.relayClient != null && CrossSpireMod.relayClient.isOpen()) {
             CrossSpireMod.relayClient.send(Protocol.GSON.toJson(result));
-            BaseMod.logger.info("MessageRouter sent invoke_result: " + inv.refId);
+            StringBuilder fx = new StringBuilder();
+            Protocol.EffectDescription[] effs = result.effects;
+            for (int i = 0; i < effs.length; i++) {
+                if (i > 0) fx.append(", ");
+                fx.append(effs[i].kind).append("=").append(effs[i].amount);
+            }
+            BaseMod.logger.info("MessageRouter sent invoke_result: " + inv.refId + " [" + fx + "]");
         }
     }
 

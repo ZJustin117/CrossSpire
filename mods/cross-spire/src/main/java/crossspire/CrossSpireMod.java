@@ -77,6 +77,33 @@ public class CrossSpireMod {
         } catch (Exception e) {
             // ignore — script is optional
         }
+        startBatchWatcher();
+    }
+
+    private static void startBatchWatcher() {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                String batchFile = "/storage/emulated/0/Android/data/io.stamethyst/files/sts/crossspire_batch.txt";
+                while (true) {
+                    try { Thread.sleep(5000); } catch (InterruptedException e) { break; }
+                    try {
+                        java.io.File f = new java.io.File(batchFile);
+                        if (!f.exists()) continue;
+                        java.io.BufferedReader br = new java.io.BufferedReader(new java.io.FileReader(f));
+                        String line;
+                        while ((line = br.readLine()) != null) {
+                            line = line.trim();
+                            if (line.isEmpty() || line.startsWith("#")) continue;
+                            BaseMod.logger.info("CrossSpire batch: " + line);
+                            ConsoleCommand.execute(line.split(" "));
+                        }
+                        br.close();
+                        f.delete();
+                    } catch (Exception ignored) {}
+                }
+            }
+        }, "BatchWatcher").start();
     }
 
     public static void connect() {

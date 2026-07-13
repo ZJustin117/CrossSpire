@@ -40,7 +40,12 @@ public class CombatResultReplayer {
             BaseMod.logger.info("CombatResultReplayer applyEffects skipped: not in game");
             return;
         }
-        BaseMod.logger.info("CombatResultReplayer applyEffects: " + effects.length + " effects");
+        StringBuilder fx = new StringBuilder();
+        for (int i = 0; i < effects.length; i++) {
+            if (i > 0) fx.append(", ");
+            fx.append(effects[i].kind).append("=").append(effects[i].amount);
+        }
+        BaseMod.logger.info("CombatResultReplayer applyEffects: " + effects.length + " effects: " + fx);
         EventSuppression.suppressEvents(() -> {
             for (Protocol.EffectDescription eff : effects) {
                 JsonObject fakeEl = new JsonObject();

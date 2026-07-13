@@ -57,7 +57,12 @@ public class LocalReference<T> extends Reference<T> {
 
         if (CrossSpireMod.relayClient != null && CrossSpireMod.relayClient.isOpen()) {
             CrossSpireMod.relayClient.send(Protocol.GSON.toJson(complete));
-            BaseMod.logger.info("LocalReference broadcast queue_complete: " + cardId);
+            StringBuilder fx = new StringBuilder();
+            for (int i = 0; i < captured.length; i++) {
+                if (i > 0) fx.append(", ");
+                fx.append(captured[i].kind).append("=").append(captured[i].amount);
+            }
+            BaseMod.logger.info("LocalReference queue_complete: " + cardId + " [" + fx + "]");
         }
     }
 
