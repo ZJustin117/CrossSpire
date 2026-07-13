@@ -35,6 +35,8 @@ public class CrossSpireCommand extends ConsoleCommand {
             QueueDisplay.show();
         } else if ("play".equals(sub)) {
             cmdPlay(tokens, depth);
+        } else if ("auto".equals(sub)) {
+            cmdAuto(tokens, depth);
         } else {
             errorMsg();
         }
@@ -123,6 +125,13 @@ public class CrossSpireCommand extends ConsoleCommand {
         AbstractDungeon.actionManager.addToBottom(new UseCardAction(copy, target));
         CrossSpireMod.queueManager.enqueueOwnCard(cardId, targetId);
         DevConsole.log("Playing " + cardId + " → " + targetId);
+    }
+
+    private void cmdAuto(String[] tokens, int depth) {
+        String charName = tokens.length > depth + 1 ? tokens[depth + 1].toUpperCase() : "IRONCLAD";
+        DevConsole.log("Auto starting " + charName + "...");
+        crossspire.sync.AutoGameStartPatch.pendingChar = charName;
+        new com.megacrit.cardcrawl.screens.charSelect.CharacterSelectScreen().open(false);
     }
 
     @Override

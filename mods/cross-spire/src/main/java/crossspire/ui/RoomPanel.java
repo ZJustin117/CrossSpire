@@ -187,7 +187,10 @@ public class RoomPanel implements PostRenderSubscriber, PostUpdateSubscriber {
         if (playBtnY > 0 && inRect(mx, my, x, playBtnY, bw, bh)) {
             String seed = com.megacrit.cardcrawl.helpers.SeedHelper.cachedSeed;
             if (seed != null && !seed.isEmpty()) {
-                crossspire.remote.GameStarter.start(selectedCharacter, seed);
+                BaseMod.logger.info("RoomPanel Play: " + selectedCharacter + " seed=" + seed);
+                crossspire.sync.AutoGameStartPatch.pendingChar = selectedCharacter;
+                com.megacrit.cardcrawl.screens.charSelect.CharacterSelectScreen css = new com.megacrit.cardcrawl.screens.charSelect.CharacterSelectScreen();
+                css.open(false);
             }
             return;
         }
