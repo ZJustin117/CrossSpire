@@ -11,10 +11,16 @@ import crossspire.CrossSpireMod;
 
 public class CombatSyncPatches {
 
+    public static boolean suppressBroadcast = false;
+
     @SpirePatch(clz = MonsterRoom.class, method = "onPlayerEntry")
     public static class OnMonsterRoomEntry {
         @SpirePostfixPatch
         public static void Postfix(MonsterRoom __instance) {
+            if (suppressBroadcast) {
+                suppressBroadcast = false;
+                return;
+            }
             if (CrossSpireMod.relayClient == null || !CrossSpireMod.relayClient.isOpen()) return;
             if (__instance.monsters == null) return;
 

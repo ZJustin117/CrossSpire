@@ -3,6 +3,8 @@ package crossspire.sync;
 import basemod.BaseMod;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.megacrit.cardcrawl.core.CardCrawlGame;
+import com.megacrit.cardcrawl.dungeons.AbstractDungeon;
 import crossspire.CrossSpireMod;
 import crossspire.network.Protocol;
 import crossspire.remote.RemotePlayerRegistry;
@@ -88,6 +90,32 @@ public class SyncExecutor {
         String source = msg.has("source") ? msg.get("source").getAsString() : "";
         if (source.equals(CrossSpireMod.playerId)) return;
         JsonArray ids = msg.has("monster_ids") ? msg.getAsJsonArray("monster_ids") : new JsonArray();
-        BaseMod.logger.info("SyncExecutor room_enter from " + (source.length() >= 8 ? source.substring(0, 8) : source) + " monsters=" + ids);
+        if (ids.size() == 0) return;
+
+        String firstMonster = ids.get(0).getAsString();
+        BaseMod.logger.info("SyncExecutor room_enter from " + source.substring(0, 8) + " monsters=" + ids);
+
+        CombatSyncPatches.suppressBroadcast = true;
+
+        final String monster = firstMonster;
+        new Thread(new Runnable() {
+            @Override public void run() {
+                for (int attempt = 0; attempt < 10; attempt++) {
+                    try { Thread.sleep(3000); } catch (InterruptedException e) { break; }
+                    if (AbstractDungeon.player != null
+                        && CardCrawlGame.mode == CardCrawlGame.GameMode.GAMEPLAY
+                        && !(AbstractDungeon.getCurrRoom() instanceof com.megacrit.cardcrawl.rooms.MonsterRoom)) {
+                        BaseMod.logger.info("SyncExecutor entering remote combat (attempt " + attempt + "): " + monster);
+                        String[] args = ("fight " + monster).split(" ");
+                        basemod.devcommands.ConsoleCommand.execute(args);
+                        BaseMod.logger.info("SyncExecutor entered remote combat via fight: " + monster);
+                        return;
+                    }
+                    BaseMod.logger.info("SyncExecutor room_enter waiting (attempt " + attempt + "): player="
+                        + (AbstractDungeon.player != null) + " mode=" + CardCrawlGame.mode);
+                }
+                BaseMod.logger.info("SyncExecutor room_enter giving up after 10 attempts");
+            }
+        }, "RoomEnterDeferred").start();
     }
 }
