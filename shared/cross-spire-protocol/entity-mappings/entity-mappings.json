@@ -1,0 +1,29 @@
+{
+  "version": "0.1.0",
+  "description": "Entity mappings from Slay the Spire 1 to Slay the Spire 2. Unmapped entities use remote references with fallback effects.",
+  "characters": {
+    "IRONCLAD": { "sts2_id": "IRONCLAD", "mapped": false, "note": "awaiting STS2 character enum" },
+    "THE_SILENT": { "sts2_id": "THE_SILENT", "mapped": false },
+    "DEFECT": { "sts2_id": "DEFECT", "mapped": false },
+    "WATCHER": { "sts2_id": "WATCHER", "mapped": false }
+  },
+  "cards": {
+    "Strike_R": { "sts2_id": "Strike_R", "mapped": true },
+    "Defend_R": { "sts2_id": "Defend_R", "mapped": true },
+    "Bash": { "sts2_id": "Bash", "mapped": true },
+    "Strike_G": { "sts2_id": "Strike_G", "mapped": true },
+    "Defend_G": { "sts2_id": "Defend_G", "mapped": true },
+    "Neutralize": { "sts2_id": "Neutralize", "mapped": true },
+    "Strike_B": { "sts2_id": "Strike_B", "mapped": true },
+    "Defend_B": { "sts2_id": "Defend_B", "mapped": true },
+    "Zap": { "sts2_id": "Zap", "mapped": true },
+    "Dualcast": { "sts2_id": "Dualcast", "mapped": true }
+  },
+  "relics": {
+    "Burning Blood": { "sts2_id": "BurningBlood", "mapped": true },
+    "Ring of the Snake": { "sts2_id": "RingOfTheSnake", "mapped": true },
+    "Cracked Core": { "sts2_id": "CrackedCore", "mapped": true },
+    "Pure Water": { "sts2_id": "PureWater", "mapped": true },
+    "Vajra": { "sts2_id": "Vajra", "mapped": true }
+  }
+}

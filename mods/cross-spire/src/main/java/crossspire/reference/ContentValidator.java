@@ -5,6 +5,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import com.megacrit.cardcrawl.cards.AbstractCard;
+import com.megacrit.cardcrawl.helpers.CardLibrary;
+import com.megacrit.cardcrawl.helpers.RelicLibrary;
+import com.megacrit.cardcrawl.relics.AbstractRelic;
 import basemod.BaseMod;
 
 public final class ContentValidator {
@@ -14,12 +18,11 @@ public final class ContentValidator {
     public static String hashResource(String resourceType, String resourceId) {
         try {
             String path = resolvePath(resourceType, resourceId);
-            if (path == null) return "";
+            if (path == null) return hashFromInstance(resourceType, resourceId);
             byte[] bytes = loadBytes(path);
             return sha256(bytes);
         } catch (Exception e) {
-            BaseMod.logger.info("ContentValidator hashResource failed: " + resourceType + "/" + resourceId + " - " + e.getMessage());
-            return "";
+            return hashFromInstance(resourceType, resourceId);
         }
     }
 
@@ -28,6 +31,28 @@ public final class ContentValidator {
         String local = hashResource(resourceType, resourceId);
         if (local.isEmpty()) return false;
         return local.equals(remoteHash);
+    }
+
+    private static String hashFromInstance(String resourceType, String resourceId) {
+        try {
+            Class<?> cls = null;
+            if ("card".equals(resourceType)) {
+                AbstractCard card = CardLibrary.getCard(resourceId);
+                if (card != null) cls = card.getClass();
+            } else if ("relic".equals(resourceType)) {
+                AbstractRelic relic = RelicLibrary.getRelic(resourceId);
+                if (relic != null) cls = relic.getClass();
+            } else {
+                String className = resolvePath(resourceType, resourceId);
+                if (className != null) cls = Class.forName(className.replace('/', '.').replace(".class", ""));
+            }
+            if (cls == null) return "";
+            String classPath = cls.getName().replace('.', '/') + ".class";
+            byte[] bytes = loadBytes(classPath);
+            return sha256(bytes);
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     private static String resolvePath(String resourceType, String resourceId) {
