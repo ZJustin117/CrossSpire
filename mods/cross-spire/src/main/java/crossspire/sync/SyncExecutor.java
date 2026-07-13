@@ -2,12 +2,7 @@ package crossspire.sync;
 
 import basemod.BaseMod;
 import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.megacrit.cardcrawl.dungeons.AbstractDungeon;
-import com.megacrit.cardcrawl.helpers.MonsterHelper;
-import com.megacrit.cardcrawl.monsters.AbstractMonster;
-import com.megacrit.cardcrawl.monsters.MonsterGroup;
 import crossspire.CrossSpireMod;
 import crossspire.network.Protocol;
 import crossspire.remote.RemotePlayerRegistry;
@@ -35,8 +30,8 @@ public class SyncExecutor {
 
         if (source.equals(CrossSpireMod.playerId)) return;
 
-        BaseMod.logger.info("SyncExecutor battle_start from " + source.substring(0, 8) + " char=" + charName + " seed=" + seed);
-        CrossSpireMod.pendingStartSeed = seed;  // seed only — joiner uses own character
+        BaseMod.logger.info("SyncExecutor battle_start from " + (source.length() >= 8 ? source.substring(0, 8) : source) + " char=" + charName + " seed=" + seed);
+        CrossSpireMod.pendingStartSeed = seed;
     }
 
     private void handleRemotePlayerSync(String rawMessage) {
@@ -70,7 +65,9 @@ public class SyncExecutor {
             }
         }
 
-        BaseMod.logger.info("SyncExecutor remote_player " + source.substring(0, 8) + " hp=" + rp.hp + " blk=" + rp.block);
+        if (source.length() >= 8) {
+            BaseMod.logger.info("SyncExecutor remote_player " + source.substring(0, 8) + " hp=" + rp.hp + " blk=" + rp.block);
+        }
     }
 
     private void handleRoomEnter(String rawMessage) {
@@ -79,9 +76,6 @@ public class SyncExecutor {
         if (source.equals(CrossSpireMod.playerId)) return;
 
         JsonArray ids = msg.has("monster_ids") ? msg.getAsJsonArray("monster_ids") : new JsonArray();
-        JsonArray hps = msg.has("monster_hps") ? msg.getAsJsonArray("monster_hps") : new JsonArray();
-
-        BaseMod.logger.info("SyncExecutor room_enter from " + source.substring(0, 8) + " monsters=" + ids);
-        CombatSyncPatches.storePendingRoom(source, ids, hps);
+        BaseMod.logger.info("SyncExecutor room_enter from " + (source.length() >= 8 ? source.substring(0, 8) : source) + " monsters=" + ids);
     }
 }

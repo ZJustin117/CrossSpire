@@ -141,18 +141,10 @@ public class RoomPanel implements PostRenderSubscriber, PostUpdateSubscriber {
 
     @Override
     public void receivePostUpdate() {
-        // Handle pending game start (joiner received stage_sync from host)
         if (CrossSpireMod.pendingStartSeed != null) {
-            String sd = CrossSpireMod.pendingStartSeed;
-            String cn = CrossSpireMod.lobbyState.getMyCharacter();
+            CrossSpireMod.deferredSeed = CrossSpireMod.pendingStartSeed;
+            CrossSpireMod.deferredChar = CrossSpireMod.lobbyState.getMyCharacter();
             CrossSpireMod.pendingStartSeed = null;
-            BaseMod.logger.info("RoomPanel deferred start: " + cn + " seed=" + sd);
-            String usedSeed = crossspire.remote.GameStarter.start(cn, sd);
-            if (usedSeed != null) {
-                CrossSpireMod.lastStartedChar = cn;
-                CrossSpireMod.lastStartedSeed = usedSeed;
-                CrossSpireMod.startedGame = true;
-            }
             return;
         }
 
