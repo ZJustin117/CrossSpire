@@ -1,0 +1,252 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://crossspire.dev/protocol-schema.json",
+  "title": "CrossSpire Protocol",
+  "description": "Message format definitions for CrossSpire multiplayer mod. Shared source of truth for Java and TypeScript implementations.",
+  "definitions": {
+    "GameMessage": {
+      "type": "object",
+      "required": ["type", "source", "seq"],
+      "properties": {
+        "type": { "type": "string", "description": "Message type discriminator" },
+        "subtype": { "type": "string", "description": "Optional subtype for state_sync / stage_sync" },
+        "source": { "type": "string", "description": "Sender player ID (UUID)" },
+        "seq": { "type": "integer", "description": "Monotonic sequence number per source" },
+        "target": { "type": "string", "description": "Target player ID; absent for broadcast" },
+        "timestamp": { "type": "number", "description": "Send timestamp (epoch ms)" }
+      }
+    },
+    "EffectDescription": {
+      "type": "object",
+      "required": ["kind", "target", "amount"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["damage", "gain_block", "apply_power", "remove_power", "heal", "gain_energy",
+            "draw_card", "discard_card", "exhaust_card", "gain_gold", "obtain_relic",
+            "obtain_potion", "lose_hp", "magic_number"]
+        },
+        "target": { "type": "string" },
+        "amount": { "type": "integer" },
+        "card_id": { "type": "string" },
+        "relic_id": { "type": "string" },
+        "potion_id": { "type": "string" },
+        "power_id": { "type": "string" },
+        "damage_type": { "type": "string" }
+      }
+    },
+    "OperationStep": {
+      "type": "object",
+      "properties": {
+        "step": { "type": "string" },
+        "card_id": { "type": "string" },
+        "source": { "type": "string" },
+        "target": { "type": "string" },
+        "amount": { "type": "integer" }
+      }
+    },
+    "MemberInfo": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "ip": { "type": "string" },
+        "port": { "type": "integer" }
+      }
+    },
+    "RemotePlayerState": {
+      "type": "object",
+      "properties": {
+        "hp": { "type": "integer" },
+        "max_hp": { "type": "integer" },
+        "block": { "type": "integer" },
+        "energy": { "type": "integer" },
+        "character_class": { "type": "string" },
+        "powers": { "type": "array", "items": { "type": "string" } },
+        "power_amounts": { "type": "array", "items": { "type": "integer" } },
+        "relics": { "type": "array", "items": { "type": "string" } },
+        "potions": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  },
+  "messageTypes": {
+    "connected": {
+      "description": "Server → Client: handshake with assigned playerId",
+      "extends": "GameMessage",
+      "properties": { "playerId": { "type": "string" } }
+    },
+    "join": {
+      "description": "Client → Server: request to join a room",
+      "properties": { "code": { "type": "string" } }
+    },
+    "room_state": {
+      "description": "Server → Client: current room state on join",
+      "extends": "GameMessage",
+      "properties": {
+        "code": { "type": "string" },
+        "players": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "player_joined": {
+      "description": "Server → Broadcast: new player entered room",
+      "extends": "GameMessage",
+      "properties": { "playerId": { "type": "string" } }
+    },
+    "player_left": {
+      "description": "Server → Broadcast: player left room",
+      "extends": "GameMessage",
+      "properties": { "playerId": { "type": "string" } }
+    },
+    "ping": {
+      "description": "Client ↔ Server: keepalive"
+    },
+    "pong": {
+      "description": "Client ↔ Server: keepalive response"
+    },
+    "hello": {
+      "description": "Peer → Broadcast: announce P2P network info",
+      "extends": "GameMessage",
+      "properties": {
+        "ip": { "type": "string" },
+        "port": { "type": "integer" },
+        "peers": { "type": "array", "items": { "$ref": "#/definitions/MemberInfo" } }
+      }
+    },
+    "player_ready": {
+      "description": "Client → Broadcast: lobby ready with character choice",
+      "extends": "GameMessage",
+      "properties": { "character": { "type": "string" } }
+    },
+    "queue_packet": {
+      "description": "Player → Broadcast: submit card to distributed queue",
+      "extends": "GameMessage",
+      "properties": {
+        "packet_id": { "type": "string" },
+        "sender_id": { "type": "string" },
+        "owner_id": { "type": "string" },
+        "card_id": { "type": "string" },
+        "resource_hash": { "type": "string" },
+        "target": { "type": "string" }
+      }
+    },
+    "queue_complete": {
+      "description": "Owner → Broadcast: card execution finished",
+      "extends": "GameMessage",
+      "properties": {
+        "packet_id": { "type": "string" },
+        "card_id": { "type": "string" },
+        "effects": { "type": "array", "items": { "$ref": "#/definitions/EffectDescription" } },
+        "operation_sequence": { "type": "array", "items": { "$ref": "#/definitions/OperationStep" } }
+      }
+    },
+    "invoke": {
+      "description": "Peer → Target: dereference a remote reference",
+      "extends": "GameMessage",
+      "properties": {
+        "ref_id": { "type": "string" },
+        "trigger": { "type": "string" },
+        "args": { "type": "string" }
+      }
+    },
+    "invoke_result": {
+      "description": "Target → Peer: result of remote dereference",
+      "extends": "GameMessage",
+      "properties": {
+        "ref_id": { "type": "string" },
+        "effects": { "type": "array", "items": { "$ref": "#/definitions/EffectDescription" } },
+        "operation_sequence": { "type": "array", "items": { "$ref": "#/definitions/OperationStep" } }
+      }
+    },
+    "player_state": {
+      "description": "Peer → Broadcast: remote player HP/block/energy update",
+      "extends": "GameMessage",
+      "properties": { "player": { "$ref": "#/definitions/RemotePlayerState" } }
+    },
+    "stage_sync": {
+      "description": "StageHost → Broadcast: stage/map/battle synchronization",
+      "extends": "GameMessage",
+      "properties": {
+        "character": { "type": "string" },
+        "seed": { "type": "string" },
+        "act": { "type": "integer" },
+        "monster_ids": { "type": "array", "items": { "type": "string" } },
+        "monster_hps": { "type": "array", "items": { "type": "integer" } }
+      }
+    },
+    "monster_intent": {
+      "description": "StageHost → Broadcast: monster intent change",
+      "extends": "GameMessage",
+      "properties": {
+        "monster_id": { "type": "string" },
+        "intent": { "type": "string" },
+        "damage": { "type": "integer" },
+        "hits": { "type": "integer" },
+        "target_id": { "type": "string" }
+      }
+    },
+    "combat_result": {
+      "description": "StageHost → Broadcast: monster action results",
+      "extends": "GameMessage",
+      "properties": {
+        "monster_id": { "type": "string" },
+        "effects": { "type": "array", "items": { "$ref": "#/definitions/EffectDescription" } },
+        "operation_sequence": { "type": "array", "items": { "$ref": "#/definitions/OperationStep" } }
+      }
+    },
+    "event_result": {
+      "description": "StageHost → Broadcast: event outcome",
+      "extends": "GameMessage",
+      "properties": {
+        "event_id": { "type": "string" },
+        "effects": { "type": "array", "items": { "$ref": "#/definitions/EffectDescription" } }
+      }
+    },
+    "reference_register": {
+      "description": "Peer → Broadcast: announce available references",
+      "extends": "GameMessage",
+      "properties": {
+        "ref_id": { "type": "string" },
+        "resource_type": { "type": "string" },
+        "resource_id": { "type": "string" },
+        "resource_hash": { "type": "string" }
+      }
+    },
+    "reference_migrate": {
+      "description": "Peer → Broadcast: request reference migration to new owner",
+      "extends": "GameMessage",
+      "properties": {
+        "ref_id": { "type": "string" },
+        "resource_type": { "type": "string" },
+        "resource_id": { "type": "string" },
+        "resource_hash": { "type": "string" }
+      }
+    },
+    "resource_registry": {
+      "description": "Peer → Broadcast: local mod content manifest",
+      "extends": "GameMessage",
+      "properties": {
+        "cards": { "type": "array", "items": { "type": "string" } },
+        "relics": { "type": "array", "items": { "type": "string" } },
+        "powers": { "type": "array", "items": { "type": "string" } },
+        "potions": { "type": "array", "items": { "type": "string" } },
+        "characters": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "resource_request": {
+      "description": "Client → Target: request asset bytes",
+      "extends": "GameMessage",
+      "properties": {
+        "resource_type": { "type": "string" },
+        "resource_id": { "type": "string" }
+      }
+    },
+    "resource_response": {
+      "description": "Target → Client: asset data",
+      "extends": "GameMessage",
+      "properties": {
+        "resource_type": { "type": "string" },
+        "resource_id": { "type": "string" },
+        "checksum": { "type": "string" }
+      }
+    }
+  }
+}

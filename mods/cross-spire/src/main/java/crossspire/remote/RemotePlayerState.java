@@ -7,6 +7,7 @@ public class RemotePlayerState {
     public int maxHp;
     public int block;
     public int energy;
+    public int gold;
     public String characterClass;
     public String[] powers;
     public int[] powerAmounts;

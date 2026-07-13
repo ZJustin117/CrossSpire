@@ -11,13 +11,32 @@ public class P2PManager {
 
     private static final int DEFAULT_PORT = 54321;
     private final int listenPort;
+    private final String advertisedIp;
     private ServerSocket serverSocket;
     private final Map<String, Socket> connections = new ConcurrentHashMap<String, Socket>();
     private boolean running = false;
 
     public P2PManager() {
+        java.util.Properties cfg = loadConfig();
         String portProp = System.getProperty("crossspire.p2p.port");
+        if (portProp == null) portProp = cfg.getProperty("crossspire.p2p.port");
         listenPort = portProp != null ? Integer.parseInt(portProp) : DEFAULT_PORT;
+        String ip = System.getProperty("crossspire.p2p.ip");
+        if (ip == null) ip = cfg.getProperty("crossspire.p2p.ip");
+        advertisedIp = ip != null ? ip : "127.0.0.1";
+    }
+
+    private static java.util.Properties loadConfig() {
+        java.util.Properties p = new java.util.Properties();
+        try {
+            java.io.File f = new java.io.File("/storage/emulated/0/Android/data/io.stamethyst/files/sts/crossspire.properties");
+            if (f.exists()) {
+                java.io.FileInputStream fis = new java.io.FileInputStream(f);
+                p.load(fis);
+                fis.close();
+            }
+        } catch (Exception ignored) {}
+        return p;
     }
 
     public void start() {
@@ -111,7 +130,7 @@ public class P2PManager {
     public void sendHello() {
         if (CrossSpireMod.relayClient == null || !CrossSpireMod.relayClient.isOpen()) return;
         Protocol.HelloMessage hello = new Protocol.HelloMessage();
-        hello.ip = "127.0.0.1";
+        hello.ip = advertisedIp;
         hello.port = listenPort;
         hello.source = CrossSpireMod.playerId;
         hello.seq = 1;
@@ -120,14 +139,14 @@ public class P2PManager {
         for (Map.Entry<String, Socket> entry : connections.entrySet()) {
             Protocol.MemberInfo mi = new Protocol.MemberInfo();
             mi.id = entry.getKey();
-            mi.ip = "127.0.0.1";
+            mi.ip = advertisedIp;
             mi.port = listenPort;
             peerList.add(mi);
         }
         hello.peers = peerList.toArray(new Protocol.MemberInfo[0]);
 
         CrossSpireMod.relayClient.send(Protocol.GSON.toJson(hello));
-        BaseMod.logger.info("P2PManager sent hello: 127.0.0.1:" + listenPort + " peers=" + peerList.size());
+        BaseMod.logger.info("P2PManager sent hello: " + advertisedIp + ":" + listenPort + " peers=" + peerList.size());
     }
 
     public void onHelloReceived(String rawMessage) {

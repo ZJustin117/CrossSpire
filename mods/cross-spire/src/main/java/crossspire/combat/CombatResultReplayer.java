@@ -18,6 +18,10 @@ import crossspire.network.Protocol;
 public class CombatResultReplayer {
 
     public void handleCombatResult(String rawMessage) {
+        if (AbstractDungeon.player == null) {
+            BaseMod.logger.info("CombatResultReplayer skipped: not in game");
+            return;
+        }
         JsonObject msg = Protocol.GSON.fromJson(rawMessage, JsonObject.class);
         String cardId = msg.has("card_id") ? msg.get("card_id").getAsString() : "";
         JsonArray effects = msg.has("effects") ? msg.getAsJsonArray("effects") : new JsonArray();
@@ -25,19 +29,36 @@ public class CombatResultReplayer {
 
         AbstractCard localCard = CardLibrary.getCard(cardId);
         if (localCard != null && opSeq.size() > 0) {
-            replayWithCard(cardId, opSeq);
+            replayWithCard(cardId, opSeq, effects);
         } else {
             fallbackEffects(effects, cardId);
         }
     }
 
-    private void replayWithCard(String cardId, JsonArray opSeq) {
-        BaseMod.logger.info("CombatResultReplayer replay: " + cardId + " steps=" + opSeq.size());
+    public void applyEffects(Protocol.EffectDescription[] effects) {
+        if (AbstractDungeon.player == null) {
+            BaseMod.logger.info("CombatResultReplayer applyEffects skipped: not in game");
+            return;
+        }
+        BaseMod.logger.info("CombatResultReplayer applyEffects: " + effects.length + " effects");
         EventSuppression.suppressEvents(() -> {
-            AbstractCard card = CardLibrary.getCard(cardId);
-            if (card == null) return;
-            AbstractDungeon.player.hand.addToTop(card.makeCopy());
+            for (Protocol.EffectDescription eff : effects) {
+                JsonObject fakeEl = new JsonObject();
+                fakeEl.addProperty("kind", eff.kind);
+                fakeEl.addProperty("target", eff.target);
+                fakeEl.addProperty("amount", eff.amount);
+                if (eff.powerId != null) fakeEl.addProperty("power_id", eff.powerId);
+                if (eff.cardId != null) fakeEl.addProperty("card_id", eff.cardId);
+                if (eff.relicId != null) fakeEl.addProperty("relic_id", eff.relicId);
+                if (eff.potionId != null) fakeEl.addProperty("potion_id", eff.potionId);
+                applyEffect(eff.kind, eff.target, eff.amount, fakeEl);
+            }
         });
+    }
+
+    private void replayWithCard(String cardId, JsonArray opSeq, JsonArray effects) {
+        BaseMod.logger.info("CombatResultReplayer replay: " + cardId + " steps=" + opSeq.size() + " effects=" + effects.size());
+        fallbackEffects(effects, cardId);
     }
 
     private void fallbackEffects(JsonArray effects, String sourceCard) {

@@ -115,11 +115,11 @@ public class LobbyState {
         started = true;
         BaseMod.logger.info("LobbyState ALL READY! ready=" + readyPlayers.size());
 
-        String hostId = CrossSpireMod.playerId;
-        for (String pid : readyPlayers) {
-            if (pid.isEmpty()) continue;
-            if (pid.compareTo(hostId) < 0) hostId = pid;
-        }
+        String hostId = CrossSpireMod.stageHost.electHost(
+            readyPlayers.toArray(new String[0])
+        );
+
+        CrossSpireMod.stageHost.setStageHost(hostId);
 
         BaseMod.logger.info("LobbyState host=" + safeSub(hostId) + " (self=" + safeSub(CrossSpireMod.playerId) + ")");
 

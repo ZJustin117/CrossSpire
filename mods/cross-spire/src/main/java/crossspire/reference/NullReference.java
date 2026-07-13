@@ -1,5 +1,8 @@
 package crossspire.reference;
 
+import crossspire.CrossSpireMod;
+import crossspire.network.Protocol;
+
 public class NullReference<T> extends Reference<T> {
 
     public NullReference(String refId, String ownerId, String resourceHash) {
@@ -27,7 +30,18 @@ public class NullReference<T> extends Reference<T> {
 
     @Override
     public boolean tryMigrate() {
-        basemod.BaseMod.logger.info("NullReference: migration not implemented for " + refId);
+        basemod.BaseMod.logger.info("NullReference migration attempt for " + refId);
+        if (CrossSpireMod.relayClient != null && CrossSpireMod.relayClient.isOpen()) {
+            Protocol.ReferenceMigrateMessage msg = new Protocol.ReferenceMigrateMessage();
+            msg.source = CrossSpireMod.playerId;
+            msg.seq = (int) (System.currentTimeMillis() % 100000);
+            msg.refId = refId;
+            msg.resourceType = resourceType();
+            msg.resourceId = resourceId();
+            msg.resourceHash = resourceHash;
+            CrossSpireMod.relayClient.send(Protocol.GSON.toJson(msg));
+            basemod.BaseMod.logger.info("NullReference broadcast reference_migrate: " + refId);
+        }
         return false;
     }
 

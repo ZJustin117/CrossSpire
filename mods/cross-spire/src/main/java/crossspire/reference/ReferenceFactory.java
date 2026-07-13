@@ -21,5 +21,23 @@ public final class ReferenceFactory {
         return new NullReference<Object>("card:" + cardId + "@" + ownerId, ownerId, resourceHash);
     }
 
+    public static Reference<Object> createRef(String resourceType, String resourceId, String ownerId, String resourceHash) {
+        if ("card".equals(resourceType)) {
+            return createCardRef(resourceId, ownerId, resourceHash);
+        }
+
+        if (CrossSpireMod.stageHost != null && !CrossSpireMod.stageHost.canOwnLocally(resourceType, resourceId)) {
+            if (CrossSpireMod.p2pManager != null && CrossSpireMod.p2pManager.hasDirectConnection(ownerId)) {
+                return new RemoteReference<Object>(resourceId, ownerId, resourceHash, true);
+            }
+            if (CrossSpireMod.isConnected()) {
+                return new RemoteReference<Object>(resourceId, ownerId, resourceHash, false);
+            }
+            return new NullReference<Object>(resourceType + ":" + resourceId + "@" + ownerId, ownerId, resourceHash);
+        }
+
+        return new LocalReference<Object>(resourceId, CrossSpireMod.playerId);
+    }
+
     private ReferenceFactory() {}
 }

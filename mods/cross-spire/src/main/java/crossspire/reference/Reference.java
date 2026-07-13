@@ -20,4 +20,9 @@ public abstract class Reference<T> {
 
     public boolean tryDegrade() { return false; }
     public boolean tryMigrate() { return false; }
+
+    public Reference<T> triggerOn(String eventType) {
+        TriggerRegistry.register(eventType, refId, this);
+        return this;
+    }
 }

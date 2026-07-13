@@ -51,6 +51,7 @@ public class RelayClient extends WebSocketClient {
         if ("connected".equals(type)) {
             String playerId = msg.get("playerId").getAsString();
             CrossSpireMod.playerId = playerId;
+            CrossSpireMod.stageHost.setLocalPlayerId(playerId);
             BaseMod.logger.info("CrossSpire assigned playerId: " + playerId);
             CrossSpireMod.lobbyScreen.setStatus("Connected as " + playerId.substring(0, 8));
             joinRoom();

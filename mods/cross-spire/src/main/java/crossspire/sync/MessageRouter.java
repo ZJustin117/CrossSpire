@@ -10,6 +10,14 @@ import crossspire.reference.RemoteReference;
 import crossspire.ui.QueueDisplay;
 import crossspire.resource.RemoteResourceManager;
 import crossspire.resource.ResourceRegistryTracker;
+import com.megacrit.cardcrawl.actions.utility.UseCardAction;
+import com.megacrit.cardcrawl.cards.AbstractCard;
+import com.megacrit.cardcrawl.core.AbstractCreature;
+import com.megacrit.cardcrawl.dungeons.AbstractDungeon;
+import com.megacrit.cardcrawl.helpers.CardLibrary;
+import com.megacrit.cardcrawl.monsters.AbstractMonster;
+import java.util.ArrayList;
+import java.util.List;
 
 public class MessageRouter {
 
@@ -69,33 +77,105 @@ public class MessageRouter {
         } else if ("invoke_result".equals(type)) {
             Protocol.InvokeResultMessage result = Protocol.GSON.fromJson(rawMessage, Protocol.InvokeResultMessage.class);
             RemoteReference.onInvokeResult(result);
+        } else if ("monster_intent".equals(type)) {
+            syncExecutor.handleSync("monster_intent", null, 1, rawMessage);
+        } else if ("combat_result".equals(type)) {
+            syncExecutor.handleCombatResult(rawMessage);
+        } else if ("event_result".equals(type)) {
+            syncExecutor.handleEventResult(rawMessage);
+        } else if ("reference_migrate".equals(type)) {
+            handleReferenceMigrate(rawMessage);
+        } else if ("reference_register".equals(type)) {
+            Protocol.ReferenceRegisterMessage reg = Protocol.GSON.fromJson(rawMessage, Protocol.ReferenceRegisterMessage.class);
+            BaseMod.logger.info("MessageRouter reference_register: " + reg.resourceType + ":" + reg.resourceId);
+        }
+    }
+
+    public void replayCombatResult(Protocol.EffectDescription[] effects) {
+        if (effects == null || effects.length == 0) return;
+        BaseMod.logger.info("MessageRouter replayCombatResult: " + effects.length + " effects");
+        resultReplayer.applyEffects(effects);
+    }
+
+    private void handleReferenceMigrate(String rawMessage) {
+        Protocol.ReferenceMigrateMessage msg = Protocol.GSON.fromJson(rawMessage, Protocol.ReferenceMigrateMessage.class);
+        BaseMod.logger.info("MessageRouter reference_migrate: " + msg.refId + " type=" + msg.resourceType);
+        if (crossspire.reference.ContentValidator.matches(msg.resourceType, msg.resourceId, msg.resourceHash)) {
+            Protocol.InvokeResultMessage reply = new Protocol.InvokeResultMessage();
+            reply.type = "reference_migrate_ack";
+            reply.source = CrossSpireMod.playerId;
+            reply.target = msg.source;
+            reply.seq = msg.seq;
+            reply.refId = msg.refId;
+            if (CrossSpireMod.relayClient != null && CrossSpireMod.relayClient.isOpen()) {
+                CrossSpireMod.relayClient.send(Protocol.GSON.toJson(reply));
+                BaseMod.logger.info("MessageRouter sent reference_migrate_ack for: " + msg.refId);
+            }
         }
     }
 
     private void handleInvoke(String rawMessage) {
         Protocol.InvokeMessage inv = Protocol.GSON.fromJson(rawMessage, Protocol.InvokeMessage.class);
         BaseMod.logger.info("MessageRouter invoke: " + inv.refId + " trigger=" + inv.trigger);
-        crossspire.reference.Reference<Object> ref = new crossspire.reference.LocalReference<Object>(
-            inv.refId.contains("@") ? inv.refId.split(":")[1].split("@")[0] : "unknown",
-            CrossSpireMod.playerId
-        );
-        ref.dereference(inv.args);
 
-        Protocol.EffectDescription dmg = new Protocol.EffectDescription();
-        dmg.kind = "damage";
-        dmg.target = "self";
-        dmg.amount = 6;
+        if (AbstractDungeon.player == null || AbstractDungeon.actionManager == null) {
+            BaseMod.logger.info("MessageRouter invoke skipped: not in combat");
+            return;
+        }
+
+        String cardId = inv.refId.contains("@") ? inv.refId.split(":")[1].split("@")[0] : "unknown";
+        String targetId = inv.args != null ? inv.args : "self";
+
+        AbstractCard template = CardLibrary.getCard(cardId);
+        if (template == null) {
+            BaseMod.logger.info("MessageRouter invoke: card not found " + cardId);
+            return;
+        }
+
+        AbstractCard copy = template.makeCopy();
+        AbstractCreature target = AbstractDungeon.player;
+        if (!"self".equals(targetId) && AbstractDungeon.getCurrRoom() != null) {
+            AbstractMonster m = AbstractDungeon.getCurrRoom().monsters.getMonster(targetId);
+            if (m != null) target = m;
+        }
+        AbstractDungeon.actionManager.addToBottom(new UseCardAction(copy, target));
 
         Protocol.InvokeResultMessage result = new Protocol.InvokeResultMessage();
         result.source = CrossSpireMod.playerId;
         result.seq = 1;
         result.refId = inv.refId;
-        result.effects = new Protocol.EffectDescription[] { dmg };
+        result.effects = buildInvokeEffects(template, targetId);
         result.operationSequence = new Protocol.OperationStep[0];
 
         if (CrossSpireMod.relayClient != null && CrossSpireMod.relayClient.isOpen()) {
             CrossSpireMod.relayClient.send(Protocol.GSON.toJson(result));
             BaseMod.logger.info("MessageRouter sent invoke_result: " + inv.refId);
         }
+    }
+
+    private Protocol.EffectDescription[] buildInvokeEffects(AbstractCard card, String targetId) {
+        List<Protocol.EffectDescription> list = new ArrayList<>();
+        if (card.baseDamage > 0) {
+            Protocol.EffectDescription dmg = new Protocol.EffectDescription();
+            dmg.kind = "damage";
+            dmg.target = targetId;
+            dmg.amount = card.baseDamage;
+            list.add(dmg);
+        }
+        if (card.baseBlock > 0) {
+            Protocol.EffectDescription blk = new Protocol.EffectDescription();
+            blk.kind = "gain_block";
+            blk.target = "self";
+            blk.amount = card.baseBlock;
+            list.add(blk);
+        }
+        if (card.magicNumber > 0) {
+            Protocol.EffectDescription mgc = new Protocol.EffectDescription();
+            mgc.kind = "magic_number";
+            mgc.target = targetId;
+            mgc.amount = card.magicNumber;
+            list.add(mgc);
+        }
+        return list.toArray(new Protocol.EffectDescription[0]);
     }
 }

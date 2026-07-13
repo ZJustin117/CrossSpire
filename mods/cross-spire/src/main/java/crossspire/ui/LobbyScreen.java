@@ -4,6 +4,9 @@ import basemod.BaseMod;
 import basemod.interfaces.PostInitializeSubscriber;
 import basemod.interfaces.PostRenderSubscriber;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.graphics.Color;
+import com.megacrit.cardcrawl.helpers.FontHelper;
 import crossspire.CrossSpireMod;
 
 public class LobbyScreen implements PostInitializeSubscriber, PostRenderSubscriber {
@@ -14,8 +17,6 @@ public class LobbyScreen implements PostInitializeSubscriber, PostRenderSubscrib
     public LobbyScreen() {
         BaseMod.subscribe(this);
     }
-
-    private boolean loggedOnce = false;
 
     public void setStatus(String text) {
         statusText = text;
@@ -35,10 +36,13 @@ public class LobbyScreen implements PostInitializeSubscriber, PostRenderSubscrib
     public void receivePostRender(SpriteBatch sb) {
         if (!visible) return;
 
-        if (!loggedOnce) {
-            String connected = CrossSpireMod.isConnected() ? "[Connected]" : "[Not Connected]";
-            BaseMod.logger.info("LobbyScreen: " + connected + " " + ServerPicker.serverUrl + " Room:" + ServerPicker.roomCode);
-            loggedOnce = true;
+        String line = "CrossSpire: " + statusText;
+        if (CrossSpireMod.isConnected()) {
+            FontHelper.renderFontLeftTopAligned(sb, FontHelper.tipBodyFont,
+                line, 10, 60, Color.GREEN);
+        } else {
+            FontHelper.renderFontLeftTopAligned(sb, FontHelper.tipBodyFont,
+                line, 10, 60, Color.GRAY);
         }
     }
 }

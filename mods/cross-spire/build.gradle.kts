@@ -20,6 +20,8 @@ dependencies {
     compileOnly(files("$stsModsDir/ModTheSpire.jar"))
     compileOnly(files("$stsModsDir/StSLib.jar"))
     implementation("org.java-websocket:Java-WebSocket:1.5.3")
+    implementation("com.google.code.gson:gson:2.10.1")
+    testImplementation("junit:junit:4.13.2")
 }
 
 tasks.jar {
@@ -28,4 +30,10 @@ tasks.jar {
     isReproducibleFileOrder = true
     from({ configurations.runtimeClasspath.get().filter { it.name.endsWith(".jar") }.map { zipTree(it) } })
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+tasks.test {
+    testLogging {
+        events("passed", "failed", "skipped")
+    }
 }

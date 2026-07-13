@@ -60,6 +60,7 @@ public final class Protocol {
         @SerializedName("max_hp") public int maxHp;
         public int block;
         public int energy;
+        public int gold;
         @SerializedName("character_class") public String characterClass;
         public String[] powers;
         @SerializedName("power_amounts") public int[] powerAmounts;
@@ -122,6 +123,50 @@ public final class Protocol {
         @SerializedName("ref_id") public String refId;
         public EffectDescription[] effects;
         @SerializedName("operation_sequence") public OperationStep[] operationSequence;
+    }
+
+    // -- monster / combat messages --
+
+    public static class MonsterIntentMessage extends GameMessage {
+        public MonsterIntentMessage() { type = "monster_intent"; }
+        @SerializedName("monster_id") public String monsterId;
+        public String intent;
+        public int damage;
+        public int hits;
+        @SerializedName("target_id") public String targetId;
+    }
+
+    public static class CombatResultMessage extends GameMessage {
+        public CombatResultMessage() { type = "combat_result"; }
+        @SerializedName("monster_id") public String monsterId;
+        public EffectDescription[] effects;
+        @SerializedName("operation_sequence") public OperationStep[] operationSequence;
+    }
+
+    // -- event messages --
+
+    public static class EventResultMessage extends GameMessage {
+        public EventResultMessage() { type = "event_result"; }
+        @SerializedName("event_id") public String eventId;
+        public EffectDescription[] effects;
+    }
+
+    // -- reference management --
+
+    public static class ReferenceRegisterMessage extends GameMessage {
+        public ReferenceRegisterMessage() { type = "reference_register"; }
+        @SerializedName("ref_id") public String refId;
+        @SerializedName("resource_type") public String resourceType;
+        @SerializedName("resource_id") public String resourceId;
+        @SerializedName("resource_hash") public String resourceHash;
+    }
+
+    public static class ReferenceMigrateMessage extends GameMessage {
+        public ReferenceMigrateMessage() { type = "reference_migrate"; }
+        @SerializedName("ref_id") public String refId;
+        @SerializedName("resource_type") public String resourceType;
+        @SerializedName("resource_id") public String resourceId;
+        @SerializedName("resource_hash") public String resourceHash;
     }
 
     // -- keep legacy types for backward compat with RelayClient --
