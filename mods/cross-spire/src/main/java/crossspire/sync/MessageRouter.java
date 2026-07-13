@@ -88,6 +88,9 @@ public class MessageRouter {
         } else if ("reference_register".equals(type)) {
             Protocol.ReferenceRegisterMessage reg = Protocol.GSON.fromJson(rawMessage, Protocol.ReferenceRegisterMessage.class);
             BaseMod.logger.info("MessageRouter reference_register: " + reg.resourceType + ":" + reg.resourceId);
+        } else if ("stage_host_election".equals(type) || "stage_host_result".equals(type)
+                || "full_snapshot".equals(type) || "animation_sync".equals(type)) {
+            BaseMod.logger.info("MessageRouter " + type + " (reserved, not yet implemented)");
         }
     }
 

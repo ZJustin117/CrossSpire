@@ -169,6 +169,31 @@ public final class Protocol {
         @SerializedName("resource_hash") public String resourceHash;
     }
 
+    // -- host election / snapshot / animation --
+
+    public static class StageHostElectionMessage extends GameMessage {
+        public StageHostElectionMessage() { type = "stage_host_election"; }
+        @SerializedName("candidates") public String[] candidates;
+    }
+
+    public static class StageHostResultMessage extends GameMessage {
+        public StageHostResultMessage() { type = "stage_host_result"; }
+        @SerializedName("host_id") public String hostId;
+    }
+
+    public static class FullSnapshotMessage extends GameMessage {
+        public FullSnapshotMessage() { type = "full_snapshot"; }
+        @SerializedName("stage_sync") public StageSync stage;
+        @SerializedName("players") public RemotePlayerState[] players;
+        @SerializedName("pending_messages") public GameMessage[] pendingMessages;
+    }
+
+    public static class AnimationSyncMessage extends GameMessage {
+        public AnimationSyncMessage() { type = "animation_sync"; }
+        @SerializedName("player_id") public String playerId;
+        @SerializedName("animation_name") public String animationName;
+    }
+
     // -- keep legacy types for backward compat with RelayClient --
 
     public static class QueueSubmit extends GameMessage {

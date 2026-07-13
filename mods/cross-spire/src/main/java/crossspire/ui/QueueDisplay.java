@@ -2,6 +2,8 @@ package crossspire.ui;
 
 import basemod.BaseMod;
 import basemod.DevConsole;
+import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.megacrit.cardcrawl.helpers.FontHelper;
 import crossspire.CrossSpireMod;
 import crossspire.network.Protocol;
 import java.util.ArrayList;
@@ -57,5 +59,30 @@ public class QueueDisplay {
                 DevConsole.log(String.format("  %d. %s %s by %s", ++idx, marker, p.cardId, sid));
             }
         }
+    }
+
+    public static void render(SpriteBatch sb) {
+        synchronized (displayQueue) {
+            if (displayQueue.isEmpty()) return;
+            int size = displayQueue.size();
+            float y = 200;
+            FontHelper.renderFontLeftTopAligned(sb, FontHelper.tipBodyFont,
+                "Queue (" + size + ")", 10, y, com.badlogic.gdx.graphics.Color.YELLOW);
+            y -= 16;
+            int idx = 0;
+            for (Protocol.QueuePacket p : displayQueue) {
+                if (idx++ >= 10) break;
+                boolean mine = p.ownerId.equals(CrossSpireMod.playerId);
+                String sid = p.senderId.isEmpty() ? "??" : p.senderId.substring(0, 8);
+                String line = (idx) + ". " + (mine ? "[MINE]" : "[   ]") + " " + p.cardId + " by " + sid;
+                FontHelper.renderFontLeftTopAligned(sb, FontHelper.tipBodyFont,
+                    line, 10, y, mine ? com.badlogic.gdx.graphics.Color.GREEN : com.badlogic.gdx.graphics.Color.WHITE);
+                y -= 14;
+            }
+        }
+    }
+
+    public static int size() {
+        synchronized (displayQueue) { return displayQueue.size(); }
     }
 }

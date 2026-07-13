@@ -13,6 +13,7 @@ public class LobbyScreen implements PostInitializeSubscriber, PostRenderSubscrib
 
     private String statusText = "Disconnected";
     private boolean visible = false;
+    private boolean waitingForHost = false;
 
     public LobbyScreen() {
         BaseMod.subscribe(this);
@@ -21,6 +22,11 @@ public class LobbyScreen implements PostInitializeSubscriber, PostRenderSubscrib
     public void setStatus(String text) {
         statusText = text;
         BaseMod.logger.info("LobbyScreen status: " + text);
+    }
+
+    public void setWaitingForHost(boolean waiting) {
+        this.waitingForHost = waiting;
+        if (waiting) BaseMod.logger.info("LobbyScreen: waiting for host...");
     }
 
     public void show() { visible = true; }
@@ -43,6 +49,11 @@ public class LobbyScreen implements PostInitializeSubscriber, PostRenderSubscrib
         } else {
             FontHelper.renderFontLeftTopAligned(sb, FontHelper.tipBodyFont,
                 line, 10, 60, Color.GRAY);
+        }
+
+        if (waitingForHost) {
+            FontHelper.renderFontLeftTopAligned(sb, FontHelper.tipBodyFont,
+                "Waiting for host...", 10, 44, Color.RED);
         }
     }
 }

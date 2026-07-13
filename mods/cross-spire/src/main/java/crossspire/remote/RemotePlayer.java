@@ -14,10 +14,13 @@ import com.megacrit.cardcrawl.localization.CharacterStrings;
 import com.megacrit.cardcrawl.screens.CharSelectInfo;
 import com.megacrit.cardcrawl.screens.stats.CharStat;
 import java.util.ArrayList;
+import java.util.List;
+import crossspire.reference.Reference;
 
 public class RemotePlayer extends AbstractPlayer {
 
     private final String remotePlayerId;
+    private final List<Reference<?>> passiveReferences = new ArrayList<Reference<?>>();
 
     public RemotePlayer(String name, PlayerClass playerClass, String remotePlayerId) {
         super(name, playerClass);
@@ -26,6 +29,14 @@ public class RemotePlayer extends AbstractPlayer {
 
     public String getRemotePlayerId() {
         return remotePlayerId;
+    }
+
+    public List<Reference<?>> getPassiveReferences() {
+        return passiveReferences;
+    }
+
+    public void addPassiveReference(Reference<?> ref) {
+        passiveReferences.add(ref);
     }
 
     @Override
