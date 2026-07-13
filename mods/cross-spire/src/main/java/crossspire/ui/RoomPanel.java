@@ -38,7 +38,7 @@ public class RoomPanel implements PostRenderSubscriber, PostUpdateSubscriber {
     }
 
     // Click target positions — set during render, consumed during update
-    private float connBtnY, charBtnY, readyBtnY;
+    private float connBtnY, charBtnY, readyBtnY, playBtnY;
 
     private void ensureTexture() {
         if (whitePixel != null) return;
@@ -118,6 +118,11 @@ public class RoomPanel implements PostRenderSubscriber, PostUpdateSubscriber {
 
         this.readyBtnY = y;
         drawBtn(sb, "Ready", x, y, bw, bh, BTN_ORANGE);
+        y -= bh + 4;
+
+        this.playBtnY = y;
+        boolean hasSeed = cachedSeed != null && !cachedSeed.isEmpty();
+        drawBtn(sb, "Play", x, y, bw, bh, hasSeed ? BTN_GREEN : BTN_BG);
         y -= bh + 8;
 
         int count = RemotePlayerRegistry.count();
@@ -176,6 +181,15 @@ public class RoomPanel implements PostRenderSubscriber, PostUpdateSubscriber {
 
         if (readyBtnY > 0 && inRect(mx, my, x, readyBtnY, bw, bh)) {
             CrossSpireMod.lobbyState.markLocalReady(selectedCharacter);
+            return;
+        }
+
+        if (playBtnY > 0 && inRect(mx, my, x, playBtnY, bw, bh)) {
+            String seed = com.megacrit.cardcrawl.helpers.SeedHelper.cachedSeed;
+            if (seed != null && !seed.isEmpty()) {
+                crossspire.remote.GameStarter.start(selectedCharacter, seed);
+            }
+            return;
         }
     }
 
