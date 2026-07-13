@@ -27,6 +27,23 @@ CrossSpire is an open-source multiplayer mod for Slay the Spire 1, designed with
 - Java and TypeScript implementations derive their types from this schema.
 - When adding new message types, update the JSON schema first, then both language implementations.
 
+## Reference Documentation
+
+The `reference-docs/` directory contains API documentation for the two key modding frameworks used by CrossSpire. Consult these when writing patches or adding custom game content.
+
+| File | Content |
+|------|---------|
+| `modthespire-overview.md` | ModTheSpire installation, usage, and build instructions |
+| `modthespire-spirepatch.md` | `@SpirePatch` API — Prefix, Postfix, Insert, Instrument, Replace, Raw, Locator |
+| `basemod-hooks.md` | All BaseMod subscriber hooks — Adder, Before/Pre, After/Post, Render, Update |
+| `basemod-custom-cards.md` | `CustomCard` constructor, textures, registration (`EditCardsSubscriber`) |
+| `basemod-custom-characters.md` | `CustomPlayer`, enum patching, `EditCharactersSubscriber` |
+| `basemod-custom-relics.md` | `CustomRelic`, `addRelic`, `addRelicToCustomPool` |
+| `basemod-custom-events.md` | `AbstractEvent`, `PhasedEvent`, `AddEventParams.Builder` |
+| `basemod-custom-colors.md` | `CardColor` enum patching, `addColor` API |
+| `basemod-custom-keywords.md` | Keyword JSON registration, `addKeyword` |
+| `basemod-custom-potions.md` | `addPotion` API |
+
 ## Storage
 
 - Temporary files, decompiled sources, and scratch files go into `agent-tmp/` directory. Do not commit them.
