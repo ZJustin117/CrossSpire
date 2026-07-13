@@ -88,7 +88,15 @@ public class RoomPanel implements PostRenderSubscriber, PostUpdateSubscriber {
 
         FontHelper.renderFontLeftTopAligned(sb, FontHelper.tipBodyFont,
             "Room: " + ServerPicker.roomCode, x, y, CYAN_C);
-        y -= rh + 4;
+        y -= rh;
+
+        String cachedSeed = com.megacrit.cardcrawl.helpers.SeedHelper.cachedSeed;
+        if (cachedSeed != null && !cachedSeed.isEmpty()) {
+            FontHelper.renderFontLeftTopAligned(sb, FontHelper.tipBodyFont,
+                "Seed: " + cachedSeed, x, y, Color.GOLD);
+            y -= rh;
+        }
+        y -= 4;
 
         // store button Y positions for click detection
         this.connBtnY = y;
@@ -139,36 +147,8 @@ public class RoomPanel implements PostRenderSubscriber, PostUpdateSubscriber {
         FontHelper.renderFontLeftTopAligned(sb, FontHelper.tipBodyFont, text, x + 6, y - 5, Color.WHITE);
     }
 
-    private static int startFrames = 0;
-    private static String startChar = null;
-    private static String startSeed = null;
-
     @Override
     public void receivePostUpdate() {
-        if (CrossSpireMod.pendingStartSeed != null && startFrames == 0) {
-            startSeed = CrossSpireMod.pendingStartSeed;
-            startChar = CrossSpireMod.lobbyState.getMyCharacter();
-            CrossSpireMod.pendingStartSeed = null;
-            startFrames = 5; // wait 5 frames
-            return;
-        }
-
-        if (startFrames > 0) {
-            startFrames--;
-            if (startFrames == 0 && startSeed != null) {
-                BaseMod.logger.info("RoomPanel starting game: " + startChar + " seed=" + startSeed);
-                String usedSeed = crossspire.remote.GameStarter.start(startChar, startSeed);
-                if (usedSeed != null) {
-                    CrossSpireMod.lastStartedChar = startChar;
-                    CrossSpireMod.lastStartedSeed = usedSeed;
-                    CrossSpireMod.startedGame = true;
-                }
-                startSeed = null;
-                startChar = null;
-            }
-            return;
-        }
-
         if (!InputHelper.justClickedLeft) return;
 
         float mx = InputHelper.mX;

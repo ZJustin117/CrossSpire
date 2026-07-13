@@ -78,7 +78,7 @@ public class LobbyState {
         readyPlayers.add(source);
         characterChoices.put(source, character.toUpperCase());
 
-        BaseMod.logger.info("LobbyState " + source.substring(0, 8) + " ready as " + character
+        BaseMod.logger.info("LobbyState " + safeSub(source) + " ready as " + character
             + " ready=" + readyPlayers.size() + "/" + roomSize);
 
         checkAllReady();
@@ -113,24 +113,20 @@ public class LobbyState {
         if (readyPlayers.size() < roomSize) return;
 
         started = true;
-        BaseMod.logger.info("LobbyState ALL READY! readyPlayers=" + readyPlayers + " charChoices=" + characterChoices);
+        BaseMod.logger.info("LobbyState ALL READY! ready=" + readyPlayers.size());
 
-        // Determine host: player with the smallest playerId
-        String hostId = CrossSpireMod.playerId; // self is default
+        String hostId = CrossSpireMod.playerId;
         for (String pid : readyPlayers) {
+            if (pid.isEmpty()) continue;
             if (pid.compareTo(hostId) < 0) hostId = pid;
         }
 
         BaseMod.logger.info("LobbyState host=" + safeSub(hostId) + " (self=" + safeSub(CrossSpireMod.playerId) + ")");
 
         if (hostId.equals(CrossSpireMod.playerId)) {
-            // I am the host — generate seed, start game, broadcast
-            String myChar = characterChoices.get(CrossSpireMod.playerId);
-            if (myChar == null) myChar = "IRONCLAD";
-
             String seed = String.valueOf(System.currentTimeMillis() % 900000 + 100000);
             Protocol.StageSync sync = new Protocol.StageSync();
-            sync.character = myChar;
+            sync.character = myCharacter;
             sync.seed = seed;
             sync.source = CrossSpireMod.playerId;
             sync.seq = 1;
@@ -138,16 +134,9 @@ public class LobbyState {
 
             if (CrossSpireMod.relayClient != null && CrossSpireMod.relayClient.isOpen()) {
                 CrossSpireMod.relayClient.send(Protocol.GSON.toJson(sync));
-                BaseMod.logger.info("LobbyState host broadcast stage_sync: " + myChar + " seed=" + seed);
             }
-
-            CrossSpireMod.pendingStartSeed = seed;
-            CrossSpireMod.lastStartedChar = myChar;
-            CrossSpireMod.lastStartedSeed = seed;
-            CrossSpireMod.startedGame = true;
-        } else {
-            // I am NOT the host — wait for stage_sync from host via pendingStart mechanism
-            BaseMod.logger.info("LobbyState waiting for stage_sync from host " + hostId.substring(0, 8));
+            BaseMod.logger.info("LobbyState host broadcast seed=" + seed);
+            com.megacrit.cardcrawl.helpers.SeedHelper.setSeed(seed);
         }
     }
 }

@@ -73,15 +73,7 @@ public class CrossSpireCommand extends ConsoleCommand {
         String seed = tokens.length > depth + 2 ? tokens[depth + 2] : "";
         DevConsole.log("Starting " + charName + " seed=" + (seed.isEmpty() ? "(auto)" : seed));
         try {
-            String usedSeed = crossspire.remote.GameStarter.start(charName, seed.isEmpty() ? null : seed);
-            if (usedSeed != null) {
-                CrossSpireMod.lastStartedChar = charName;
-                CrossSpireMod.lastStartedSeed = usedSeed;
-                CrossSpireMod.startedGame = true;
-                if (ServerPicker.isStageHost) {
-                    broadcastBattleStart(charName, usedSeed);
-                }
-            }
+            crossspire.remote.GameStarter.start(charName, seed.isEmpty() ? null : seed);
         } catch (Exception e) {
             DevConsole.log("Start failed: " + e.getMessage());
         }
@@ -131,18 +123,6 @@ public class CrossSpireCommand extends ConsoleCommand {
         AbstractDungeon.actionManager.addToBottom(new UseCardAction(copy, target));
         CrossSpireMod.queueManager.enqueueOwnCard(cardId, targetId);
         DevConsole.log("Playing " + cardId + " → " + targetId);
-    }
-
-    private void broadcastBattleStart(String charName, String seed) {
-        if (CrossSpireMod.relayClient == null || !CrossSpireMod.relayClient.isOpen()) return;
-        Protocol.StageSync msg = new Protocol.StageSync();
-        msg.character = charName;
-        msg.seed = seed;
-        msg.source = CrossSpireMod.playerId;
-        msg.seq = 1;
-        msg.act = 1;
-        CrossSpireMod.relayClient.send(Protocol.GSON.toJson(msg));
-        BaseMod.logger.info("CrossSpireCommand broadcast stage_sync: " + charName + " seed=" + seed);
     }
 
     @Override

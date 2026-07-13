@@ -31,11 +31,6 @@ public class CrossSpireMod {
     public static P2PManager p2pManager;
     public static LobbyState lobbyState;
     public static String playerId = "";
-    public static boolean startedGame = false;
-    public static String lastStartedChar = "IRONCLAD";
-    public static String lastStartedSeed = "";
-    public static String pendingStartChar = null;
-    public static String pendingStartSeed = null;
     public static AbstractPlayer localPlayer = null;
 
     public static void initialize() {
@@ -102,17 +97,5 @@ public class CrossSpireMod {
 
     public static boolean isConnected() {
         return relayClient != null && relayClient.isOpen();
-    }
-
-    public static void resendBattleStart() {
-        if (relayClient == null || !relayClient.isOpen() || !startedGame) return;
-        Protocol.StageSync msg = new Protocol.StageSync();
-        msg.character = lastStartedChar;
-        msg.seed = lastStartedSeed;
-        msg.source = playerId;
-        msg.seq = 1;
-        msg.act = 1;
-        relayClient.send(Protocol.GSON.toJson(msg));
-        BaseMod.logger.info("CrossSpire resend stage_sync: " + lastStartedChar + " seed=" + lastStartedSeed);
     }
 }
