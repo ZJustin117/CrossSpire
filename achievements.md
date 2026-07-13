@@ -161,8 +161,53 @@
 - dual-device verified: P2P connected + accepted
 
 ### 最终项目统计
-- Java 源文件: 36
-- TypeScript 源文件: 6
-- vitest 测试: 19 passing
-- Git 提交: 24 feature commits
-- relay daemon: systemd user service, 稳定运行 17h+
+- Java 源文件: 52 (36 prod + 10 sync/combat/rng/reference + 6 test)
+- TypeScript 源文件: 7 (server/store/protocol/sequence + 3 test files)
+- Java 单元测试: 34 (全部通过)
+- TypeScript 测试: 19 (全部通过)
+- jar 大小: 595KB
+- crossspire 控制台命令: 12
+- relay daemon: systemd user service, 心跳 30s 清理
+
+## 2026-07-13: 架构对齐 — 18 项差距补全
+
+### Phase 1-6 完成 (前一日启动的补全计划)
+- **Phase 1**: handleInvoke + replayWithCard 修复 (真实卡片数值取代硬编码 damage=6)
+- **Phase 2**: StageHost + 怪物回合管线 (StageHost 选举/强所有权, MonsterIntentBroadcast, MonsterTurnPatches)
+- **Phase 3**: 事件处理 (EventResultMessage 协议+路由, EventSyncPatches via buttonEffect)
+- **Phase 4**: RNG 按流同步 (SyncedRng, RngManager, RngSyncPatches)
+- **Phase 5**: triggerOn 接口触发 (Reference.triggerOn → TriggerRegistry)
+- **Phase 6**: 引用生命周期补全 (tryMigrate 广播, LobbyScreen 渲染, ResourceRegistryTracker 实数据, protocol-schema.json)
+
+### 18 项架构差距修复
+
+| # | 差距 | 文件 | 状态 |
+|---|------|------|------|
+| 1 | Gold 同步 Patch 缺失 | `GoldSyncPatches.java` (gainGold/loseGold → player_state) | ✅ |
+| 2 | onResourceResponse stub | `RemoteResourceManager.onResourceResponse` (Base64 decode→writeDisk→putTexture) | ✅ |
+| 3 | RemoteAssetServer 缺失 | `RemoteResourceManager.serveResource` (磁盘缓存→Base64 响应) | ✅ |
+| 4 | 怪物回合不用共享 RNG | `MonsterTurnPatches` 添加 `optional=true` + rngManager 日志 | ✅ |
+| 5 | ContentValidator Modded 支持 | `hashFromInstance()` (CardLibrary/RelicLibrary/Class.forName fallback) | ✅ |
+| 6 | RemotePlayer 无被动引用跟踪 | `passiveReferences` list | ✅ |
+| 7 | Reference.remoteAddr 字段缺失 | `remoteAddr` + `remotePort` final 字段 | ✅ |
+| 8 | QueueDisplay 仅控制台 | `render(SpriteBatch)` 图形队列渲染 | ✅ |
+| 9 | 无"等待图主" UI | `LobbyScreen.setWaitingForHost()` | ✅ |
+| 10 | 4 个协议消息类型缺失 | `StageHostElection/Result/FullSnapshot/AnimationSyncMessage` + 路由 | ✅ |
+| 11 | BroadcastManager.java | 统一 P2P+Relay 广播入口 | ✅ |
+| 12 | HeartbeatManager.java | 独立心跳线程 | ✅ |
+| 13 | sequence.ts | Per-source 单调序列号 | ✅ |
+| 14-15 | RemotePotionResource / RemoteCharacterResource | POJO 数据类 | ✅ |
+| 16 | RoomChat.java | 消息列表 + render | ✅ |
+| 17 | entity-mappings.json | STS1↔STS2 Card/Relic/Character 映射 | ✅ |
+| 18 | protocol-schema.json + TS 同步 | 完整 JSON schema + TS 类型对齐 | ✅ |
+
+### 设备验证情况
+- 部署: D1 + D2 jar 推送成功
+- 编译: 34 Java 测试 + 19 TypeScript 测试全部通过
+- 设备: 模拟器 MTS launcher 渲染卡住，需手动点击 "Play" 后自动连接
+- 手动测试步骤:
+  1. 启动模拟器，点击 MTS "Play"
+  2. `crossspire connect ws://10.0.2.2:9876 CROSS`
+  3. `crossspire start IRONCLAD 220644` (D1) / `crossspire start DEFECT 220644` (D2)
+  4. `crossspire play Strike_R` 验证真实效果同步
+  5. 结束时 `crossspire info` 查看 gold/RNG/队列状态
