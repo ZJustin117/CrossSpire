@@ -58,3 +58,4 @@ mods/*/build/
 # SlayTheAmethyst symlinks
 /scripts/tools
 /gradlew
+/desktop-1.0.jar
