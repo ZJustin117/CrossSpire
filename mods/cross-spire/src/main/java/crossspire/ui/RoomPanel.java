@@ -3,6 +3,7 @@ package crossspire.ui;
 import basemod.BaseMod;
 import basemod.interfaces.PostRenderSubscriber;
 import basemod.interfaces.PostUpdateSubscriber;
+import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
@@ -185,11 +186,17 @@ public class RoomPanel implements PostRenderSubscriber, PostUpdateSubscriber {
         }
 
         if (playBtnY > 0 && inRect(mx, my, x, playBtnY, bw, bh)) {
-            String s = CrossSpireMod.syncedSeed;
+            final String s = CrossSpireMod.syncedSeed;
+            final String ch = selectedCharacter;
             if (s != null && !s.isEmpty()) {
-                BaseMod.logger.info("RoomPanel Play: " + selectedCharacter + " seed=" + s);
-                crossspire.sync.AutoGameStartPatch.pendingChar = selectedCharacter;
-                new com.megacrit.cardcrawl.screens.charSelect.CharacterSelectScreen().open(true);
+                BaseMod.logger.info("RoomPanel Play: " + ch + " seed=" + s);
+                Gdx.app.postRunnable(new Runnable() {
+                    @Override
+                    public void run() {
+                        BaseMod.logger.info("RoomPanel Play executing: " + ch + " seed=" + s);
+                        crossspire.remote.GameStarter.start(ch, s);
+                    }
+                });
             }
             return;
         }
