@@ -36,6 +36,7 @@ public class SyncExecutor {
         if (source.equals(CrossSpireMod.playerId)) return;
 
         BaseMod.logger.info("SyncExecutor battle_start from " + source.substring(0, 8) + " char=" + charName + " seed=" + seed);
+        CrossSpireMod.pendingStartSeed = seed;  // seed only — joiner uses own character
     }
 
     private void handleRemotePlayerSync(String rawMessage) {
@@ -81,31 +82,6 @@ public class SyncExecutor {
         JsonArray hps = msg.has("monster_hps") ? msg.getAsJsonArray("monster_hps") : new JsonArray();
 
         BaseMod.logger.info("SyncExecutor room_enter from " + source.substring(0, 8) + " monsters=" + ids);
-
-        try {
-            java.util.ArrayList<AbstractMonster> allMonsters = new java.util.ArrayList<AbstractMonster>();
-            for (int i = 0; i < ids.size(); i++) {
-                String monsterId = ids.get(i).getAsString();
-                MonsterGroup group = MonsterHelper.getEncounter(monsterId);
-                if (group != null) {
-                    for (AbstractMonster m : group.monsters) {
-                        if (i < hps.size()) {
-                            m.maxHealth = hps.get(i).getAsInt();
-                            m.currentHealth = m.maxHealth;
-                        }
-                        allMonsters.add(m);
-                    }
-                }
-            }
-
-            if (!allMonsters.isEmpty()) {
-                MonsterGroup finalGroup = new MonsterGroup(allMonsters.toArray(new AbstractMonster[0]));
-                AbstractDungeon.getCurrRoom().monsters = finalGroup;
-                finalGroup.init();
-                BaseMod.logger.info("SyncExecutor room_enter applied: " + allMonsters.size() + " monsters");
-            }
-        } catch (Exception e) {
-            BaseMod.logger.error("SyncExecutor room_enter error: " + e.getMessage());
-        }
+        CombatSyncPatches.storePendingRoom(source, ids, hps);
     }
 }

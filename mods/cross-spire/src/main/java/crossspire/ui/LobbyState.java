@@ -16,10 +16,14 @@ public class LobbyState {
     private int roomSize = 1;
     private boolean started = false;
     private String pendingReadyCharacter = null;
+    private String myCharacter = "IRONCLAD";
+
+    public String getMyCharacter() { return myCharacter; }
 
     public void markLocalReady(String character) {
+        myCharacter = character.toUpperCase();
         readyPlayers.add(CrossSpireMod.playerId);
-        characterChoices.put(CrossSpireMod.playerId, character.toUpperCase());
+        characterChoices.put(CrossSpireMod.playerId, myCharacter);
 
         if (CrossSpireMod.relayClient != null && CrossSpireMod.relayClient.isOpen()) {
             broadcastAndCheck(character);
@@ -29,9 +33,9 @@ public class LobbyState {
         }
     }
 
-    public void onRoomJoined() {
-        roomSize = 1;
-        BaseMod.logger.info("LobbyState room joined, size=1");
+    public void onRoomJoined(int size) {
+        roomSize = Math.max(1, size);
+        BaseMod.logger.info("LobbyState room joined, size=" + roomSize);
         flushPending();
     }
 
@@ -87,7 +91,16 @@ public class LobbyState {
         started = true;
         BaseMod.logger.info("LobbyState ALL READY!");
 
-        if (ServerPicker.isStageHost) {
+        // Determine host: player with the smallest playerId
+        String hostId = CrossSpireMod.playerId; // self is default
+        for (String pid : readyPlayers) {
+            if (pid.compareTo(hostId) < 0) hostId = pid;
+        }
+
+        BaseMod.logger.info("LobbyState host=" + hostId.substring(0, 8) + " (self=" + CrossSpireMod.playerId.substring(0, 8) + ")");
+
+        if (hostId.equals(CrossSpireMod.playerId)) {
+            // I am the host — generate seed, start game, broadcast
             String myChar = characterChoices.get(CrossSpireMod.playerId);
             if (myChar == null) myChar = "IRONCLAD";
 
@@ -101,7 +114,7 @@ public class LobbyState {
 
             if (CrossSpireMod.relayClient != null && CrossSpireMod.relayClient.isOpen()) {
                 CrossSpireMod.relayClient.send(Protocol.GSON.toJson(sync));
-                BaseMod.logger.info("LobbyState broadcast stage_sync: " + myChar + " seed=" + seed);
+                BaseMod.logger.info("LobbyState host broadcast stage_sync: " + myChar + " seed=" + seed);
             }
 
             String usedSeed = crossspire.remote.GameStarter.start(myChar, seed);
@@ -111,7 +124,8 @@ public class LobbyState {
                 CrossSpireMod.startedGame = true;
             }
         } else {
-            BaseMod.logger.info("LobbyState non-host, waiting for stage_sync from host");
+            // I am NOT the host — wait for stage_sync from host via pendingStart mechanism
+            BaseMod.logger.info("LobbyState waiting for stage_sync from host " + hostId.substring(0, 8));
         }
     }
 }

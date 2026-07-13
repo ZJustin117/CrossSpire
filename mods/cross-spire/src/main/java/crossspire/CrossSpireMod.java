@@ -34,6 +34,8 @@ public class CrossSpireMod {
     public static boolean startedGame = false;
     public static String lastStartedChar = "IRONCLAD";
     public static String lastStartedSeed = "";
+    public static String pendingStartChar = null;
+    public static String pendingStartSeed = null;
     public static AbstractPlayer localPlayer = null;
 
     public static void initialize() {

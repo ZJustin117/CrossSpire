@@ -37,6 +37,9 @@ public class RoomPanel implements PostRenderSubscriber, PostUpdateSubscriber {
         BaseMod.subscribe(this);
     }
 
+    // Click target positions — set during render, consumed during update
+    private float connBtnY, charBtnY, readyBtnY;
+
     private void ensureTexture() {
         if (whitePixel != null) return;
         try {
@@ -85,13 +88,16 @@ public class RoomPanel implements PostRenderSubscriber, PostUpdateSubscriber {
 
         FontHelper.renderFontLeftTopAligned(sb, FontHelper.tipBodyFont,
             "Room: " + ServerPicker.roomCode, x, y, CYAN_C);
-        y -= rh + 6;
+        y -= rh + 4;
 
+        // store button Y positions for click detection
+        this.connBtnY = y;
         drawBtn(sb, connected ? "Disconnect" : "Connect to Relay", x, y, bw, bh, connected ? BTN_RED : BTN_GREEN);
-        y -= bh + 6;
+        y -= bh + 4;
 
         FontHelper.renderFontLeftTopAligned(sb, FontHelper.tipBodyFont, "Character:", x, y, WHITE_C);
         y -= rh;
+        this.charBtnY = y;
         String[] chars = {"IRONCLAD", "THE_SILENT", "DEFECT", "WATCHER"};
         float cx = x;
         for (String ch : chars) {
@@ -100,10 +106,10 @@ public class RoomPanel implements PostRenderSubscriber, PostUpdateSubscriber {
             drawBtn(sb, ch, cx, y, cw, bh - 3, sel ? BTN_ORANGE : BTN_BG);
             cx += cw + 4;
         }
-        y -= bh + 2;
+        y -= bh - 2 + 4;
 
-        drawBtn(sb, "Ready", x, y, bw * 0.45F, bh, BTN_ORANGE);
-        drawBtn(sb, "Start Game", x + bw * 0.48F, y, bw * 0.52F, bh, BTN_GREEN);
+        this.readyBtnY = y;
+        drawBtn(sb, "Ready", x, y, bw, bh, BTN_ORANGE);
         y -= bh + 8;
 
         int count = RemotePlayerRegistry.count();
@@ -135,46 +141,48 @@ public class RoomPanel implements PostRenderSubscriber, PostUpdateSubscriber {
 
     @Override
     public void receivePostUpdate() {
-        if (!InputHelper.justClickedLeft) return;
+        // Handle pending game start (joiner received stage_sync from host)
+        if (CrossSpireMod.pendingStartSeed != null) {
+            String sd = CrossSpireMod.pendingStartSeed;
+            String cn = CrossSpireMod.lobbyState.getMyCharacter();
+            CrossSpireMod.pendingStartSeed = null;
+            BaseMod.logger.info("RoomPanel deferred start: " + cn + " seed=" + sd);
+            String usedSeed = crossspire.remote.GameStarter.start(cn, sd);
+            if (usedSeed != null) {
+                CrossSpireMod.lastStartedChar = cn;
+                CrossSpireMod.lastStartedSeed = usedSeed;
+                CrossSpireMod.startedGame = true;
+            }
+            return;
+        }
 
-        float sx = Math.max(Settings.xScale, 1);
-        float sy = Math.max(Settings.yScale, 1);
-        if (sx <= 0 || sy <= 0) return;
+        if (!InputHelper.justClickedLeft) return;
 
         float mx = InputHelper.mX;
         float my = InputHelper.mY;
-        float x  = 30.0F * sx;
-        float y  = Settings.HEIGHT - 30.0F * sy;
-        float rh = 22.0F * sy;
-        float bw = 145.0F * sx;
-        float bh = 26.0F * sy;
+        float x  = 30.0F * Math.max(Settings.xScale, 1);
+        float bw = 145.0F * Math.max(Settings.xScale, 1);
+        float bh = 26.0F * Math.max(Settings.yScale, 1);
 
-        y -= 4 + rh + 6 + rh * 2 + 6;
-
-        if (inRect(mx, my, x, y, bw, bh)) {
+        // Use stored Y positions from render
+        if (connBtnY > 0 && inRect(mx, my, x, connBtnY, bw, bh)) {
             if (CrossSpireMod.isConnected()) CrossSpireMod.disconnect();
             else CrossSpireMod.connect();
             return;
         }
-        y -= bh + 6;
 
-        y -= rh;
-        String[] chars = {"IRONCLAD", "THE_SILENT", "DEFECT", "WATCHER"};
-        float cx = x;
-        for (String ch : chars) {
-            float cw = FontHelper.getWidth(FontHelper.tipBodyFont, ch, 1.0F) * 1.5F + 14;
-            if (inRect(mx, my, cx, y, cw, bh - 3)) { selectedCharacter = ch; return; }
-            cx += cw + 4;
+        if (charBtnY > 0) {
+            String[] chars = {"IRONCLAD", "THE_SILENT", "DEFECT", "WATCHER"};
+            float cx = x;
+            for (String ch : chars) {
+                float cw = FontHelper.getWidth(FontHelper.tipBodyFont, ch, 1.0F) * 1.5F + 14;
+                if (inRect(mx, my, cx, charBtnY, cw, bh - 3)) { selectedCharacter = ch; return; }
+                cx += cw + 4;
+            }
         }
-        y -= bh + 2;
 
-        if (inRect(mx, my, x, y, bw * 0.45F, bh)) {
+        if (readyBtnY > 0 && inRect(mx, my, x, readyBtnY, bw, bh)) {
             CrossSpireMod.lobbyState.markLocalReady(selectedCharacter);
-            return;
-        }
-        if (inRect(mx, my, x + bw * 0.48F, y, bw * 0.52F, bh)) {
-            crossspire.remote.GameStarter.start(selectedCharacter,
-                String.valueOf(System.currentTimeMillis() % 900000 + 100000));
         }
     }
 
