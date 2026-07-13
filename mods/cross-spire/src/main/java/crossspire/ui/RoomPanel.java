@@ -90,10 +90,10 @@ public class RoomPanel implements PostRenderSubscriber, PostUpdateSubscriber {
             "Room: " + ServerPicker.roomCode, x, y, CYAN_C);
         y -= rh;
 
-        String cachedSeed = com.megacrit.cardcrawl.helpers.SeedHelper.cachedSeed;
-        if (cachedSeed != null && !cachedSeed.isEmpty()) {
+        String seed = CrossSpireMod.syncedSeed;
+        if (seed != null && !seed.isEmpty()) {
             FontHelper.renderFontLeftTopAligned(sb, FontHelper.tipBodyFont,
-                "Seed: " + cachedSeed, x, y, Color.GOLD);
+                "Seed: " + seed, x, y, Color.GOLD);
             y -= rh;
         }
         y -= 4;
@@ -121,7 +121,7 @@ public class RoomPanel implements PostRenderSubscriber, PostUpdateSubscriber {
         y -= bh + 4;
 
         this.playBtnY = y;
-        boolean hasSeed = cachedSeed != null && !cachedSeed.isEmpty();
+        boolean hasSeed = seed != null && !seed.isEmpty();
         drawBtn(sb, "Play", x, y, bw, bh, hasSeed ? BTN_GREEN : BTN_BG);
         y -= bh + 8;
 
@@ -185,12 +185,11 @@ public class RoomPanel implements PostRenderSubscriber, PostUpdateSubscriber {
         }
 
         if (playBtnY > 0 && inRect(mx, my, x, playBtnY, bw, bh)) {
-            String seed = com.megacrit.cardcrawl.helpers.SeedHelper.cachedSeed;
-            if (seed != null && !seed.isEmpty()) {
-                BaseMod.logger.info("RoomPanel Play: " + selectedCharacter + " seed=" + seed);
+            String s = CrossSpireMod.syncedSeed;
+            if (s != null && !s.isEmpty()) {
+                BaseMod.logger.info("RoomPanel Play: " + selectedCharacter + " seed=" + s);
                 crossspire.sync.AutoGameStartPatch.pendingChar = selectedCharacter;
-                com.megacrit.cardcrawl.screens.charSelect.CharacterSelectScreen css = new com.megacrit.cardcrawl.screens.charSelect.CharacterSelectScreen();
-                css.open(false);
+                new com.megacrit.cardcrawl.screens.charSelect.CharacterSelectScreen().open(true);
             }
             return;
         }

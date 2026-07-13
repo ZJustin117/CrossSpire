@@ -31,6 +31,7 @@ public class CrossSpireMod {
     public static P2PManager p2pManager;
     public static LobbyState lobbyState;
     public static String playerId = "";
+    public static String syncedSeed = null;
     public static AbstractPlayer localPlayer = null;
 
     public static void initialize() {

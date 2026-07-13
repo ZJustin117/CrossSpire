@@ -32,7 +32,8 @@ public class SyncExecutor {
 
         BaseMod.logger.info("SyncExecutor battle_start from " + (source.length() >= 8 ? source.substring(0,8) : source) + " char=" + charName + " seed=" + seed);
         com.megacrit.cardcrawl.helpers.SeedHelper.setSeed(seed);
-        BaseMod.logger.info("SyncExecutor seed set: " + seed + " — start a new game to join.");
+        CrossSpireMod.syncedSeed = seed;
+        BaseMod.logger.info("SyncExecutor seed set: " + seed);
     }
 
     private void handleRemotePlayerSync(String rawMessage) {
