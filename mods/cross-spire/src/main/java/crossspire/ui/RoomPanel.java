@@ -139,12 +139,33 @@ public class RoomPanel implements PostRenderSubscriber, PostUpdateSubscriber {
         FontHelper.renderFontLeftTopAligned(sb, FontHelper.tipBodyFont, text, x + 6, y - 5, Color.WHITE);
     }
 
+    private static int startFrames = 0;
+    private static String startChar = null;
+    private static String startSeed = null;
+
     @Override
     public void receivePostUpdate() {
-        if (CrossSpireMod.pendingStartSeed != null) {
-            CrossSpireMod.deferredSeed = CrossSpireMod.pendingStartSeed;
-            CrossSpireMod.deferredChar = CrossSpireMod.lobbyState.getMyCharacter();
+        if (CrossSpireMod.pendingStartSeed != null && startFrames == 0) {
+            startSeed = CrossSpireMod.pendingStartSeed;
+            startChar = CrossSpireMod.lobbyState.getMyCharacter();
             CrossSpireMod.pendingStartSeed = null;
+            startFrames = 5; // wait 5 frames
+            return;
+        }
+
+        if (startFrames > 0) {
+            startFrames--;
+            if (startFrames == 0 && startSeed != null) {
+                BaseMod.logger.info("RoomPanel starting game: " + startChar + " seed=" + startSeed);
+                String usedSeed = crossspire.remote.GameStarter.start(startChar, startSeed);
+                if (usedSeed != null) {
+                    CrossSpireMod.lastStartedChar = startChar;
+                    CrossSpireMod.lastStartedSeed = usedSeed;
+                    CrossSpireMod.startedGame = true;
+                }
+                startSeed = null;
+                startChar = null;
+            }
             return;
         }
 

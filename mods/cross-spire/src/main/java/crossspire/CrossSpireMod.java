@@ -36,8 +36,6 @@ public class CrossSpireMod {
     public static String lastStartedSeed = "";
     public static String pendingStartChar = null;
     public static String pendingStartSeed = null;
-    public static String deferredSeed = null;
-    public static String deferredChar = null;
     public static AbstractPlayer localPlayer = null;
 
     public static void initialize() {

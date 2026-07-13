@@ -141,8 +141,7 @@ public class LobbyState {
                 BaseMod.logger.info("LobbyState host broadcast stage_sync: " + myChar + " seed=" + seed);
             }
 
-            CrossSpireMod.deferredSeed = seed;
-            CrossSpireMod.deferredChar = myChar;
+            CrossSpireMod.pendingStartSeed = seed;
             CrossSpireMod.lastStartedChar = myChar;
             CrossSpireMod.lastStartedSeed = seed;
             CrossSpireMod.startedGame = true;
