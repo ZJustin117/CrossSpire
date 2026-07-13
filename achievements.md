@@ -68,13 +68,15 @@
 
 | 指标 | 数值 |
 |------|------|
-| TypeScript 源文件 | 4 (server/store/protocol + tests) |
-| Java 源文件 | 22 |
-| 单元测试 | 15 (全部通过) |
+| TypeScript 源文件 | 6 (server/store/protocol + 3 test files) |
+| Java 源文件 | 36 |
+| 单元测试 | 19 (全部通过) |
 | BaseMod publish 拦截 | 12 |
 | AbstractPlayer abstract 方法实现 | 37 |
-| Fallback 效果类型 | 5 (damage/block/heal/energy/lose_hp) |
-| jar 大小 | 217KB |
+| Fallback 效果类型 | 13 (全部实现, 含 apply_power via ConsoleCommand) |
+| jar 大小 | 279KB |
+| crossspire 控制台命令 | 12 |
+| relay daemon | systemd user service, 心跳 30s 清理 |
 
 ## 技术栈
 
@@ -115,8 +117,52 @@
 
 **全 10 节点通过。**
 
+## 2026-07-12: 完整 MVP 交付
+
+### Phase C: relay daemon + 心跳清理 + 定向投递
+- **store.ts**: PlayerMeta 数据结构 + touchHeartbeat + getExpiredPlayers
+- **server.ts**: deliver() 定向投递 + ping/pong 处理 + close 清理 + 30s 过期定时器
+- **RelayClient.java**: 15s 心跳线程
+- **systemd service**: `~/.config/systemd/user/crossspire-relay.service`, 自动重启
+- 19 vitest 全部通过
+
+### Phase D: lobby 就绪流程
+- **LobbyState.java**: 就绪/ready 重发/host 自动选举/seed 广播
+- **RoomPanel.java**: PostRenderSubscriber 交互面板 (Connect/Disconnect/角色选择/Ready/Play 按钮)
+- **LobbyScreen.java**: 状态文本追踪
+- 双设备验证: 连接 → Ready → 双方就绪 → seed 同步
+
+### Phase E: 分布式广播队列 + 引用系统
+- **QueueManager.java**: 分布式队列，timestamp+sender_id 排序，Reference 路由
+- **ContentValidator.java**: SHA-256 资源哈希
+- **Reference.java + LocalReference + RemoteReference + NullReference + ReferenceFactory**: 引用系统完整实现
+- QueueManager.checkHead 完全替换为 Reference 路由
+- MessageRouter: invoke/invoke_result 路由
+
+### Phase F: 全 Fallback 效果 (13/13)
+- **CombatResultReplayer.java**: 分层同步引擎
+  - replayWithCard: 本地有卡牌 → 操作重放
+  - fallbackEffects: 13 种效果
+- damage/block/heal/energy/lose_hp: 直接 API 调用
+- apply_power: Basemod ConsoleCommand.execute("power id amount") 修复 Vulnerable NPE
+- remove_power/draw_card/discard_card/exhaust_card/gain_gold/obtain_relic/obtain_potion: 完整实现
+
+### Phase G: 战斗渲染 + 信息显示
+- **RemoteStatsOverlay.java**: 战斗中右上角 HUD (血条+Buffs+角色类型)
+- **RemotePlayerState.java**: 扩展 power/characterClass 字段
+- **QueueDisplay.java**: 队列可视化
+- **crossspire info/lobby/combat**: 12 个控制台命令
+- **CombatSyncPatches.java**: room_enter 广播 (怪物配置通知)
+
+### Phase H: P2P 网络 + relay 稳定性
+- **P2PManager.java**: ServerSocket 监听 + hello 协议交换 + sendOrRelay 回退
+- hello 消息携带 peers 列表 (全互联 mesh)
+- relay 房间清理 (30s 心跳超时 → player_left 广播)
+- dual-device verified: P2P connected + accepted
+
 ### 最终项目统计
-- Java 源文件: 34
+- Java 源文件: 36
 - TypeScript 源文件: 6
 - vitest 测试: 19 passing
-- Git 提交: 14 个 feature commits
+- Git 提交: 24 feature commits
+- relay daemon: systemd user service, 稳定运行 17h+
