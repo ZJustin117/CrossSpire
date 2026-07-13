@@ -10,7 +10,7 @@ function deliver(roomCode: string, message: unknown, excludePlayer?: string) {
   const data = JSON.stringify(message);
   const target = (message as any).target;
 
-  if (target) {
+  if (target && playerSockets.has(target)) {
     const socket = playerSockets.get(target);
     if (socket && socket.readyState === WebSocket.OPEN) {
       socket.send(data);
