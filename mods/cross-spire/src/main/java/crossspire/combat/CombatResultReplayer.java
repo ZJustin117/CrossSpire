@@ -4,7 +4,9 @@ import basemod.BaseMod;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.megacrit.cardcrawl.actions.common.ApplyPowerAction;
 import com.megacrit.cardcrawl.cards.AbstractCard;
+import com.megacrit.cardcrawl.cards.DamageInfo;
 import com.megacrit.cardcrawl.dungeons.AbstractDungeon;
 import com.megacrit.cardcrawl.helpers.CardLibrary;
 import com.megacrit.cardcrawl.monsters.AbstractMonster;
@@ -23,17 +25,103 @@ public class CombatResultReplayer {
             return;
         }
         JsonObject msg = Protocol.GSON.fromJson(rawMessage, JsonObject.class);
-        String cardId = msg.has("card_id") ? msg.get("card_id").getAsString() : "";
+        String senderId = msg.has("source") ? msg.get("source").getAsString() : "";
+
+        if (senderId.equals(CrossSpireMod.playerId)) {
+            BaseMod.logger.info("CombatResultReplayer skip: own result (REAL mode already executed)");
+            return;
+        }
+
         JsonArray effects = msg.has("effects") ? msg.getAsJsonArray("effects") : new JsonArray();
         JsonArray opSeq = msg.has("operation_sequence") ? msg.getAsJsonArray("operation_sequence") : new JsonArray();
 
-        AbstractCard localCard = CardLibrary.getCard(cardId);
-        if (localCard != null && opSeq.size() > 0) {
-            replayVfx(opSeq);
-            replayWithCard(cardId, opSeq, effects);
+        BaseMod.logger.info("CombatResultReplayer INDUCED mode: sender=" + senderId.substring(0, 8)
+            + " ops=" + opSeq.size() + " eff=" + effects.size());
+
+        if (opSeq.size() > 0) {
+            replayInduced(opSeq, effects);
         } else {
-            replayVfx(opSeq);
-            fallbackEffects(effects, cardId);
+            fallbackEffects(effects, "unknown");
+        }
+    }
+
+    private void replayInduced(JsonArray opSeq, JsonArray effects) {
+        for (JsonElement el : opSeq) {
+            JsonObject op = el.getAsJsonObject();
+            String step = op.has("step") ? op.get("step").getAsString() : "";
+
+            switch (step) {
+                case "play_card":
+                    publishOnCardUse(op);
+                    break;
+                case "apply_power":
+                    publishPostPowerApply(op);
+                    break;
+                case "vfx":
+                    replaySingleVfx(op);
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        EventSuppression.suppressEvents(() -> {
+            for (JsonElement el : effects) {
+                JsonObject eff = el.getAsJsonObject();
+                String kind = eff.has("kind") ? eff.get("kind").getAsString() : "";
+                String target = eff.has("target") ? eff.get("target").getAsString() : "";
+                int amount = eff.has("amount") ? eff.get("amount").getAsInt() : 0;
+                applyEffect(kind, target, amount, eff);
+            }
+        });
+    }
+
+    private void publishOnCardUse(JsonObject op) {
+        String cardId = op.has("card_id") ? op.get("card_id").getAsString() : "";
+        if (cardId.isEmpty()) return;
+
+        AbstractCard template = CardLibrary.getCard(cardId);
+        AbstractCard card = template != null ? template.makeCopy()
+            : new CardStub(cardId, 1, AbstractCard.CardType.ATTACK,
+                AbstractCard.CardRarity.BASIC, AbstractCard.CardTarget.ENEMY);
+
+        try {
+            BaseMod.publishOnCardUse(card);
+            BaseMod.logger.info("CombatResultReplayer published onCardUse: " + cardId);
+        } catch (Exception e) {
+            BaseMod.logger.info("CombatResultReplayer onCardUse failed (" + cardId + "): " + e.getMessage());
+        }
+    }
+
+    private void publishPostPowerApply(JsonObject op) {
+        String powerId = op.has("power_id") ? op.get("power_id").getAsString() : "";
+        int amount = op.has("amount") ? op.get("amount").getAsInt() : 0;
+        if (powerId.isEmpty()) return;
+
+        AbstractPower power = resolvePower(powerId, amount);
+        if (power == null) return;
+
+        try {
+            BaseMod.publishPostPowerApply(power, AbstractDungeon.player, AbstractDungeon.player);
+            BaseMod.logger.info("CombatResultReplayer published postPowerApply: " + powerId + " x" + amount);
+        } catch (Exception e) {
+            BaseMod.logger.info("CombatResultReplayer postPowerApply failed (" + powerId + "): " + e.getMessage());
+        }
+    }
+
+    private void replaySingleVfx(JsonObject op) {
+        String vfxKind = op.has("vfx_kind") ? op.get("vfx_kind").getAsString() : "";
+        String target = op.has("target") ? op.get("target").getAsString() : "self";
+
+        if (AbstractDungeon.effectList == null) return;
+
+        if ("ATTACK".equals(vfxKind)) {
+            AbstractMonster m = findMonster(target);
+            float cx = m != null ? m.hb.cX : AbstractDungeon.player.hb.cX;
+            float cy = m != null ? m.hb.cY : AbstractDungeon.player.hb.cY;
+            AbstractDungeon.effectList.add(new com.megacrit.cardcrawl.vfx.combat.FlashAtkImgEffect(cx, cy,
+                com.megacrit.cardcrawl.actions.AbstractGameAction.AttackEffect.SLASH_HORIZONTAL, false));
+            BaseMod.logger.info("CombatResultReplayer vfx ATTACK on " + target);
         }
     }
 
@@ -63,11 +151,6 @@ public class CombatResultReplayer {
         });
     }
 
-    private void replayWithCard(String cardId, JsonArray opSeq, JsonArray effects) {
-        BaseMod.logger.info("CombatResultReplayer replay: " + cardId + " steps=" + opSeq.size() + " effects=" + effects.size());
-        fallbackEffects(effects, cardId);
-    }
-
     private void fallbackEffects(JsonArray effects, String sourceCard) {
         BaseMod.logger.info("CombatResultReplayer fallback: " + sourceCard + " effects=" + effects.size());
         EventSuppression.suppressEvents(() -> {
@@ -76,8 +159,6 @@ public class CombatResultReplayer {
                 String kind = eff.has("kind") ? eff.get("kind").getAsString() : "";
                 String target = eff.has("target") ? eff.get("target").getAsString() : "";
                 int amount = eff.has("amount") ? eff.get("amount").getAsInt() : 0;
-
-                BaseMod.logger.info("CombatResultReplayer effect: " + kind + "→" + target + " x" + amount);
                 applyEffect(kind, target, amount, eff);
             }
         });
@@ -88,7 +169,9 @@ public class CombatResultReplayer {
             switch (kind) {
                 case "damage": {
                     AbstractMonster m = findMonster(target);
-                    if (m != null) { m.currentHealth -= amount; }
+                    if (m != null) {
+                        m.damage(new DamageInfo(getPlayer(), amount, DamageInfo.DamageType.NORMAL));
+                    }
                     break;
                 }
                 case "gain_block":
@@ -109,8 +192,10 @@ public class CombatResultReplayer {
                     break;
                 case "apply_power": {
                     String powerId = eff.has("power_id") ? eff.get("power_id").getAsString() : "";
-                    if (!powerId.isEmpty() && getPlayer() != null)
-                        applyPower(powerId, target, amount);
+                    if (!powerId.isEmpty()) {
+                        AbstractDungeon.actionManager.addToBottom(
+                            new ApplyPowerAction(resolvePowerTarget(target), getPlayer(), resolvePower(powerId, amount)));
+                    }
                     break;
                 }
                 case "remove_power": {
@@ -202,29 +287,28 @@ public class CombatResultReplayer {
     }
 
     private void applyPower(String powerId, String target, int amount) {
-        try {
-            String[] tokens = ("power " + powerId + " " + amount).split(" ");
-            basemod.devcommands.ConsoleCommand.execute(tokens);
-            BaseMod.logger.info("CombatResultReplayer apply_power: " + powerId + "→" + target + " x" + amount);
-        } catch (Exception e) {
-            BaseMod.logger.error("CombatResultReplayer apply_power failed (" + powerId + "): " + e.getMessage());
-        }
+        AbstractDungeon.actionManager.addToBottom(
+            new ApplyPowerAction(resolvePowerTarget(target), getPlayer(), resolvePower(powerId, amount)));
+        BaseMod.logger.info("CombatResultReplayer apply_power: " + powerId + "→" + target + " x" + amount);
     }
 
-    private void replayVfx(JsonArray opSeq) {
-        if (AbstractDungeon.effectList == null || opSeq.size() == 0) return;
-        for (JsonElement el : opSeq) {
-            JsonObject op = el.getAsJsonObject();
-            if (!"vfx".equals(op.has("step") ? op.get("step").getAsString() : "")) continue;
-            String vfxKind = op.has("vfx_kind") ? op.get("vfx_kind").getAsString() : "";
-            float cx = AbstractDungeon.player != null ? AbstractDungeon.player.hb.cX : 0;
-            float cy = AbstractDungeon.player != null ? AbstractDungeon.player.hb.cY : 0;
+    private com.megacrit.cardcrawl.core.AbstractCreature resolvePowerTarget(String target) {
+        if (!"self".equals(target)) {
+            AbstractMonster m = findMonster(target);
+            if (m != null) return m;
+        }
+        return getPlayer();
+    }
 
-            if ("ATTACK".equals(vfxKind)) {
-                AbstractDungeon.effectList.add(new com.megacrit.cardcrawl.vfx.combat.FlashAtkImgEffect(cx, cy,
-                    com.megacrit.cardcrawl.actions.AbstractGameAction.AttackEffect.SLASH_HORIZONTAL, false));
-                BaseMod.logger.info("CombatResultReplayer vfx ATTACK");
-            }
+    private AbstractPower resolvePower(String powerId, int amount) {
+        try {
+            return (AbstractPower) Class.forName("com.megacrit.cardcrawl.powers." + powerId)
+                .getConstructor(com.megacrit.cardcrawl.core.AbstractCreature.class, int.class)
+                .newInstance(getPlayer(), amount);
+        } catch (Exception e) {
+            BaseMod.logger.error("CombatResultReplayer resolvePower failed (" + powerId + "): " + e.getMessage());
+            return null;
         }
     }
 }
+

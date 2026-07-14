@@ -67,8 +67,16 @@ public class LocalReference<T> extends Reference<T> {
     }
 
     private Protocol.OperationStep[] buildVfxOps(AbstractCard card, String targetId) {
-        boolean isAttack = card.baseDamage > 0 && card.type == AbstractCard.CardType.ATTACK;
         List<Protocol.OperationStep> list = new ArrayList<>();
+
+        Protocol.OperationStep playCard = new Protocol.OperationStep();
+        playCard.step = "play_card";
+        playCard.cardId = card.cardID;
+        playCard.source = ownerId;
+        playCard.target = targetId;
+        list.add(playCard);
+
+        boolean isAttack = card.baseDamage > 0 && card.type == AbstractCard.CardType.ATTACK;
         if (isAttack) {
             Protocol.OperationStep atk = new Protocol.OperationStep();
             atk.step = "vfx";
@@ -84,6 +92,14 @@ public class LocalReference<T> extends Reference<T> {
             blk.target = "self";
             blk.vfxKind = "BLOCK";
             list.add(blk);
+        }
+        if (card.magicNumber > 0) {
+            Protocol.OperationStep pow = new Protocol.OperationStep();
+            pow.step = "apply_power";
+            pow.powerId = "Vulnerable";
+            pow.target = targetId;
+            pow.amount = card.magicNumber;
+            list.add(pow);
         }
         return list.toArray(new Protocol.OperationStep[0]);
     }
