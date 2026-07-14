@@ -15,7 +15,6 @@ public class RemoteResourceManager {
             Texture tex = RemoteAssetCache.getTexture(sourcePlayerId, "card_large", cardId);
             if (tex != null) return tex;
         }
-
         requestResource(sourcePlayerId, "card_large", cardId);
         return null;
     }
@@ -30,6 +29,24 @@ public class RemoteResourceManager {
         return null;
     }
 
+    public static RemoteCharacterResource getCharacter(String sourcePlayerId) {
+        RemoteCharacterResource chr = RemoteAssetCache.getCharacter(sourcePlayerId);
+        if (chr != null && chr.isLoaded()) return chr;
+
+        if (RemoteAssetCache.tryLoadCharacterFromDisk(sourcePlayerId)) {
+            return RemoteAssetCache.getCharacter(sourcePlayerId);
+        }
+
+        requestCharacterAssets(sourcePlayerId);
+        return null;
+    }
+
+    private static void requestCharacterAssets(String targetPlayerId) {
+        requestResource(targetPlayerId, "character_skeleton", "skeleton.json");
+        requestResource(targetPlayerId, "character_atlas", "skeleton.atlas");
+        requestResource(targetPlayerId, "character_png", "skeleton.png");
+    }
+
     private static void requestResource(String targetPlayerId, String resourceType, String resourceId) {
         if (CrossSpireMod.relayClient == null || !CrossSpireMod.relayClient.isOpen()) return;
 
@@ -41,7 +58,8 @@ public class RemoteResourceManager {
         req.addProperty("resource_id", resourceId);
 
         CrossSpireMod.relayClient.send(req.toString());
-        BaseMod.logger.info("RemoteResourceManager requesting " + resourceType + "/" + resourceId + " from " + targetPlayerId.substring(0, 8));
+        BaseMod.logger.info("RemoteResourceManager requesting " + resourceType + "/" + resourceId
+            + " from " + targetPlayerId.substring(0, 8));
     }
 
     public static void onResourceResponse(String rawMessage) {
@@ -57,53 +75,40 @@ public class RemoteResourceManager {
                 return;
             }
 
-            byte[] pngData = Base64.getDecoder().decode(dataB64);
-            if (pngData.length == 0) return;
+            byte[] data = Base64.getDecoder().decode(dataB64);
+            if (data.length == 0) return;
+
+            if (resourceType.startsWith("character_")) {
+                handleCharacterAsset(source, resourceType, resourceId, data);
+                return;
+            }
 
             String diskId = resourceId;
             if (!diskId.endsWith(".png")) diskId = diskId + ".png";
-
-            RemoteAssetCache.writeDisk(source, resourceType, diskId, pngData);
-            RemoteAssetCache.putTexture(source, resourceType, resourceId, pngData);
+            RemoteAssetCache.writeDisk(source, resourceType, diskId, data);
+            RemoteAssetCache.putTexture(source, resourceType, resourceId, data);
 
             BaseMod.logger.info("RemoteResourceManager cached " + resourceType + "/" + resourceId
-                + " from " + source.substring(0, 8) + " (" + pngData.length + " bytes)");
+                + " from " + source.substring(0, 8) + " (" + data.length + " bytes)");
         } catch (Exception e) {
             BaseMod.logger.error("RemoteResourceManager onResourceResponse error: " + e.getMessage());
         }
     }
 
-    public static void serveResource(String rawMessage) {
-        if (CrossSpireMod.relayClient == null || !CrossSpireMod.relayClient.isOpen()) return;
+    private static void handleCharacterAsset(String source, String resourceType,
+                                             String resourceId, byte[] data) {
+        String diskId = resourceId;
+        RemoteAssetCache.writeDisk(source, "characters", diskId, data);
 
-        try {
-            JsonObject req = new com.google.gson.JsonParser().parse(rawMessage).getAsJsonObject();
-            String requester = req.has("source") ? req.get("source").getAsString() : "";
-            String resourceType = req.has("resource_type") ? req.get("resource_type").getAsString() : "";
-            String resourceId = req.has("resource_id") ? req.get("resource_id").getAsString() : "";
+        BaseMod.logger.info("RemoteResourceManager cached character " + resourceType
+            + " from " + source.substring(0, 8) + " (" + data.length + " bytes)");
 
-            if (requester.isEmpty() || resourceType.isEmpty() || resourceId.isEmpty()) return;
-
-            String lookId = resourceId.endsWith(".png") ? resourceId : resourceId + ".png";
-            byte[] cached = RemoteAssetCache.readDisk(CrossSpireMod.playerId, resourceType, lookId);
-            if (cached == null || cached.length == 0) {
-                BaseMod.logger.info("RemoteResourceManager serveResource: asset not cached " + resourceType + "/" + resourceId);
-                return;
-            }
-
-            JsonObject resp = new JsonObject();
-            resp.addProperty("type", "resource_response");
-            resp.addProperty("source", CrossSpireMod.playerId);
-            resp.addProperty("target", requester);
-            resp.addProperty("resource_type", resourceType);
-            resp.addProperty("resource_id", resourceId);
-            resp.addProperty("data", Base64.getEncoder().encodeToString(cached));
-
-            CrossSpireMod.relayClient.send(resp.toString());
-            BaseMod.logger.info("RemoteResourceManager served " + resourceType + "/" + resourceId
-                + " -> " + requester.substring(0, 8) + " (" + cached.length + " bytes)");
-        } catch (Exception e) {
-            BaseMod.logger.error("RemoteResourceManager serveResource error: " + e.getMessage());
+        if ("skeleton.png".equals(resourceId)) {
+            RemoteAssetCache.tryLoadCharacterFromDisk(source);
         }
+    }
+
+    public static void serveResource(String rawMessage) {
+        RemoteAssetServer.serveResource(rawMessage);
     }
 }
