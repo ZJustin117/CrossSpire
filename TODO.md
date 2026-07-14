@@ -2,11 +2,11 @@
 
 ## 一、架构完整性
 
-- [ ] **1.1 统一队列路径** — 删除旧 `QueueManager`，`crossspire play` 改为走 `CentralQueueManager`（Client→host(queue_submit)→invoke→invoke_result→combat_result）
-- [ ] **1.2 消费 queue_update / queue_empty** — `MessageRouter` 新增路由：`queue_update`→`QueueDisplay` 刷新；`queue_empty`→解锁回合结束按钮
-- [ ] **1.3 诱导重放升级为深层空函数调用** — 事件步骤改为 `AbstractPlayer.useCard(stubCard, target)`，触发 @SpirePatch + 内部 BaseMod.publishOnCardUse 全量执行
-- [ ] **1.4 消除重复 combat_result** — `handleInvoke` 只发 `invoke_result`（target=调用方），由房主 `CentralQueueManager.onInvokeResult` 统一广播 `combat_result`
-- [ ] **1.5 target 接收端校验** — `MessageRouter.handleInvoke` 增加 `if (!msg.target.equals(me)) return` 定向投递保护
+- [x] **1.1 统一队列路径** — 删除旧 `QueueManager`，`crossspire play` 改为走 `CentralQueueManager`（Client→host(queue_submit)→invoke→invoke_result→combat_result）
+- [x] **1.2 消费 queue_update / queue_empty** — `MessageRouter` 新增路由：`queue_update`→`QueueDisplay` 刷新；`queue_empty`→解锁回合结束按钮
+- [x] **1.3 诱导重放升级为深层空函数调用** — 事件步骤改为 `AbstractPlayer.useCard(stubCard, target)`，触发 @SpirePatch + 内部 BaseMod.publishOnCardUse 全量执行
+- [x] **1.4 消除重复 combat_result** — `handleInvoke` 只发 `invoke_result`（target=调用方），由房主 `CentralQueueManager.onInvokeResult` 统一广播 `combat_result`
+- [x] **1.5 target 接收端校验** — `MessageRouter.handleInvoke` 增加 `if (!msg.target.equals(me)) return` 定向投递保护
 
 ## 二、生产质量
 
