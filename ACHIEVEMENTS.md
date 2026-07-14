@@ -158,17 +158,43 @@ CrossSpire development timeline and milestones.
 
 ---
 
+## 2026-07-16 — 架构完整性 5/5
+
+### 一、统一队列 + 深层诱导重放
+
+旧分布式 `QueueManager` 删除，全链路统一走 `CentralQueueManager` 房主中央队列：
+
+| # | 任务 | 文件变更 |
+|---|------|----------|
+| 1.1 | **统一队列路径** | 删除 `QueueManager.java`；`MessageRouter` 构造函数改为 `CentralQueueManager`；`CrossSpireCommand.cmdPlay` 交由 `LocalCapturePatches` 自动捕获发 `queue_submit` |
+| 1.2 | **消费 queue_update / queue_empty** | `MessageRouter` 新增 `queue_update`→`QueueDisplay.onUpdate()` + `queue_empty`→`QueueDisplay.onQueueEmpty()`；`QueueDisplay` 重写为 `QueueEntry` 列表 |
+| 1.3 | **深层诱导重放** | `CombatResultReplayer.inducedUseCard()` → `AbstractPlayer.useCard(stubCard, target, -1)` — 不加 suppressEvents，@SpirePatch + BaseMod 事件链全量触发 |
+| 1.4 | **消除重复 combat_result** | `handleInvoke` 移除重复广播，仅 `CentralQueueManager.onInvokeResult` 统一广播 |
+| 1.5 | **target 接收端校验** | `handleInvoke` 顶部增加 `inv.target` 校验 + `isRoomHost()` 保护 |
+
+### 统计
+
+| 指标 | 变更 |
+|------|------|
+| 修改文件 | 7 |
+| 行数 | +88 / -252 |
+| 删除文件 | `QueueManager.java` |
+| 测试 | 47 全部通过 |
+| jar | 625 KB (-5 KB) |
+
+---
+
 ## 项目总览
 
 | 指标 | 当前值 |
 |------|--------|
-| Java 源文件 | 56 (prod: 50, test: 6) |
+| Java 源文件 | 55 (prod: 49, test: 6) |
 | TypeScript 源文件 | 7 |
 | Java 单元测试 | 47 (全部通过) |
 | TypeScript 测试 | 19 (全部通过) |
 | 协议消息类型 | 31 |
 | MTS @SpirePatch | 26+ |
-| Jar 大小 | 630 KB |
+| Jar 大小 | 625 KB |
 | relay daemon | systemd user service, 30s 心跳清理 |
 
 ## 技术栈
