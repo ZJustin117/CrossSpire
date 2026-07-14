@@ -61,7 +61,7 @@ public class CrossSpireCommand extends ConsoleCommand {
         DevConsole.log("Room: " + ServerPicker.roomCode);
         DevConsole.log("Seed:  " + (CrossSpireMod.syncedSeed != null ? CrossSpireMod.syncedSeed : "(none)"));
         DevConsole.log("P2P peers: " + CrossSpireMod.p2pManager.connectionCount());
-        DevConsole.log("Queue size: " + CrossSpireMod.queueManager.size());
+        DevConsole.log("Queue size: " + CrossSpireMod.centralQueueManager.size());
     }
 
     private void cmdInfo() {
@@ -177,7 +177,6 @@ public class CrossSpireCommand extends ConsoleCommand {
         copy.current_y = AbstractDungeon.player.hb.cY;
 
         AbstractDungeon.actionManager.addToBottom(new UseCardAction(copy, target));
-        CrossSpireMod.queueManager.enqueueOwnCard(cardId, targetId);
         DevConsole.log("Playing " + cardId + " → " + targetId);
     }
 

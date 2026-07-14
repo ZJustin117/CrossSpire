@@ -85,7 +85,7 @@ public class CentralQueueManager {
         }
 
         Protocol.QueueSubmitMessage head = queue.get(0);
-        log("CentralQueueManager process: " + head.cardId + " owner=" + head.ownerId);
+        CSLog.log("CentralQueueManager process: " + head.cardId + " owner=" + head.ownerId);
 
         if (head.ownerId != null && head.ownerId.equals(CrossSpireMod.playerId)) {
             handleOwnItem(head);
@@ -95,7 +95,7 @@ public class CentralQueueManager {
     }
 
     private void handleOwnItem(Protocol.QueueSubmitMessage head) {
-        log("CentralQueueManager own item: " + head.cardId);
+        CSLog.log("CentralQueueManager own item: " + head.cardId);
         crossspire.reference.LocalReference<Object> ref = new crossspire.reference.LocalReference<Object>(head.cardId, CrossSpireMod.playerId);
         ref.dereference(head.gameTarget);
 
@@ -113,13 +113,13 @@ public class CentralQueueManager {
 
         if (CrossSpireMod.relayClient != null && CrossSpireMod.relayClient.isOpen()) {
             CrossSpireMod.relayClient.send(Protocol.GSON.toJson(invoke));
-            log("CentralQueueManager sent invoke to " + head.ownerId.substring(0, 8)
+            CSLog.log("CentralQueueManager sent invoke to " + head.ownerId.substring(0, 8)
                 + " for " + head.cardId);
         }
     }
 
     public void onInvokeResult(Protocol.InvokeResultMessage result) {
-        log("CentralQueueManager invoke_result: " + result.refId);
+        CSLog.log("CentralQueueManager invoke_result: " + result.refId);
 
         Protocol.QueueComplete complete = new Protocol.QueueComplete();
         complete.source = CrossSpireMod.playerId;
@@ -170,7 +170,7 @@ public class CentralQueueManager {
         CrossSpireMod.relayClient.send(Protocol.GSON.toJson(empty));
 
         processing = false;
-        log("CentralQueueManager queue_empty broadcast");
+        CSLog.log("CentralQueueManager queue_empty broadcast");
     }
 
     private Protocol.QueueEntry toEntry(Protocol.QueueSubmitMessage pkt, String status) {
@@ -184,7 +184,9 @@ public class CentralQueueManager {
         return entry;
     }
 
-    private static void log(String msg) {
-        System.out.println("[CrossSpire] " + msg);
+    static final class CSLog {
+        static void log(String msg) {
+            System.out.println("[CrossSpire] " + msg);
+        }
     }
 }

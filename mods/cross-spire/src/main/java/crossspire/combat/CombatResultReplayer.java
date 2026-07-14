@@ -52,7 +52,7 @@ public class CombatResultReplayer {
 
             switch (step) {
                 case "play_card":
-                    publishOnCardUse(op);
+                    inducedUseCard(op);
                     break;
                 case "apply_power":
                     publishPostPowerApply(op);
@@ -76,20 +76,27 @@ public class CombatResultReplayer {
         });
     }
 
-    private void publishOnCardUse(JsonObject op) {
+    private void inducedUseCard(JsonObject op) {
         String cardId = op.has("card_id") ? op.get("card_id").getAsString() : "";
+        String targetId = op.has("target") ? op.get("target").getAsString() : "self";
         if (cardId.isEmpty()) return;
 
         AbstractCard template = CardLibrary.getCard(cardId);
-        AbstractCard card = template != null ? template.makeCopy()
+        AbstractCard stubCard = template != null ? template.makeCopy()
             : new CardStub(cardId, 1, AbstractCard.CardType.ATTACK,
                 AbstractCard.CardRarity.BASIC, AbstractCard.CardTarget.ENEMY);
 
+        AbstractMonster target = null;
+        if (!"self".equals(targetId) && AbstractDungeon.getCurrRoom() != null) {
+            target = AbstractDungeon.getCurrRoom().monsters.getMonster(targetId);
+        }
+
         try {
-            BaseMod.publishOnCardUse(card);
-            BaseMod.logger.info("CombatResultReplayer published onCardUse: " + cardId);
+            AbstractDungeon.player.useCard(stubCard, target, -1);
+            BaseMod.logger.info("CombatResultReplayer INDUCED useCard: " + cardId
+                + " → " + targetId);
         } catch (Exception e) {
-            BaseMod.logger.info("CombatResultReplayer onCardUse failed (" + cardId + "): " + e.getMessage());
+            BaseMod.logger.info("CombatResultReplayer useCard failed (" + cardId + "): " + e.getMessage());
         }
     }
 

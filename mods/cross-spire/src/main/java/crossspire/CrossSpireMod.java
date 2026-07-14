@@ -9,7 +9,6 @@ import crossspire.remote.StageHost;
 import crossspire.sync.MessageRouter;
 import crossspire.sync.SyncExecutor;
 import crossspire.combat.CombatResultReplayer;
-import crossspire.combat.QueueManager;
 import crossspire.combat.CentralQueueManager;
 import crossspire.network.P2PManager;
 import crossspire.network.Protocol;
@@ -29,7 +28,6 @@ public class CrossSpireMod {
     public static RelayClient relayClient;
     public static MessageRouter messageRouter;
     public static LobbyScreen lobbyScreen;
-    public static QueueManager queueManager;
     public static CentralQueueManager centralQueueManager;
     public static P2PManager p2pManager;
     public static LobbyState lobbyState;
@@ -54,12 +52,11 @@ public class CrossSpireMod {
         BaseMod.logger.info("CrossSpire mod initialized");
         BaseMod.logger.info("CrossSpire EventSuppression ready, current value=" + EventSuppression.SUPPRESSION.get());
 
-        queueManager = new QueueManager();
         centralQueueManager = new CentralQueueManager();
         p2pManager = new P2PManager();
         lobbyState = new LobbyState();
         stageHost = new StageHost("");
-        messageRouter = new MessageRouter(new SyncExecutor(), queueManager, new CombatResultReplayer());
+        messageRouter = new MessageRouter(new SyncExecutor(), centralQueueManager, new CombatResultReplayer());
         lobbyScreen = new LobbyScreen();
         lobbyScreen.hide();
         ConsoleCommand.addCommand("crossspire", CrossSpireCommand.class);

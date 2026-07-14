@@ -14,81 +14,71 @@ import java.util.List;
 
 public class QueueDisplay {
 
-    private static final List<Protocol.QueuePacket> displayQueue = Collections.synchronizedList(new ArrayList<Protocol.QueuePacket>());
-    private static String executingPacketId = null;
+    private static final List<Protocol.QueueEntry> entries = Collections.synchronizedList(new ArrayList<Protocol.QueueEntry>());
+    private static boolean endTurnAllowed = false;
 
-    public static void onPacket(Protocol.QueuePacket pkt) {
-        synchronized (displayQueue) {
-            for (int i = 0; i < displayQueue.size(); i++) {
-                if (displayQueue.get(i).packetId.equals(pkt.packetId)) return;
-            }
-            displayQueue.add(pkt);
-            displayQueue.sort(new Comparator<Protocol.QueuePacket>() {
-                @Override
-                public int compare(Protocol.QueuePacket a, Protocol.QueuePacket b) {
-                    if (a.timestamp != b.timestamp) return Long.compare(a.timestamp, b.timestamp);
-                    return a.senderId.compareTo(b.senderId);
-                }
-            });
-        }
-        BaseMod.logger.info("QueueDisplay added: " + pkt.packetId);
-    }
-
-    public static void setExecuting(String packetId) {
-        executingPacketId = packetId;
-    }
-
-    public static void onComplete(String packetId) {
-        synchronized (displayQueue) {
-            for (int i = 0; i < displayQueue.size(); i++) {
-                if (displayQueue.get(i).packetId.equals(packetId)) {
-                    displayQueue.remove(i);
-                    break;
+    public static void onUpdate(Protocol.QueueEntry[] updatedEntries) {
+        synchronized (entries) {
+            entries.clear();
+            if (updatedEntries != null) {
+                for (Protocol.QueueEntry e : updatedEntries) {
+                    entries.add(e);
                 }
             }
         }
-        if (packetId.equals(executingPacketId)) {
-            executingPacketId = null;
-        }
-        BaseMod.logger.info("QueueDisplay complete: " + packetId);
+    }
+
+    public static void onQueueEmpty() {
+        endTurnAllowed = true;
+        BaseMod.logger.info("QueueDisplay queue_empty — end turn allowed");
+    }
+
+    public static boolean isEndTurnAllowed() {
+        return endTurnAllowed;
+    }
+
+    public static void resetEndTurn() {
+        endTurnAllowed = false;
     }
 
     public static void show() {
-        synchronized (displayQueue) {
-            if (displayQueue.isEmpty()) {
+        synchronized (entries) {
+            if (entries.isEmpty()) {
                 DevConsole.log("Queue: (empty)");
                 return;
             }
-            DevConsole.log("Queue (" + displayQueue.size() + "):");
+            DevConsole.log("Queue (" + entries.size() + "):");
             int idx = 0;
-            for (Protocol.QueuePacket p : displayQueue) {
-                boolean mine = p.ownerId.equals(CrossSpireMod.playerId);
+            for (Protocol.QueueEntry e : entries) {
+                boolean mine = e.ownerId != null && e.ownerId.equals(CrossSpireMod.playerId);
                 String marker = mine ? "[MINE]" : "[REMOTE]";
-                String sid = p.senderId.isEmpty() ? "??" : p.senderId.substring(0, 8);
-                DevConsole.log(String.format("  %d. %s %s by %s", ++idx, marker, p.cardId, sid));
+                String sid = e.senderId != null && !e.senderId.isEmpty() ? e.senderId.substring(0, 8) : "??";
+                String status = "pending".equals(e.status) ? "[WAIT]"
+                    : "executing".equals(e.status) ? "[EXEC]"
+                    : "[DONE]";
+                DevConsole.log(String.format("  %d. %s %s %s by %s", ++idx, status, marker, e.cardId, sid));
             }
         }
     }
 
     public static void render(SpriteBatch sb) {
-        synchronized (displayQueue) {
-            if (displayQueue.isEmpty()) return;
-            int size = displayQueue.size();
+        synchronized (entries) {
+            if (entries.isEmpty()) return;
             float y = 200;
             FontHelper.renderFontLeftTopAligned(sb, FontHelper.tipBodyFont,
-                "Queue (" + size + ")", 10, y, Color.YELLOW);
+                "Queue (" + entries.size() + ")", 10, y, Color.YELLOW);
             y -= 16;
             int idx = 0;
-            for (Protocol.QueuePacket p : displayQueue) {
+            for (Protocol.QueueEntry e : entries) {
                 if (idx >= 10) break;
-                boolean mine = p.ownerId.equals(CrossSpireMod.playerId);
-                boolean executing = p.packetId.equals(executingPacketId);
-                String sid = p.senderId.isEmpty() ? "??" : p.senderId.substring(0, 8);
+                boolean mine = e.ownerId != null && e.ownerId.equals(CrossSpireMod.playerId);
+                boolean executing = "executing".equals(e.status);
+                String sid = e.senderId != null && !e.senderId.isEmpty() ? e.senderId.substring(0, 8) : "??";
 
                 String status = executing ? "[EXEC]" : mine ? "[MINE]" : "[WAIT]";
                 int pos = mine ? minePosition() : -1;
-                String posStr = mine && pos > 0 ? " (pos " + pos + "/" + size + ")" : "";
-                String line = (idx + 1) + ". " + status + " " + p.cardId + " by " + sid + posStr;
+                String posStr = mine && pos > 0 ? " (pos " + pos + "/" + entries.size() + ")" : "";
+                String line = (idx + 1) + ". " + status + " " + e.cardId + " by " + sid + posStr;
 
                 Color colour;
                 if (executing) {
@@ -105,18 +95,26 @@ public class QueueDisplay {
                 idx++;
             }
         }
+        if (endTurnAllowed) {
+            FontHelper.renderFontLeftTopAligned(sb, FontHelper.tipBodyFont,
+                "TURN OK", 10, 120, Color.GREEN);
+        }
     }
 
     private static int minePosition() {
         int pos = 0;
-        for (Protocol.QueuePacket p : displayQueue) {
+        for (Protocol.QueueEntry e : entries) {
             pos++;
-            if (p.ownerId.equals(CrossSpireMod.playerId)) return pos;
+            if (e.ownerId != null && e.ownerId.equals(CrossSpireMod.playerId)) return pos;
         }
         return -1;
     }
 
     public static int size() {
-        synchronized (displayQueue) { return displayQueue.size(); }
+        synchronized (entries) { return entries.size(); }
+    }
+
+    public static boolean isEmpty() {
+        return size() == 0;
     }
 }

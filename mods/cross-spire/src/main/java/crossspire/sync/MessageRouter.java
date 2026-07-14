@@ -4,7 +4,7 @@ import basemod.BaseMod;
 import com.google.gson.JsonObject;
 import crossspire.CrossSpireMod;
 import crossspire.combat.CombatResultReplayer;
-import crossspire.combat.QueueManager;
+import crossspire.combat.CentralQueueManager;
 import crossspire.network.Protocol;
 import crossspire.reference.RemoteReference;
 import crossspire.ui.QueueDisplay;
@@ -25,12 +25,12 @@ import java.util.List;
 public class MessageRouter {
 
     private final SyncExecutor syncExecutor;
-    private final QueueManager queueManager;
+    private final CentralQueueManager centralQueue;
     private final CombatResultReplayer resultReplayer;
 
-    public MessageRouter(SyncExecutor syncExecutor, QueueManager queueManager, CombatResultReplayer resultReplayer) {
+    public MessageRouter(SyncExecutor syncExecutor, CentralQueueManager centralQueue, CombatResultReplayer resultReplayer) {
         this.syncExecutor = syncExecutor;
-        this.queueManager = queueManager;
+        this.centralQueue = centralQueue;
         this.resultReplayer = resultReplayer;
     }
 
@@ -44,20 +44,7 @@ public class MessageRouter {
 
         String subtype = msg.has("subtype") ? msg.get("subtype").getAsString() : "";
 
-        if ("queue_packet".equals(type)) {
-            BaseMod.logger.info("MessageRouter queue_packet routing...");
-            try {
-                Protocol.QueuePacket pkt = Protocol.GSON.fromJson(rawMessage, Protocol.QueuePacket.class);
-                BaseMod.logger.info("MessageRouter queue_packet parsed: " + pkt.cardId + " by " + pkt.senderId.substring(0,8));
-                queueManager.onQueuePacket(pkt);
-                QueueDisplay.onPacket(pkt);
-            } catch (Exception e) {
-                BaseMod.logger.error("MessageRouter queue_packet parse error: " + e.getMessage());
-            }
-        } else if ("queue_complete".equals(type)) {
-            Protocol.QueueComplete complete = Protocol.GSON.fromJson(rawMessage, Protocol.QueueComplete.class);
-            queueManager.onQueueComplete(complete);
-            QueueDisplay.onComplete(complete.packetId);
+        if ("combat_result".equals(type)) {
             resultReplayer.handleCombatResult(rawMessage);
         } else if ("player_state".equals(type)) {
             syncExecutor.handleSync("remote_player", null, 1, rawMessage);
@@ -108,6 +95,11 @@ public class MessageRouter {
             handlePlayerEndTurn();
         } else if ("queue_submit".equals(type)) {
             handleQueueSubmit(rawMessage);
+        } else if ("queue_update".equals(type)) {
+            Protocol.QueueUpdateMessage upd = Protocol.GSON.fromJson(rawMessage, Protocol.QueueUpdateMessage.class);
+            QueueDisplay.onUpdate(upd.entries);
+        } else if ("queue_empty".equals(type)) {
+            QueueDisplay.onQueueEmpty();
         }
     }
 
@@ -137,6 +129,12 @@ public class MessageRouter {
     private void handleInvoke(String rawMessage) {
         Protocol.InvokeMessage inv = Protocol.GSON.fromJson(rawMessage, Protocol.InvokeMessage.class);
         BaseMod.logger.info("MessageRouter invoke: " + inv.refId + " trigger=" + inv.trigger);
+
+        if (inv.target != null && !inv.target.equals(CrossSpireMod.playerId)
+                && !CrossSpireMod.isRoomHost()) {
+            BaseMod.logger.info("MessageRouter invoke not for us: target=" + inv.target.substring(0, 8));
+            return;
+        }
 
         if (AbstractDungeon.player == null || AbstractDungeon.actionManager == null) {
             BaseMod.logger.info("MessageRouter invoke skipped: not in combat");
@@ -177,15 +175,6 @@ public class MessageRouter {
                 fx.append(effs[i].kind).append("=").append(effs[i].amount);
             }
             BaseMod.logger.info("MessageRouter sent invoke_result: " + inv.refId + " [" + fx + "]");
-
-            // Also broadcast combat_result to all players for induced replay
-            Protocol.CombatResultMessage combatBroadcast = new Protocol.CombatResultMessage();
-            combatBroadcast.source = CrossSpireMod.playerId;
-            combatBroadcast.seq = CrossSpireMod.nextSeq();
-            combatBroadcast.effects = result.effects;
-            combatBroadcast.operationSequence = result.operationSequence;
-            CrossSpireMod.relayClient.send(Protocol.GSON.toJson(combatBroadcast));
-            BaseMod.logger.info("MessageRouter broadcast combat_result: " + fx);
         }
     }
 
