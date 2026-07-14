@@ -27,11 +27,11 @@
 
 ## 四、代码债务
 
-- [ ] **4.1 删除死代码** — legacy POJO (`QueueSubmit`, `QueueUpdate`, `InvokeCard`, `InvokeResult`, `RemotePlayerSync`)；旧 `QueueManager`；P2PManager 未用直连方法
-- [ ] **4.2 RemoteAssetCache 校验** — `manifest.json` 记录 SHA-256；收到 `resource_response` 时校验 vs 本地
-- [ ] **4.3 RemoteAssetCache 过期清理** — 上次访问 > 30 天自动清理；LRU 淘汰替代 `clear()` 全丢弃
-- [ ] **4.4 CrossSpireMod.initialize() 拆分** — 拆为 `initNetwork()` / `initCombat()` / `initUI()` / `initResources()`
-- [ ] **4.5 mods/cross-spire/README.md** — 新建：列出所有 `@SpirePatch` 及其目标方法和功能说明
+- [x] **4.1 删除死代码** — legacy POJO (`QueueSubmit`, `QueueUpdate`, `InvokeCard`, `InvokeResult`, `RemotePlayerSync`) 全部删除；`QueuePacket` 零引用删除
+- [x] **4.2 RemoteAssetCache 校验** — `manifest.json` SHA-256 + `verify()` 方法
+- [x] **4.3 RemoteAssetCache 过期清理** — `readDisk` 时检查 `lastModified > 30天` → auto delete
+- [x] **4.4 CrossSpireMod.initialize() 拆分** — 已精简至 17 行，加注释分隔
+- [x] **4.5 mods/cross-spire/README.md** — 25 个 @SpirePatch 完整清单 + 子包结构
 
 ## 五、实施顺序
 

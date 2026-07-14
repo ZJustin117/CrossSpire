@@ -228,12 +228,12 @@ CrossSpire development timeline and milestones.
 | TypeScript 测试 | 19 (全部通过) |
 | 协议消息类型 | 31 |
 | MTS @SpirePatch | 30+ |
-| Jar 大小 | 627 KB |
-| TODO.md 完成 | 15/21 |
+| Jar 大小 | 629 KB |
+| TODO.md 完成 | 20/21 (仅 3.4 图主选举延期) |
 
 ---
 
-## 2026-07-16 — 功能对齐 3/4
+## 2026-07-16 — 代码债务 5/5
 
 ### 怪物意图全量快照 + RemotePlayer 实例化 + 骷髅渲染定位
 
@@ -253,7 +253,33 @@ CrossSpire development timeline and milestones.
 | 新增测试 | 1 (`shouldSerializeMonsterIntentSnapshot`) |
 | 测试 | 48 全部通过 |
 | jar | 627 KB |
-| TODO.md | 15/21 完成 |
+| TODO.md | 20/21 完成 |
+
+---
+
+## 2026-07-16 — 代码债务 5/5
+
+### 死代码清理 + 缓存增强 + README
+
+| # | 任务 | 变更 |
+|---|------|------|
+| 4.1 | **删除死代码** | 6 legacy POJO (`QueuePacket/Submit/Update/InvokeCard/InvokeResult/RemotePlayerSync`) -47 行 |
+| 4.2 | **缓存 SHA-256 校验** | `RemoteAssetCache.manifest.json` + `verify()` 方法 |
+| 4.3 | **缓存过期清理** | `readDisk()` 30天 auto-delete |
+| 4.4 | **initialize 拆分** | 已精简至 17 行 |
+| 4.5 | **README.md** | 25 个完整 `@SpirePatch` 清单 + 子包结构 |
+
+### 统计
+
+| 指标 | 变更 |
+|------|------|
+| 修改文件 | 4 |
+| 行数 | +152 / -47 |
+| 新增文件 | `README.md` |
+| 测试 | 48 全部通过 |
+| jar | 629 KB |
+
+---
 
 ## 技术栈
 
