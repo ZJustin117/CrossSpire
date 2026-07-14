@@ -2,17 +2,41 @@ package crossspire.resource;
 
 import basemod.BaseMod;
 import basemod.ReflectionHacks;
-import com.badlogic.gdx.graphics.g2d.TextureAtlas;
+import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.files.FileHandle;
 import com.badlogic.gdx.graphics.Pixmap;
-import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.PixmapIO;
-import com.esotericsoftware.spine.Skeleton;
+import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.TextureAtlas;
 import com.google.gson.JsonObject;
 import crossspire.CrossSpireMod;
-import java.io.ByteArrayOutputStream;
 import java.util.Base64;
+import java.util.HashMap;
+import java.util.Map;
 
 public class RemoteAssetServer {
+
+    private static final Map<String, String> CHAR_SKELETON_PATHS = new HashMap<>();
+    static {
+        CHAR_SKELETON_PATHS.put("IRONCLAD", "images/characters/ironclad/idle/skeleton.json");
+        CHAR_SKELETON_PATHS.put("THE_SILENT", "images/characters/theSilent/idle/skeleton.json");
+        CHAR_SKELETON_PATHS.put("DEFECT", "images/characters/defect/idle/skeleton.json");
+        CHAR_SKELETON_PATHS.put("WATCHER", "images/characters/watcher/idle/skeleton.json");
+    }
+    private static final Map<String, String> CHAR_ATLAS_PATHS = new HashMap<>();
+    static {
+        CHAR_ATLAS_PATHS.put("IRONCLAD", "images/characters/ironclad/idle/skeleton.atlas");
+        CHAR_ATLAS_PATHS.put("THE_SILENT", "images/characters/theSilent/idle/skeleton.atlas");
+        CHAR_ATLAS_PATHS.put("DEFECT", "images/characters/defect/idle/skeleton.atlas");
+        CHAR_ATLAS_PATHS.put("WATCHER", "images/characters/watcher/idle/skeleton.atlas");
+    }
+    private static final Map<String, String> CHAR_PNG_PATHS = new HashMap<>();
+    static {
+        CHAR_PNG_PATHS.put("IRONCLAD", "images/characters/ironclad/idle/skeleton.png");
+        CHAR_PNG_PATHS.put("THE_SILENT", "images/characters/theSilent/idle/skeleton.png");
+        CHAR_PNG_PATHS.put("DEFECT", "images/characters/defect/idle/skeleton.png");
+        CHAR_PNG_PATHS.put("WATCHER", "images/characters/watcher/idle/skeleton.png");
+    }
 
     public static void serveResource(String rawMessage) {
         if (CrossSpireMod.relayClient == null || !CrossSpireMod.relayClient.isOpen()) return;
@@ -33,7 +57,7 @@ public class RemoteAssetServer {
             String lookId = resourceId.endsWith(".png") ? resourceId : resourceId + ".png";
             byte[] cached = RemoteAssetCache.readDisk(CrossSpireMod.playerId, resourceType, lookId);
             if (cached == null || cached.length == 0) {
-                BaseMod.logger.info("RemoteAssetServer serveResource: asset not cached " + resourceType + "/" + resourceId);
+                BaseMod.logger.info("RemoteAssetServer no asset: " + resourceType + "/" + resourceId);
                 return;
             }
 
@@ -50,68 +74,59 @@ public class RemoteAssetServer {
             if (player == null) player = CrossSpireMod.localPlayer;
             if (player == null) return;
 
+            String charClass = player.chosenClass != null ? player.chosenClass.name() : "IRONCLAD";
+
             switch (resourceType) {
-                case "character_skeleton":
-                    Skeleton skel = (Skeleton) ReflectionHacks.getPrivate(player,
-                        com.megacrit.cardcrawl.core.AbstractCreature.class, "skeleton");
-                    if (skel == null) return;
-                    String skeletonJson = skel.getData().hashCode() + "";
-                    sendResponse(requester, resourceType, "skeleton.json", skeletonJson);
-                    break;
-
-                case "character_atlas": {
-                    TextureAtlas atlas = (TextureAtlas) ReflectionHacks.getPrivate(player,
-                        com.megacrit.cardcrawl.core.AbstractCreature.class, "atlas");
-                    if (atlas == null) return;
-
-                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                    java.io.OutputStreamWriter writer = new java.io.OutputStreamWriter(baos, "UTF-8");
-                    try {
-                        for (com.badlogic.gdx.graphics.g2d.TextureAtlas.AtlasRegion r :
-                                atlas.getRegions()) {
-                            writer.write(r.name + "\n");
-                            writer.write("  rotate: false\n");
-                            writer.write("  xy: " + (int)r.getRegionX() + ", " + (int)r.getRegionY() + "\n");
-                            writer.write("  size: " + r.getRegionWidth() + ", " + r.getRegionHeight() + "\n");
-                            writer.write("  orig: " + r.originalWidth + ", " + r.originalHeight + "\n");
-                            writer.write("  offset: " + (int)r.offsetX + ", " + (int)r.offsetY + "\n");
-                            writer.write("  index: -1\n");
-                        }
-                        writer.flush();
-                    } catch (Exception ignored) {}
-                    sendResponse(requester, resourceType, "skeleton.atlas",
-                        Base64.getEncoder().encodeToString(baos.toByteArray()));
+                case "character_skeleton": {
+                    String path = CHAR_SKELETON_PATHS.get(charClass);
+                    if (path == null) return;
+                    String json = readGameFile(path);
+                    if (json != null) {
+                        sendResponse(requester, resourceType, "skeleton.json",
+                            Base64.getEncoder().encodeToString(json.getBytes("UTF-8")));
+                    }
                     break;
                 }
-
+                case "character_atlas": {
+                    String path = CHAR_ATLAS_PATHS.get(charClass);
+                    if (path == null) return;
+                    String atlasText = readGameFile(path);
+                    if (atlasText != null) {
+                        sendResponse(requester, resourceType, "skeleton.atlas",
+                            Base64.getEncoder().encodeToString(atlasText.getBytes("UTF-8")));
+                    }
+                    break;
+                }
                 case "character_png": {
-                    TextureAtlas atlas = (TextureAtlas) ReflectionHacks.getPrivate(player,
-                        com.megacrit.cardcrawl.core.AbstractCreature.class, "atlas");
-                    if (atlas == null) return;
-                    com.badlogic.gdx.graphics.g2d.TextureAtlas.AtlasRegion first =
-                        atlas.getRegions().first();
-                    if (first == null) return;
-                    Texture tex = first.getTexture();
-                    if (tex == null) return;
-                    tex.getTextureData().prepare();
-                    Pixmap pixmap = tex.getTextureData().consumePixmap();
-
-                    java.io.File tmpFile = java.io.File.createTempFile("spine_", ".png");
-                    com.badlogic.gdx.files.FileHandle fh =
-                        new com.badlogic.gdx.files.FileHandle(tmpFile);
-                    PixmapIO.writePNG(fh, pixmap);
-
-                    byte[] pngData = java.nio.file.Files.readAllBytes(tmpFile.toPath());
-                    tmpFile.delete();
-
+                    String path = CHAR_PNG_PATHS.get(charClass);
+                    if (path == null) return;
+                    FileHandle fh = Gdx.files.internal(path);
+                    if (!fh.exists()) return;
+                    Pixmap pixmap = new Pixmap(fh);
+                    java.io.File tmp = java.io.File.createTempFile("spine_", ".png");
+                    com.badlogic.gdx.files.FileHandle tmpFh = new com.badlogic.gdx.files.FileHandle(tmp);
+                    PixmapIO.writePNG(tmpFh, pixmap);
+                    byte[] data = java.nio.file.Files.readAllBytes(tmp.toPath());
+                    tmp.delete();
+                    pixmap.dispose();
                     sendResponse(requester, resourceType, "skeleton.png",
-                        Base64.getEncoder().encodeToString(pngData));
+                        Base64.getEncoder().encodeToString(data));
                     break;
                 }
             }
         } catch (Exception e) {
             BaseMod.logger.error("RemoteAssetServer character asset error: " + e.getMessage());
         }
+    }
+
+    private static String readGameFile(String path) {
+        try {
+            FileHandle fh = Gdx.files.internal(path);
+            if (fh != null && fh.exists()) {
+                return fh.readString("UTF-8");
+            }
+        } catch (Exception ignored) {}
+        return null;
     }
 
     private static void sendResponse(String target, String resourceType, String resourceId, String dataB64) {
