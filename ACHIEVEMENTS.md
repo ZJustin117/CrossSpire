@@ -181,6 +181,40 @@ CrossSpire development timeline and milestones.
 | 删除文件 | `QueueManager.java` |
 | 测试 | 47 全部通过 |
 | jar | 625 KB (-5 KB) |
+---
+
+## 2026-07-16 — 生产质量 7/7
+
+### 事件抑制 + Heartbeat + 掉线 + 骨架修复
+
+| # | 任务 | 文件 | 说明 |
+|---|------|------|------|
+| 2.1 | **怪物回合结果同步** | `MonsterTurnPatches.java` | `applyStartOfTurnPowers` 前后 HP/Block 增量法（`takeTurn` 为 abstract 无法 Patch） |
+| 2.2 | **骨架传输修复** | `RemoteAssetServer.java` | 字符→路径映射表，从 `Gdx.files.internal()` 读取原始 skeleton.json/atlas/png，替代 hashcode stub |
+| 2.3 | **客户端掉线处理** | `RelayClient.java`, `MessageRouter.java`, `LobbyState.java` | `player_left` handler → `Registry.remove()` + `onPlayerLeft()` + roomSize 递减 |
+| 2.4 | **日志降噪** | `CrossSpireMod.java` | batch `f.delete()` 已实现 |
+| 2.5 | **EventSuppression 封装** | `EventSuppression.java`, `SuppressBaseModPatches.java` | `SUPPRESSION` package-private，调用方改用 `isSuppressed()` |
+| 2.6 | **HeartbeatManager 接入** | `RelayClient.java`, `HeartbeatManager.java` | `onOpen`→`start()`, `onClose`→`stop()`，移除内联线程 |
+| 2.7 | **Reference.hostId 路由** | `Reference.java`, `RemoteReference.java`, `MessageRouter.java` | invoke 发到 `hostId`，房主识别并转发给 owner |
+
+### 统计
+
+| 指标 | 变更 |
+|------|------|
+| 修改文件 | 9 |
+| 行数 | +143 / -67 |
+| 测试 | 47 全部通过 |
+| jar | 625 KB |
+| TODO.md | 12/21 完成 (5 架构 + 7 质量) |
+
+### 双设备验证
+
+| 验证项 | 结果 |
+|--------|------|
+| `HeartbeatManager started` | D1 ✅ D2 ✅ |
+| `RelayClient room host` 正确 | D1 ✅ D2 ✅ |
+| 无新增 Error/Exception | D1 ✅ D2 ✅ |
+| 构建 + 测试 | 47/47 ✅ |
 
 ---
 
@@ -193,9 +227,9 @@ CrossSpire development timeline and milestones.
 | Java 单元测试 | 47 (全部通过) |
 | TypeScript 测试 | 19 (全部通过) |
 | 协议消息类型 | 31 |
-| MTS @SpirePatch | 26+ |
+| MTS @SpirePatch | 28+ |
 | Jar 大小 | 625 KB |
-| relay daemon | systemd user service, 30s 心跳清理 |
+| TODO.md 完成 | 12/21 |
 
 ## 技术栈
 

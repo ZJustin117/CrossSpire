@@ -498,6 +498,22 @@ interface QueueEntry {
 
 怪物动作由图主解引用 → 始终本地执行，无网络往返。图主和房主分离时需经过一次转发。
 
+### 实现：HP 增量法（绕过 takeTurn 抽象方法限制）
+
+`AbstractMonster.takeTurn()` 为抽象方法，MTS 无法注入。采用 `@SpirePatch` 钩子链实现效果捕获：
+
+```
+BeforeTurn: @SpirePostfixPatch AbstractMonster.applyStartOfTurnPowers()
+  → 记录 AbstractDungeon.player.currentHealth + currentBlock
+
+AfterMonsterTurns: @SpirePostfixPatch AbstractPlayer.applyStartOfTurnPowers()
+  → 计算 HP delta = preTurnHp - currentHealth
+  → 计算 block delta = currentBlock - preTurnBlock
+  → 广播 combat_result(damage=delta, gain_block=blockDiff)
+```
+
+此方法在怪物回合前后采样玩家 HP/Block，差值即为怪物造成的净效果。
+
 ### 怪物被动效果与远程玩家动作
 
 怪物身上的 power/relic 可能响应玩家打牌等事件（如"玩家打出攻击牌时怪物回2血"）。在图主机器上，这些效果通过 INDUCED 重放的深层空函数调用触发：
@@ -722,7 +738,23 @@ Skeleton skeleton = ReflectionHacks.getPrivate(
 SkeletonData data = skeleton.getData(); // 含全部骨骼、插槽、动画定义
 ```
 
-素材发送方**保留原始文件路径引用**（如 `images/characters/ironclad/idle/skeleton.json`），按路径读取原始字节进行传输。纹理数据通过 `Texture.getTextureData()` 提取像素后编码为 PNG。
+素材发送方**不直接从内存提取** Spine 数据（序列化复杂、版本依赖）。改为**按字符→路径映射表**从原始文件读取并传输：
+
+```java
+// RemoteAssetServer.java — 字符→路径映射
+CHAR_SKELETON_PATHS.put("IRONCLAD", "images/characters/ironclad/idle/skeleton.json");
+CHAR_ATLAS_PATHS.put("IRONCLAD",   "images/characters/ironclad/idle/skeleton.atlas");
+CHAR_PNG_PATHS.put("IRONCLAD",     "images/characters/ironclad/idle/skeleton.png");
+
+// 读取原始文件并通过 Gdx.files.internal() 获取字节
+FileHandle fh = Gdx.files.internal(path);
+String skeletonJson = fh.readString("UTF-8");
+// ... Base64 编码后传输
+```
+
+素材接收方从磁盘缓存重建：`SkeletonJson.readSkeletonData(jsonFile)` + `TextureAtlas(FileHandle)` → Skeleton。
+
+纹理数据通过 `Pixmap` 从 `Gdx.files.internal().png` 读取后编码为 PNG。
 
 ### 远程素材类层次
 
