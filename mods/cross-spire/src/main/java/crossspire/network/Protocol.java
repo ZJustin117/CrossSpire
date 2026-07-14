@@ -17,16 +17,6 @@ public final class Protocol {
 
     // -- distributed broadcast queue --
 
-    public static class QueuePacket extends GameMessage {
-        public QueuePacket() { type = "queue_packet"; }
-        @SerializedName("packet_id") public String packetId;
-        @SerializedName("sender_id") public String senderId;
-        @SerializedName("owner_id") public String ownerId;
-        public long timestamp;
-        @SerializedName("card_id") public String cardId;
-        @SerializedName("resource_hash") public String resourceHash;
-    }
-
     public static class EffectDescription {
         public String kind;
         public String target;
@@ -233,15 +223,6 @@ public final class Protocol {
         public QueueEmptyMessage() { type = "queue_empty"; }
     }
 
-    // -- keep legacy types for backward compat with RelayClient --
-
-    public static class QueueSubmit extends GameMessage {
-        public QueueSubmit() { type = "queue_submit"; }
-        @SerializedName("card_id") public String cardId;
-        public boolean upgraded;
-        @SerializedName("energy_cost") public int energyCost;
-    }
-
     public static class QueueEntry {
         @SerializedName("entry_id") public String entryId;
         @SerializedName("packet_id") public String packetId;
@@ -252,31 +233,6 @@ public final class Protocol {
         public boolean upgraded;
         public String target;
         public String status;
-    }
-
-    public static class QueueUpdate extends GameMessage {
-        public QueueUpdate() { type = "queue_update"; }
-        public QueueEntry[] entries;
-    }
-
-    public static class InvokeCard extends GameMessage {
-        public InvokeCard() { type = "invoke_card"; }
-        @SerializedName("request_id") public String requestId;
-        @SerializedName("card_id") public String cardId;
-        public boolean upgraded;
-        @SerializedName("game_target") public String gameTarget;
-    }
-
-    public static class InvokeResult extends GameMessage {
-        public InvokeResult() { type = "invoke_result"; }
-        @SerializedName("request_id") public String requestId;
-        public EffectDescription[] effects;
-        @SerializedName("operation_sequence") public OperationStep[] operationSequence;
-    }
-
-    public static class RemotePlayerSync extends GameMessage {
-        public RemotePlayerSync() { type = "state_sync"; subtype = "remote_player"; }
-        public RemotePlayerState player;
     }
 
     private Protocol() {}
