@@ -10,8 +10,8 @@
 
 ## 二、生产质量
 
-- [ ] **2.1 MonsterTurnPatches 补 takeTurn** — `@SpirePatch` `AbstractMonster.takeTurn` → 房主捕获 → 广播 `combat_result`
-- [ ] **2.2 骨架传输修复** — `RemoteAssetServer` 发送真实 skeleton JSON（ReflectionHacks 提取 SkeletonData → 序列化 → Base64），替代 hashcode stub
+- [x] **2.1 MonsterTurnPatches 补 takeTurn** — HP增量法(applyStartOfTurn→applyEndOfTurn)绕过抽象方法限制
+- [x] **2.2 骨架传输修复** — 从 Gdx.files.internal 读取原始文件替代 hashcode stub
 - [x] **2.3 客户端掉线处理** — RelayClient player_left → RemotePlayerRegistry.remove + onPlayerLeft
 - [x] **2.4 日志降噪** — batch 执行后 delete()（已实现）
 - [x] **2.5 EventSuppression 封装** — SUPPRESSION package-private + isSuppressed()
