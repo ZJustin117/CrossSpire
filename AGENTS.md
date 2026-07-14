@@ -29,7 +29,7 @@ CrossSpire is an open-source multiplayer mod for Slay the Spire 1, designed with
 
 ## Reference Documentation
 
-The `reference-docs/` directory contains API documentation for the two key modding frameworks used by CrossSpire. Consult these when writing patches or adding custom game content.
+The `docs/reference/` directory contains API documentation for the two key modding frameworks used by CrossSpire. Consult these when writing patches or adding custom game content.
 
 | File | Content |
 |------|---------|
