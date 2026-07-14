@@ -12,11 +12,11 @@
 
 - [ ] **2.1 MonsterTurnPatches 补 takeTurn** — `@SpirePatch` `AbstractMonster.takeTurn` → 房主捕获 → 广播 `combat_result`
 - [ ] **2.2 骨架传输修复** — `RemoteAssetServer` 发送真实 skeleton JSON（ReflectionHacks 提取 SkeletonData → 序列化 → Base64），替代 hashcode stub
-- [ ] **2.3 客户端掉线处理** — relay `player_left` → `MessageRouter` 路由 → 清除 `RemotePlayerState` + `CentralQueueManager` 移除待处理项
-- [ ] **2.4 日志降噪** — batch 执行后删除 `crossspire_batch.txt` 避免重复执行
-- [ ] **2.5 EventSuppression 封装** — `AtomicInteger` 计数器从 `public static final` 改为 package-private，仅通过 `suppressEvents()` API 访问
+- [x] **2.3 客户端掉线处理** — RelayClient player_left → RemotePlayerRegistry.remove + onPlayerLeft
+- [x] **2.4 日志降噪** — batch 已 delete()（无需改动）
+- [x] **2.5 EventSuppression 封装** — SUPPRESSION package-private + isSuppressed()
 - [ ] **2.6 HeartbeatManager 接入** — 当前已存在独立线程类但未被 `CrossSpireMod` 启动，补上并接入掉线检测
-- [ ] **2.7 ReferenceFactory 使用 hostId** — `Reference` 基类加 `hostId` 字段，`RemoteReference.dereference` 将 invoke 发到 hostId 而非 ownerId
+- [x] **2.7 ReferenceFactory hostId** — Reference.hostId 字段 + RemoteReference 经 hostId 路由
 
 ## 三、功能对齐
 
