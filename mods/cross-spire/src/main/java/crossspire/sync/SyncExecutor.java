@@ -100,22 +100,35 @@ public class SyncExecutor {
         final String monster = firstMonster;
         new Thread(new Runnable() {
             @Override public void run() {
-                for (int attempt = 0; attempt < 10; attempt++) {
+                for (int attempt = 0; attempt < 20; attempt++) {
                     try { Thread.sleep(3000); } catch (InterruptedException e) { break; }
-                    if (AbstractDungeon.player != null
-                        && CardCrawlGame.mode == CardCrawlGame.GameMode.GAMEPLAY
-                        && !(AbstractDungeon.getCurrRoom() instanceof com.megacrit.cardcrawl.rooms.MonsterRoom)) {
-                        BaseMod.logger.info("SyncExecutor entering remote combat (attempt " + attempt + "): " + monster);
-                        String[] args = ("fight " + monster).split(" ");
-                        basemod.devcommands.ConsoleCommand.execute(args);
-                        BaseMod.logger.info("SyncExecutor entered remote combat via fight: " + monster);
+                    if (AbstractDungeon.player == null || CardCrawlGame.mode != CardCrawlGame.GameMode.GAMEPLAY) {
+                        BaseMod.logger.info("SyncExecutor room_enter starting remote game (attempt " + attempt + ")");
+                        writeBatch("crossspire start IRONCLAD " +
+                            (CrossSpireMod.syncedSeed != null ? CrossSpireMod.syncedSeed : "220644"));
+                        try { Thread.sleep(5000); } catch (InterruptedException e2) { break; }
+                        continue;
+                    }
+                    if (AbstractDungeon.getCurrRoom() instanceof com.megacrit.cardcrawl.rooms.MonsterRoom) {
+                        BaseMod.logger.info("SyncExecutor room_enter already in combat, skipping fight");
                         return;
                     }
-                    BaseMod.logger.info("SyncExecutor room_enter waiting (attempt " + attempt + "): player="
-                        + (AbstractDungeon.player != null) + " mode=" + CardCrawlGame.mode);
+                    BaseMod.logger.info("SyncExecutor entering remote combat (attempt " + attempt + "): " + monster);
+                    writeBatch("fight " + monster);
+                    BaseMod.logger.info("SyncExecutor entered remote combat via fight: " + monster);
+                    return;
                 }
-                BaseMod.logger.info("SyncExecutor room_enter giving up after 10 attempts");
+                BaseMod.logger.info("SyncExecutor room_enter giving up after 20 attempts");
             }
         }, "RoomEnterDeferred").start();
+    }
+
+    private static void writeBatch(String command) {
+        try {
+            java.io.File f = new java.io.File("/storage/emulated/0/Android/data/io.stamethyst/files/sts/crossspire_batch.txt");
+            java.io.FileWriter fw = new java.io.FileWriter(f);
+            fw.write(command + "\n");
+            fw.close();
+        } catch (Exception ignored) {}
     }
 }

@@ -9,11 +9,18 @@ import com.megacrit.cardcrawl.dungeons.AbstractDungeon;
 import com.megacrit.cardcrawl.dungeons.Exordium;
 import com.megacrit.cardcrawl.helpers.SeedHelper;
 import crossspire.CrossSpireMod;
+import crossspire.EventSuppression;
 import java.util.ArrayList;
 
 public class GameStarter {
 
+    private static boolean gameStarted = false;
+
     public static String start(String characterName, String seed) {
+        if (gameStarted) {
+            DevConsole.log("Game already started, ignoring crossspire start");
+            return null;
+        }
         PlayerClass playerClass;
         try {
             playerClass = PlayerClass.valueOf(characterName.toUpperCase());
@@ -35,11 +42,14 @@ public class GameStarter {
             SeedHelper.setSeed("");
         }
 
-        AbstractDungeon.player = player;
-        CrossSpireMod.localPlayer = player;
-        AbstractDungeon.generateSeeds();
-        new Exordium(player, new ArrayList<String>());
-        CardCrawlGame.mode = CardCrawlGame.GameMode.GAMEPLAY;
+        EventSuppression.suppressEvents(() -> {
+            AbstractDungeon.player = player;
+            CrossSpireMod.localPlayer = player;
+            AbstractDungeon.generateSeeds();
+            new Exordium(player, new ArrayList<String>());
+            CardCrawlGame.mode = CardCrawlGame.GameMode.GAMEPLAY;
+        });
+        gameStarted = true;
 
         String usedSeed = SeedHelper.getUserFacingSeedString();
         DevConsole.log("Game started as " + characterName + " seed=" + usedSeed);
