@@ -4,7 +4,7 @@ import basemod.BaseMod;
 import basemod.devcommands.ConsoleCommand;
 import com.evacipated.cardcrawl.modthespire.lib.SpireInitializer;
 import crossspire.network.RelayClient;
-import crossspire.remote.RemoteRenderer;
+import crossspire.ui.CrossSpireHUD;
 import crossspire.remote.StageHost;
 import crossspire.sync.MessageRouter;
 import crossspire.sync.SyncExecutor;
@@ -17,8 +17,6 @@ import crossspire.ui.LobbyState;
 import com.megacrit.cardcrawl.characters.AbstractPlayer;
 import crossspire.ui.CrossSpireCommand;
 import crossspire.ui.LobbyScreen;
-import crossspire.ui.RemoteStatsOverlay;
-import crossspire.ui.RoomPanel;
 import crossspire.ui.ServerPicker;
 import com.google.gson.JsonObject;
 import java.net.URI;
@@ -34,6 +32,7 @@ public class CrossSpireMod {
     public static LobbyState lobbyState;
     public static StageHost stageHost;
     public static RngManager rngManager;
+    public static CrossSpireHUD hud;
     public static String playerId = "";
     public static String syncedSeed = null;
     public static AbstractPlayer localPlayer = null;
@@ -50,9 +49,7 @@ public class CrossSpireMod {
         lobbyScreen = new LobbyScreen();
         lobbyScreen.hide();
         ConsoleCommand.addCommand("crossspire", CrossSpireCommand.class);
-        new RemoteRenderer();
-        new RemoteStatsOverlay();
-        new RoomPanel();
+        hud = new CrossSpireHUD();
 
         if (ServerPicker.autoConnect) {
             connect();
