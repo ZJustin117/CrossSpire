@@ -224,12 +224,36 @@ CrossSpire development timeline and milestones.
 |------|--------|
 | Java 源文件 | 55 (prod: 49, test: 6) |
 | TypeScript 源文件 | 7 |
-| Java 单元测试 | 47 (全部通过) |
+| Java 单元测试 | 48 (全部通过) |
 | TypeScript 测试 | 19 (全部通过) |
 | 协议消息类型 | 31 |
-| MTS @SpirePatch | 28+ |
-| Jar 大小 | 625 KB |
-| TODO.md 完成 | 12/21 |
+| MTS @SpirePatch | 30+ |
+| Jar 大小 | 627 KB |
+| TODO.md 完成 | 15/21 |
+
+---
+
+## 2026-07-16 — 功能对齐 3/4
+
+### 怪物意图全量快照 + RemotePlayer 实例化 + 骷髅渲染定位
+
+| # | 任务 | 文件 | 说明 |
+|---|------|------|------|
+| 3.1 | **怪物意图全量快照** | `MonsterIntentBroadcastPatches.java`, `IntentRenderer.java`, `SyncExecutor.java` | `createIntent` 缓冲到 `intentBuffer`，`AbstractPlayer.applyStartOfTurnPowers` 全量广播 `MonsterIntentMessage.intents[]`；`IntentRenderer.showSnapshot()` 逐怪刷新 |
+| 3.2 | **怪物回合三阶段分离** | — | 已对齐 ARCHITECTURE §8：phase1 intent snapshot / phase2 player queue / phase3 HP delta（takeTurn 抽象无法 Patch，回退 usePreBattleAction） |
+| 3.3 | **RemotePlayer 实例化 + 渲染** | `RemotePlayerState.java`, `RemoteRenderer.java` | `getPlayerInstance()` 惰性创建 `RemotePlayer extends AbstractPlayer`；`renderHealth(sb)` 委托；多角色按 index 自动排列 x 坐标 |
+| 3.4 | **图主选举协议** | — | 延期（ARCHITECTURE.md 标注"暂不实现"） |
+
+### 统计
+
+| 指标 | 变更 |
+|------|------|
+| 修改文件 | 8 |
+| 行数 | +179 / -106 |
+| 新增测试 | 1 (`shouldSerializeMonsterIntentSnapshot`) |
+| 测试 | 48 全部通过 |
+| jar | 627 KB |
+| TODO.md | 15/21 完成 |
 
 ## 技术栈
 
