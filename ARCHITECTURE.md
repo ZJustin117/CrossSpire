@@ -46,6 +46,7 @@ CrossSpire 是一个开源的杀戮尖塔1联机Mod，目标：
 | 内容校验 | Content Validation | 同名类/方法不等同于相同类/方法。通过内容哈希比对判定两个实体是否真正一致。对同 Mod 不同版本隔离有关键意义 |
 | 房主 | Room Host | **网络路由角色**。维护到所有客户端的连接（星型拓扑，O(n) 连接）。所有客户端间消息经房主转发。房主维护中央待打出队列并负责调度。房主**不执行游戏逻辑**（除非房主本人恰好是该逻辑的所有者） |
 | 图主 | Stage Host | **游戏逻辑角色**。当前阶段（Act + Floor）地图/事件/怪物的**强所有者**。其他人只能对此建立远程引用（不允许本地引用）。由所有成员投票选定。图主可以就是房主，但两类角色可分离；房主负责把消息路由到位，图主负责在自己的机器上执行地图/怪物逻辑 |
+| 诱导重放 | Induced Replay | 非发送者收到 `combat_result` 时的本地处理模式。将 `operation_sequence` 中的步骤转化为 BaseMod 事件（`publishOnCardUse` 等），触发本地引擎自然感知该动作的发生。重放的 stub 动作本身不改变游戏状态（不扣第二次血），但由此触发的本地遗物/能力正常执行真实逻辑，产生新效果 |
 | 标准包 | Standard Packet | 待打出卡牌的提交包，包含 `{packet_id, sender_id, owner_id, card_id, resource_hash, target}`。客户端发往房主，由房主插入中央队列并管理生命周期 |
 
 ### 操作关系
@@ -133,7 +134,7 @@ ref.dereference(args):
   ├─ type == REMOTE
   │     → 发 invoke(refId, args, ownerId) 到 hostId（房主）
   │     → 房主将 invoke 转发到 ownerId
-  │     → owner 本地执行 → 触发钩子 → 回传 invoke_result 给房主
+  │     → owner 本地执行（REAL 模式）→ 触发钩子 → 回传 invoke_result 给房主
   │     → 房主转发 invoke_result 给调用方
   │     → 调用方渲染结果，不触发钩子
   │     → 返回 Result
@@ -143,6 +144,48 @@ ref.dereference(args):
         → tryMigrate()     // 是否有其他节点持有副本？
         → 都失败 → 抛出空引用异常，界面显示不可达
 ```
+
+### 解引用的两种执行模式
+
+解引用根据**执行位置**切换模式，模式选择不由上层指定，由引用系统自动判定：
+
+```
+┌─ REAL 模式（发送者/所有者机器上）
+│   真实调用 use() / AI() → 修改游戏状态 → 触发 BaseMod hooks
+│   产出 combat_result（含 operation_sequence + effects）
+│
+└─ INDUCED 模式（非发送者收到 combat_result 后）
+    取 operation_sequence 中的步骤:
+      ├─ play_card → 构造 CardStub → publishOnCardUse → 钩子触发 → 本地对象真实执行
+      ├─ apply_power → 构造 PowerStub → publishPostPowerApply → 钩子触发
+      ├─ damage → suppressEvents 写数值 + VFX（不触发钩子）
+      └─ gain_block → suppressEvents 写数值 + VFX（不触发钩子）
+```
+
+**核心逻辑**：INDUDED 模式不重复执行效果步骤（damage/block 等用 suppressEvents 写数值），但将**事件步骤**（play_card、apply_power 等）走 BaseMod 事件链，让本地引擎"感知到"动作的发生。由此触发的本地遗物/能力执行真实逻辑。
+
+### 诱导重放中的 Stub 对象
+
+INDUDED 模式下，从 protocol 数据即时生成轻量 stub 对象充当事件参数，不需要提前定义：
+
+```java
+// CardStub — 仅含 metadata，无 use() 实现
+// 从 protocol 的 card_id + resource_registry 素材清单即时构建
+class CardStub extends AbstractCard {
+    String cardID;      // 从 combat_result.card_id 来
+    CardType type;      // 从 resource_registry 素材清单查
+    CardRarity rarity;
+    int cost;
+    // use() 永远不调用 — INDUCED 模式走事件发布
+}
+
+class PowerStub extends AbstractPower {
+    String powerID;     // 从 combat_result.operation_sequence 来
+    int amount;
+}
+```
+
+Stub 对象是瞬态的：收到 `combat_result` 时构建 → 注入事件链 → 触发本地订阅者 → 销毁。不需要任何预言能力，因为是响应式生成。
 
 ### 房主即所有者时的短路路径
 
@@ -346,6 +389,37 @@ interface QueueEntry {
      → 房主 → 全员: combat_result(effects)
 ```
 
+### 诱导重放
+
+房主广播 `combat_result` 后，**非发送者**（sender_id ≠ 自己）在该消息到达时执行诱导重放：
+
+```
+房主 → 全员: combat_result { sender_id: A, operation_sequence: [...], effects: [...] }
+
+接收方处理（B, C, 房主自己...）:
+
+  发送者自己（sender_id == 自己）:
+    → 已通过 REAL 模式真实执行过
+    → 跳过诱导重放，仅做 UI 更新
+
+  非发送者（sender_id != 自己）:
+    → 进入 INDUCED 模式:
+      1. 遍历 operation_sequence 中的步骤:
+         ├─ play_card → 构造 CardStub → publishOnCardUse(stubCard, stubPlayer)
+         ├─ apply_power → 构造 PowerStub → publishPostPowerApply(stubPower)
+         └─ ...
+      2. 本地钩子触发:
+         • 使用自定义接口的遗物被触发 → 本地真实执行 → 产生新效果
+         • 使用 BaseMod 标准钩子的遗物被触发 → 本地真实执行
+         • 效果步骤 (damage/block 等) 用 suppressEvents 仅写数值+VFX
+      3. 若诱导重放产生新效果 → 交给 CombatResultReplayer 收集
+         → 提交给房主（房主插入中央队列尾部处理）
+```
+
+**诱导重放实现了特效的自动传递**：每个人的本地引擎都走一遍事件链，本地遗物正常响应。无论遗物使用 BaseMod 标准钩子还是自定义接口，只要它注册在本地引擎中就能被触发。
+
+诱导重放产出的新效果进入房主中央队列尾部，保证顺序正确且不打断当前队列执行。
+
 ### 玩家视角
 
 1. **提交卡牌**：卡牌从手牌悬浮至队列区域 → 发 `queue_submit` 到房主 → 等待
@@ -449,6 +523,32 @@ B 的远程卡牌触发 A 的本地遗物 Vajra:
 
 远程遗物可以被本地卡牌触发（本地卡牌发出事件 → 远程遗物的引用订阅了该事件 → 经房主路由调用所有者执行）。远程卡牌也可以触发仅在本地存在的遗物（遗物在本地 → 本地引用 → 直接在本地生效）。
 
+### 自定义接口遗物与诱导重放
+
+当遗物使用了自定义接口（非 BaseMod 标准 `publishXxx` 钩子）时，远程引用无法直接订阅它的触发条件，因为对方机器上没有这个遗物的定义。诱导重放解决了这个问题：
+
+```
+场景: A 有一个使用自定义接口的遗物（打出攻击牌时生效），B 没有这个 mod
+
+1. B 打出自己的攻击牌（B 本地 REAL 模式执行，触发 B 本地钩子）
+2. B → 房主: invoke_result → 房主广播 combat_result
+3. A 收到 combat_result（sender_id = B ≠ A，进入 INDUCED 模式）
+4. 诱导重放 play_card 步骤 → 构造 CardStub(type = ATTACK)
+   → BaseMod.publishOnCardUse(stubCard)
+   → 尽管 A 的遗物使用自定义接口，但只要它监听了 BaseMod 的 onCardUse 事件
+      或通过 @SpirePatch 拦截了卡牌使用流程，就能被触发
+   → 如果遗物通过完全定制的方式监听（如直接 @SpirePatch AbstractPlayer.useCard），
+      StaticStub 也可被注入到对应方法的调用链中以触发遗物逻辑
+5. A 的遗物真实执行 → 产生新效果 → 提交给房主
+6. 房主广播新效果 → B 收到新效果 → B 处的遗物 stub 也做诱导重放
+   → B 处只有 VFX（B 没有该遗物的真实逻辑），不产生副作用
+```
+
+关键点：
+- 诱导重放**不需要知道遗物用了什么接口**。它把战斗事件广播到所有人的本地引擎，让本地引擎自然处理
+- Stub 对象在操作序列上打通了事件链，不依赖对方机器上的类定义
+- 自定义钩子的覆盖范围取决于 stub 能注入到什么层次的方法调用链中——典型情况下 BaseMod 事件链已覆盖绝大部分场景
+
 ### Fallback 效果类型（保持原有）
 
 | kind | 说明 | 关键字段 |
@@ -487,17 +587,18 @@ public class CrossSpireMod {
 ```
 
 抑制的触发场景：
-- 非所有者收到 `combat_result` → 操作重放时 suppressEvents 包裹（结果已由所有者触发过一次钩子，不能重复触发）
+- 非发送者收到 `combat_result` → 诱导重放时，效果步骤（damage/block/heal 等）用 suppressEvents 仅写入数值和 VFX；事件步骤（play_card/apply_power 等）正常走 BaseMod 事件链触发本地订阅者
 - 在线角色状态写入（HP 变化、遗物获取等）时 suppressEvents 包裹
-- 远程引用解引用 → 所有者在远端触发钩子 → 结果经房主路由回来 → 本地 suppressEvents 渲染
+- 引用的 REAL 模式解引用在所有者的远端触发钩子 → 结果经房主路由回来 → 本地 INDUCED 模式按上述规则处理
 
 ### 引用中的钩子触发规则
 
 | 场景 | 是否触发钩子 | 原因 |
 |------|-------------|------|
-| 所有者解引用自己的对象 | 是 | 计算源点，钩子应触发 |
-| 非所有者收到结果同步 | 否（suppressEvents） | 结果已在所有者处触发过一次 |
-| 交叉引用中本地遗物被远程卡牌触发 | 是 | 遗物是本地引用，在本地直接执行 |
+| 所有者解引用自己的对象（REAL 模式） | 是 | 计算源点，钩子应触发 |
+| 非发送者诱导重放：事件步骤（play_card 等） | 是 | 让本地引擎"感知"动作，触发本地遗物/能力 |
+| 非发送者诱导重放：效果步骤（damage 等） | 否（suppressEvents） | 效果数值已由所有者计算，不能重复改变状态 |
+| 交叉引用中本地遗物被 INDUCED 事件触发 | 是 | 遗物是本地引用，在本地直接执行 |
 
 由于 BaseMod 没有 gold change hook，金币同步需要通过自定义 `@SpirePatch` 直接拦截 `AbstractPlayer.gainGold()` / `loseGold()` 方法。
 
