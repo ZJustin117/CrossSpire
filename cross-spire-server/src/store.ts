@@ -8,13 +8,14 @@ interface PlayerMeta {
 interface Room {
   code: string;
   players: PlayerMeta[];
+  host: string;
 }
 
 const rooms = new Map<string, Room>();
 
 export function createRoom(code?: string): Room {
   code = code ?? uuidv4().slice(0, 6).toUpperCase();
-  const room = { code, players: [] };
+  const room = { code, players: [], host: '' };
   rooms.set(code, room);
   return room;
 }
@@ -25,7 +26,11 @@ export function getRoom(code: string): Room | undefined {
 
 export function addPlayer(code: string, playerId: string) {
   const room = rooms.get(code);
-  if (room) room.players.push({ playerId, lastHeartbeat: Date.now() });
+  if (!room) return;
+  if (room.players.length === 0) {
+    room.host = playerId;
+  }
+  room.players.push({ playerId, lastHeartbeat: Date.now() });
 }
 
 export function removePlayer(code: string, playerId: string) {
@@ -33,6 +38,9 @@ export function removePlayer(code: string, playerId: string) {
   if (!room) return;
   const idx = room.players.findIndex(p => p.playerId === playerId);
   if (idx !== -1) room.players.splice(idx, 1);
+  if (room.host === playerId && room.players.length > 0) {
+    room.host = room.players[0].playerId;
+  }
   if (room.players.length === 0) rooms.delete(code);
 }
 

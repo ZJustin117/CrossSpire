@@ -9,6 +9,7 @@ const roomForPlayer = new Map<string, string>();
 function deliver(roomCode: string, message: unknown, excludePlayer?: string) {
   const data = JSON.stringify(message);
   const target = (message as any).target;
+  
 
   if (target && playerSockets.has(target)) {
     const socket = playerSockets.get(target);
@@ -52,7 +53,7 @@ export function createServer(port: number) {
 
         addPlayer(room.code, playerId);
         roomForPlayer.set(playerId, room.code);
-        ws.send(JSON.stringify({ type: 'room_state', code: room.code, players: getPlayerIds(room) }));
+        ws.send(JSON.stringify({ type: 'room_state', code: room.code, host: room.host, players: getPlayerIds(room) }));
       } else {
         const roomCode = roomForPlayer.get(playerId);
         if (!roomCode) return;

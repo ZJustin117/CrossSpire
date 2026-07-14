@@ -19,6 +19,7 @@ export interface JoinMessage {
 export interface RoomStateMessage {
   type: 'room_state';
   code: string;
+  host: string;
   players: string[];
 }
 
@@ -160,6 +161,34 @@ export interface ReferenceMigrateMessage extends GameMessage {
   resource_hash: string;
 }
 
+export interface QueueSubmitMessage extends GameMessage {
+  type: 'queue_submit';
+  sender_id: string;
+  owner_id: string;
+  card_id: string;
+  resource_hash: string;
+  game_target: string;
+  timestamp: number;
+}
+
+export interface QueueUpdateMessage extends GameMessage {
+  type: 'queue_update';
+  entries: QueueEntry[];
+}
+
+export interface QueueEntry {
+  packet_id: string;
+  sender_id: string;
+  owner_id: string;
+  card_id: string;
+  target: string;
+  status: 'pending' | 'executing' | 'done';
+}
+
+export interface QueueEmptyMessage extends GameMessage {
+  type: 'queue_empty';
+}
+
 export type RelayMessage =
   | ConnectedMessage
   | JoinMessage
@@ -179,7 +208,10 @@ export type RelayMessage =
   | PlayerReadyMessage
   | HelloMessage
   | ResourceRegistryMessage
-  | ReferenceMigrateMessage;
+  | ReferenceMigrateMessage
+  | QueueSubmitMessage
+  | QueueUpdateMessage
+  | QueueEmptyMessage;
 
 export type ClientMessage = RelayMessage;
 export type ServerMessage = RelayMessage;
