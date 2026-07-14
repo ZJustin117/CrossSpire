@@ -288,4 +288,38 @@ public class ProtocolTest {
         assertEquals("monster_0", parsed.gameTarget);
         assertEquals("host-001", parsed.target);
     }
+
+    @Test
+    public void shouldSerializeMonsterIntentSnapshotAsOptionalField() {
+        Protocol.MonsterIntentMessage msg = new Protocol.MonsterIntentMessage();
+        msg.source = "host";
+        msg.seq = 1;
+        msg.monsterId = "Cultist";
+
+        Protocol.MonsterIntentEntry e1 = new Protocol.MonsterIntentEntry();
+        e1.monsterId = "Cultist";
+        e1.intent = "ATTACK";
+        e1.damage = 6;
+        e1.hits = 1;
+        e1.targetId = "self";
+
+        Protocol.MonsterIntentEntry e2 = new Protocol.MonsterIntentEntry();
+        e2.monsterId = "JawWorm";
+        e2.intent = "DEFEND";
+        e2.damage = 0;
+        e2.hits = 1;
+        e2.targetId = "self";
+
+        msg.intents = new Protocol.MonsterIntentEntry[]{e1, e2};
+
+        String json = Protocol.GSON.toJson(msg);
+        Protocol.MonsterIntentMessage parsed = Protocol.GSON.fromJson(json, Protocol.MonsterIntentMessage.class);
+        // intents array present indicates snapshot mode
+        assertNotNull(parsed.intents);
+        assertEquals(2, parsed.intents.length);
+        assertEquals("Cultist", parsed.intents[0].monsterId);
+        assertEquals("ATTACK", parsed.intents[0].intent);
+        assertEquals(6, parsed.intents[0].damage);
+        assertEquals("JawWorm", parsed.intents[1].monsterId);
+    }
 }

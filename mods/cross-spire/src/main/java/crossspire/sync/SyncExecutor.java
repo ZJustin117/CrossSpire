@@ -37,8 +37,11 @@ public class SyncExecutor {
 
     private void handleMonsterIntent(String rawMessage) {
         Protocol.MonsterIntentMessage msg = Protocol.GSON.fromJson(rawMessage, Protocol.MonsterIntentMessage.class);
-        BaseMod.logger.info("SyncExecutor monster_intent: " + msg.monsterId + " intent=" + msg.intent);
-        IntentRenderer.show(msg.monsterId, msg.intent, msg.damage, msg.hits);
+        if (msg.intents != null && msg.intents.length > 0) {
+            IntentRenderer.showSnapshot(msg.intents);
+        } else {
+            IntentRenderer.show(msg.monsterId, msg.intent, msg.damage, msg.hits);
+        }
     }
 
     public void handleCombatResult(String rawMessage) {

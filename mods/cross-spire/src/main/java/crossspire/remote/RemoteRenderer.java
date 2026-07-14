@@ -34,6 +34,8 @@ public class RemoteRenderer implements PostRenderSubscriber, PostUpdateSubscribe
         if (!CrossSpireMod.isConnected()) return;
         if (AbstractDungeon.player == null) return;
 
+        int idx = 0;
+        int total = RemotePlayerRegistry.count();
         for (RemotePlayerState rp : RemotePlayerRegistry.all()) {
             RemoteCharacterResource chr = rp.getCharacterResource();
             if (chr == null) {
@@ -42,13 +44,24 @@ public class RemoteRenderer implements PostRenderSubscriber, PostUpdateSubscribe
                 chr = loaded;
             }
             if (chr != null && chr.isLoaded()) {
-                chr.drawX = Settings.WIDTH * 0.6f;
+                chr.drawX = remotePosX(idx, total);
                 chr.drawY = Settings.HEIGHT * 0.25f;
                 chr.scaleX = 1.0f;
                 chr.scaleY = 1.0f;
                 chr.update(Gdx.graphics.getDeltaTime());
             }
+            rp.getPlayerInstance();
+            rp.syncToPlayerInstance();
+            idx++;
         }
+    }
+
+    private float remotePosX(int index, int total) {
+        float cx = Settings.WIDTH * 0.5f;
+        float spread = 250f * Settings.xScale;
+        if (total == 1) return cx - spread;
+        float step = spread * 2f / (total - 1);
+        return cx - spread + step * index;
     }
 
     @Override
@@ -74,9 +87,14 @@ public class RemoteRenderer implements PostRenderSubscriber, PostUpdateSubscribe
 
         for (RemotePlayerState rp : RemotePlayerRegistry.all()) {
             RemoteCharacterResource chr = rp.getCharacterResource();
+            RemotePlayer remotePlayer = rp.getPlayerInstance();
 
             if (chr != null && chr.isLoaded()) {
                 chr.render(sb);
+            }
+
+            if (remotePlayer != null) {
+                remotePlayer.renderHealth(sb);
             }
 
             String hpText = rp.hp + "/" + rp.maxHp + "HP  " + rp.block + "B  E:" + rp.energy;

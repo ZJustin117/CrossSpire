@@ -129,6 +129,14 @@ public final class Protocol {
 
     // -- monster / combat messages --
 
+    public static class MonsterIntentEntry {
+        @SerializedName("monster_id") public String monsterId;
+        public String intent;
+        public int damage;
+        public int hits;
+        @SerializedName("target_id") public String targetId;
+    }
+
     public static class MonsterIntentMessage extends GameMessage {
         public MonsterIntentMessage() { type = "monster_intent"; }
         @SerializedName("monster_id") public String monsterId;
@@ -136,6 +144,7 @@ public final class Protocol {
         public int damage;
         public int hits;
         @SerializedName("target_id") public String targetId;
+        public MonsterIntentEntry[] intents;
     }
 
     public static class CombatResultMessage extends GameMessage {
