@@ -161,4 +161,131 @@ public class ProtocolTest {
         assertEquals("Strike_P", parsed.resourceId);
         assertEquals("abc123", parsed.resourceHash);
     }
+
+    @Test
+    public void shouldSerializeQueueSubmitMessage() {
+        Protocol.QueueSubmitMessage msg = new Protocol.QueueSubmitMessage();
+        msg.source = "alice";
+        msg.seq = 1;
+        msg.senderId = "alice";
+        msg.ownerId = "bob";
+        msg.cardId = "Strike_R";
+        msg.resourceHash = "abc123";
+        msg.gameTarget = "monster_0";
+        msg.target = "host-001";
+        msg.timestamp = 1700000000000L;
+
+        String json = Protocol.GSON.toJson(msg);
+        Protocol.QueueSubmitMessage parsed = Protocol.GSON.fromJson(json, Protocol.QueueSubmitMessage.class);
+
+        assertEquals("queue_submit", parsed.type);
+        assertEquals("alice", parsed.source);
+        assertEquals("alice", parsed.senderId);
+        assertEquals("bob", parsed.ownerId);
+        assertEquals("Strike_R", parsed.cardId);
+        assertEquals("abc123", parsed.resourceHash);
+        assertEquals("monster_0", parsed.gameTarget);
+        assertEquals("host-001", parsed.target);
+        assertEquals(1700000000000L, parsed.timestamp);
+    }
+
+    @Test
+    public void shouldSerializeQueueUpdateMessage() {
+        Protocol.QueueEntry entry1 = new Protocol.QueueEntry();
+        entry1.packetId = "alice/1";
+        entry1.senderId = "alice";
+        entry1.ownerId = "alice";
+        entry1.cardId = "Strike_R";
+        entry1.target = "monster_0";
+        entry1.status = "executing";
+
+        Protocol.QueueEntry entry2 = new Protocol.QueueEntry();
+        entry2.packetId = "bob/2";
+        entry2.senderId = "bob";
+        entry2.ownerId = "bob";
+        entry2.cardId = "Defend_G";
+        entry2.target = "self";
+        entry2.status = "pending";
+
+        Protocol.QueueUpdateMessage msg = new Protocol.QueueUpdateMessage();
+        msg.source = "host";
+        msg.seq = 3;
+        msg.entries = new Protocol.QueueEntry[]{entry1, entry2};
+
+        String json = Protocol.GSON.toJson(msg);
+        Protocol.QueueUpdateMessage parsed = Protocol.GSON.fromJson(json, Protocol.QueueUpdateMessage.class);
+
+        assertEquals("queue_update", parsed.type);
+        assertEquals("host", parsed.source);
+        assertEquals(2, parsed.entries.length);
+        assertEquals("alice/1", parsed.entries[0].packetId);
+        assertEquals("executing", parsed.entries[0].status);
+        assertEquals("bob/2", parsed.entries[1].packetId);
+        assertEquals("pending", parsed.entries[1].status);
+    }
+
+    @Test
+    public void shouldSerializeQueueEmptyMessage() {
+        Protocol.QueueEmptyMessage msg = new Protocol.QueueEmptyMessage();
+        msg.source = "host";
+        msg.seq = 5;
+
+        String json = Protocol.GSON.toJson(msg);
+        Protocol.QueueEmptyMessage parsed = Protocol.GSON.fromJson(json, Protocol.QueueEmptyMessage.class);
+
+        assertEquals("queue_empty", parsed.type);
+        assertEquals("host", parsed.source);
+        assertEquals(5, parsed.seq);
+    }
+
+    @Test
+    public void operationStepShouldSerializePlayCardWithVfx() {
+        Protocol.OperationStep step = new Protocol.OperationStep();
+        step.step = "play_card";
+        step.cardId = "Strike_R";
+        step.source = "alice";
+        step.target = "monster_0";
+
+        String json = Protocol.GSON.toJson(step);
+        Protocol.OperationStep parsed = Protocol.GSON.fromJson(json, Protocol.OperationStep.class);
+
+        assertEquals("play_card", parsed.step);
+        assertEquals("Strike_R", parsed.cardId);
+        assertEquals("alice", parsed.source);
+        assertEquals("monster_0", parsed.target);
+    }
+
+    @Test
+    public void operationStepShouldSerializeDamageEffect() {
+        Protocol.OperationStep step = new Protocol.OperationStep();
+        step.step = "damage";
+        step.target = "monster_0";
+        step.amount = 6;
+        step.vfxKind = "SLASH_HORIZONTAL";
+
+        String json = Protocol.GSON.toJson(step);
+        Protocol.OperationStep parsed = Protocol.GSON.fromJson(json, Protocol.OperationStep.class);
+
+        assertEquals("damage", parsed.step);
+        assertEquals("monster_0", parsed.target);
+        assertEquals(6, parsed.amount);
+        assertEquals("SLASH_HORIZONTAL", parsed.vfxKind);
+    }
+
+    @Test
+    public void shouldParseQueueSubmitFromRawJson() {
+        String raw = "{\"type\":\"queue_submit\",\"source\":\"alice\",\"seq\":2," +
+                "\"sender_id\":\"alice\",\"owner_id\":\"bob\"," +
+                "\"card_id\":\"Strike_R\",\"resource_hash\":\"abc123\"," +
+                "\"game_target\":\"monster_0\",\"target\":\"host-001\",\"timestamp\":1700000000000}";
+
+        Protocol.QueueSubmitMessage parsed = Protocol.GSON.fromJson(raw, Protocol.QueueSubmitMessage.class);
+
+        assertEquals("queue_submit", parsed.type);
+        assertEquals("alice", parsed.senderId);
+        assertEquals("bob", parsed.ownerId);
+        assertEquals("Strike_R", parsed.cardId);
+        assertEquals("monster_0", parsed.gameTarget);
+        assertEquals("host-001", parsed.target);
+    }
 }

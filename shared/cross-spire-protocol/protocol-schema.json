@@ -42,7 +42,8 @@
         "card_id": { "type": "string" },
         "source": { "type": "string" },
         "target": { "type": "string" },
-        "amount": { "type": "integer" }
+        "amount": { "type": "integer" },
+        "vfx_kind": { "type": "string" }
       }
     },
     "MemberInfo": {
@@ -60,6 +61,7 @@
         "max_hp": { "type": "integer" },
         "block": { "type": "integer" },
         "energy": { "type": "integer" },
+        "gold": { "type": "integer" },
         "character_class": { "type": "string" },
         "powers": { "type": "array", "items": { "type": "string" } },
         "power_amounts": { "type": "array", "items": { "type": "integer" } },
@@ -83,6 +85,7 @@
       "extends": "GameMessage",
       "properties": {
         "code": { "type": "string" },
+        "host": { "type": "string", "description": "Room host player ID (first to join)" },
         "players": { "type": "array", "items": { "type": "string" } }
       }
     },
@@ -123,6 +126,7 @@
         "packet_id": { "type": "string" },
         "sender_id": { "type": "string" },
         "owner_id": { "type": "string" },
+        "timestamp": { "type": "number" },
         "card_id": { "type": "string" },
         "resource_hash": { "type": "string" },
         "target": { "type": "string" }
@@ -247,6 +251,77 @@
         "resource_id": { "type": "string" },
         "checksum": { "type": "string" }
       }
+    },
+    "stage_host_election": {
+      "description": "Broadcast: initiate stage host election with candidates",
+      "extends": "GameMessage",
+      "properties": {
+        "candidates": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "stage_host_result": {
+      "description": "Broadcast: stage host election result",
+      "extends": "GameMessage",
+      "properties": {
+        "host_id": { "type": "string" }
+      }
+    },
+    "full_snapshot": {
+      "description": "StageHost → Player: complete stage state snapshot on join",
+      "extends": "GameMessage",
+      "properties": {
+        "stage_sync": { "$ref": "#/messageTypes/stage_sync" },
+        "players": { "type": "array", "items": { "$ref": "#/definitions/RemotePlayerState" } },
+        "pending_messages": { "type": "array" }
+      }
+    },
+    "animation_sync": {
+      "description": "Player → Broadcast: character animation state",
+      "extends": "GameMessage",
+      "properties": {
+        "player_id": { "type": "string" },
+        "animation_name": { "type": "string" }
+      }
+    },
+    "player_end_turn": {
+      "description": "Player → Broadcast: end turn action",
+      "extends": "GameMessage"
+    },
+    "queue_submit": {
+      "description": "Client → Host: submit card to central queue (target=hostId for routing, game_target=in-game target)",
+      "extends": "GameMessage",
+      "properties": {
+        "sender_id": { "type": "string" },
+        "owner_id": { "type": "string" },
+        "card_id": { "type": "string" },
+        "resource_hash": { "type": "string" },
+        "game_target": { "type": "string", "description": "In-game target: monster_0 | player_b | self" },
+        "timestamp": { "type": "number" }
+      }
+    },
+    "queue_update": {
+      "description": "Host → All: current queue state snapshot",
+      "extends": "GameMessage",
+      "properties": {
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "packet_id": { "type": "string" },
+              "sender_id": { "type": "string" },
+              "owner_id": { "type": "string" },
+              "card_id": { "type": "string" },
+              "target": { "type": "string" },
+              "status": { "type": "string", "enum": ["pending", "executing", "done"] }
+            }
+          }
+        }
+      }
+    },
+    "queue_empty": {
+      "description": "Host → All: queue drained, end turn allowed",
+      "extends": "GameMessage"
     }
   }
 }

@@ -41,6 +41,7 @@ public final class Protocol {
     public static class OperationStep {
         public String step;
         @SerializedName("card_id") public String cardId;
+        @SerializedName("power_id") public String powerId;
         public String source;
         public String target;
         public int amount;
@@ -201,6 +202,28 @@ public final class Protocol {
         public PlayerEndTurnMessage() { type = "player_end_turn"; }
     }
 
+    // -- host-centric queue messages --
+
+    public static class QueueSubmitMessage extends GameMessage {
+        public QueueSubmitMessage() { type = "queue_submit"; }
+        @SerializedName("packet_id") public String packetId;
+        @SerializedName("sender_id") public String senderId;
+        @SerializedName("owner_id") public String ownerId;
+        @SerializedName("card_id") public String cardId;
+        @SerializedName("resource_hash") public String resourceHash;
+        @SerializedName("game_target") public String gameTarget;
+        public long timestamp;
+    }
+
+    public static class QueueUpdateMessage extends GameMessage {
+        public QueueUpdateMessage() { type = "queue_update"; }
+        public QueueEntry[] entries;
+    }
+
+    public static class QueueEmptyMessage extends GameMessage {
+        public QueueEmptyMessage() { type = "queue_empty"; }
+    }
+
     // -- keep legacy types for backward compat with RelayClient --
 
     public static class QueueSubmit extends GameMessage {
@@ -212,6 +235,9 @@ public final class Protocol {
 
     public static class QueueEntry {
         @SerializedName("entry_id") public String entryId;
+        @SerializedName("packet_id") public String packetId;
+        @SerializedName("sender_id") public String senderId;
+        @SerializedName("owner_id") public String ownerId;
         public String source;
         @SerializedName("card_id") public String cardId;
         public boolean upgraded;
