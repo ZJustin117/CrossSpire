@@ -270,3 +270,120 @@ D1 fight Cultist
 | Jar 大小 | 601KB |
 | relay daemon | systemd user service, 心跳 30s 清理 |
 | Git 提交 | 11 feature commits |
+
+---
+
+## 2026-07-15: UI 完善 + 真机同步修复
+
+### P0: 启动崩溃修复
+
+**根因**: `crossspire start` 在 `receivePostInitialize` 中同步执行 → `TopPanel.update(326)` + `renderBlackFadeScreen` NPE。
+
+**修复**:
+- `CrossSpireMod.startBatchWatcher()`: 10s 初始延迟 + `Gdx.app.postRunnable` 主线程执行
+- `GameStarter`: `EventSuppression.suppressEvents()` 包裹状态变更
+- 启动脚本仅 `connect`，所有游戏操作通过 `crossspire_batch.txt` 延迟注入
+
+### P1a: 回合结束同步
+
+**`EndTurnSyncPatches`**: `@SpirePatch` 拦截 `EndTurnButton.enable()` → 广播 `player_end_turn`
+
+**`MessageRouter.handlePlayerEndTurn()`**: 远端调用 `EndTurnButton.disable(true)`
+
+| 验证项 | 证据 |
+|--------|------|
+| D1 end-turn 广播 | `EndTurnSync broadcast player_end_turn` |
+| D2 收到 end-turn | `CrossSpire routing: type=player_end_turn` |
+
+### P1b: VFX 动画同步
+
+**`LocalReference.buildVfxOps()`**: 根据 card type 构建 VFX (ATTACK/BLOCK)
+
+**`CombatResultReplayer.replayVfx()`**: 远端重放 `FlashAtkImgEffect`
+
+**Protocol**: `OperationStep.vfxKind` 字段承载 VFX 类型
+
+### P1 UI: CrossSpireHUD 统一覆盖层管理器
+
+**`CrossSpireHUD`**: `PostRenderSubscriber` + `PostUpdateSubscriber` 统一渲染入口
+
+| 组件 | 状态 |
+|------|------|
+| F1-F4 热键切换 4 面板 | ✅ |
+| **RoomPanel** (主菜单) | 静态化, `renderStatic`/`updateStatic` — 连接/断开、选角色、Ready/Play |
+| **RemoteStatsOverlay** (战斗中) | 静态化, 增加 E:N 能量显示 |
+| **QueueDisplay** | `[EXEC]`/`[MINE]`/`[WAIT]` 三段式状态 + `pos N/M` + 执行中黄色高亮 |
+| **状态栏** | 底部: playerId + floor + HP + gold |
+
+**HUD 结构**:
+```
+┌─────────────────────────────────────────┐
+│ F1 Lobby  F2 Combat  F3 Queue  F4 Chat  │  ← Tab bar
+├─────────────────────────────────────────┤
+│ RoomPanel (主菜单)  /  RemoteStatsOverlay│
+│ QueueDisplay (F3)                       │
+├─────────────────────────────────────────┤
+│ CrossSpire | abc12300 | Floor 1 | HP    │  ← Status bar
+└─────────────────────────────────────────┘
+```
+
+### P2: 真机 D2 战斗同步修复 — 直接房间操作
+
+**根因**: `crossspire start` → `new Exordium()` → `LevelTransitionTextOverlayEffect.render(null)` NPE。D1 因 autoplay 预加载不受影响。
+
+**解决方案 — 三步绕过**:
+
+| 步骤 | 方法 | 说明 |
+|------|------|------|
+| 1. 无 Exordium | `createGameIfNeeded()` | `CharacterManager` + `RestRoom` 占位 + `seeds` + `mode` |
+| 2. 无 fight 命令 | `enterRemoteCombat()` | `MonsterHelper.getEncounter → MonsterRoom → getCurrMapNode().room = room → onPlayerEntry()` |
+| 3. suppressBroadcast | `CombatSyncPatches.suppressBroadcast` | 阻止 D2 二次广播 room_enter |
+
+**最终同步管线**:
+```
+D1 fight Cultist → CombatSync broadcast room_enter
+  → D2 MessageRouter → SyncExecutor.handleRoomEnter
+    → Gdx.app.postRunnable
+      → createGameIfNeeded (CharacterManager + RestRoom, NO Exordium)
+      → enterRemoteCombat (MonsterHelper.getEncounter → direct room replacement)
+        → room.onPlayerEntry() → NO scene transition → NO NPE
+```
+
+### 真机完整管道验证 (D1/D2 Android 10, Adreno 650)
+
+| 验证项 | D1 | D2 | 证据 |
+|--------|----|----|------|
+| Relay 连接 | ✅ | ✅ | `connected to relay server` |
+| PlayerId + room join | ✅ | ✅ | `assigned playerId` + `joined room: CROSS` |
+| 双向发现 | ✅ | ✅ | `player_joined size=2` |
+| 资源表交换 | ✅ | ✅ | `cards=370 relics=178` |
+| D1 进入战斗 | ✅ | — | `CombatSync broadcast room_enter` |
+| D2 自动同步进入战斗 | — | ✅ | `combat entered: Cultist` **无 crash** |
+| Strike_R | ✅ `[damage=6]` | ✅ `CombatResultReplayer fallback` | queue_packet → REMOTE ref → invoke |
+| Defend_R | ✅ `[gain_block=5]` | ✅ | 同上 |
+| Bash | ✅ `[damage=8, magic_number=2]` | ✅ | 同上 |
+| VFX ATTACK | ✅ | ✅ | `CombatResultReplayer vfx ATTACK` |
+| 回合结束同步 | ✅ | ✅ | `EndTurnSync broadcast` + `player_end_turn` |
+| D2 crash count | — | **0** | PID alive after full pipeline |
+
+### EventSyncPatches (编译级验证)
+
+| Patch | 目标方法 | javap 签名 |
+|-------|---------|-----------|
+| `EventSyncPatches.OnEnterRoom` | `AbstractEvent.onEnterRoom()` | `public void` |
+| `EventSyncPatches.EnterCombat` | `AbstractEvent.enterCombat()` | `public void` |
+
+### 最终项目统计
+
+| 指标 | 数值 |
+|------|------|
+| Java 源文件 | 54 (prod: 48, test: 6) |
+| TypeScript 源文件 | 7 |
+| Java 单元测试 | 36 (全部通过) |
+| TypeScript 测试 | 19 (全部通过) |
+| 协议消息类型 | 25 |
+| Fallback 效果类型 | 13 |
+| MTS @SpirePatch | 25+ |
+| Jar 大小 | 608KB |
+| relay daemon | systemd user service |
+| Git 提交 | 19 feature commits |
