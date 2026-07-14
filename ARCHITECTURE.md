@@ -151,32 +151,46 @@ ref.dereference(args):
 
 ```
 ┌─ REAL 模式（发送者/所有者机器上）
-│   真实调用 use() / AI() → 修改游戏状态 → 触发 BaseMod hooks
+│   真实调用 use() / AI() → 修改游戏状态 → 触发 BaseMod hooks + @SpirePatch 拦截器
 │   产出 combat_result（含 operation_sequence + effects）
 │
 └─ INDUCED 模式（非发送者收到 combat_result 后）
-    取 operation_sequence 中的步骤:
-      ├─ play_card → 构造 CardStub → publishOnCardUse → 钩子触发 → 本地对象真实执行
-      ├─ apply_power → 构造 PowerStub → publishPostPowerApply → 钩子触发
-      ├─ damage → suppressEvents 写数值 + VFX（不触发钩子）
-      └─ gain_block → suppressEvents 写数值 + VFX（不触发钩子）
+    取 operation_sequence 中的步骤，构造 no-op Stub 对象，调用真实游戏方法：
+    事件步骤: 不加 suppressEvents，直接调用真实方法（内部 Stub 核心逻辑为 no-op）
+      ├─ play_card → 构造 CardStub(use()=no-op) → AbstractPlayer.useCard(stubCard, target)
+      │     → useCard() 上的 @SpirePatch 全部触发
+      │     → useCard() 内部的 BaseMod.publishOnCardUse() 自然触发
+      │     → stubCard.use() 为 no-op，不重复产生卡牌效果
+      ├─ apply_power → 构造 PowerStub → AbstractPlayer.applyPower(stubPower)
+      │     → BaseMod.publishPostPowerApply() 自然触发
+      │     → 本地 monster/relic power 回调响应
+      └─ ...
+    效果步骤: suppressEvents 包裹，仅写数值 + VFX（不触发钩子）
+      ├─ damage → suppressEvents { creature.damage(info) } — 仅写数值 + VFX
+      └─ gain_block → suppressEvents { creature.addBlock(amount) } — 仅写数值 + VFX
 ```
 
-**核心逻辑**：INDUDED 模式不重复执行效果步骤（damage/block 等用 suppressEvents 写数值），但将**事件步骤**（play_card、apply_power 等）走 BaseMod 事件链，让本地引擎"感知到"动作的发生。由此触发的本地遗物/能力执行真实逻辑。
+**核心逻辑**：
+- **事件步骤**不加 suppressEvents，以 no-op Stub 为参数调用**真实游戏方法**。Stub 自身空操作保证卡牌效果不重复，但方法体上的 `@SpirePatch` 拦截器和内部的 BaseMod 事件链全部正常触发，本地引擎完整"感知"动作发生
+- **效果步骤**用 suppressEvents 包裹，仅写入数值和 VFX，不触发钩子——效果数值已由所有者计算
+- `suppressEvents` 使用 `AtomicInteger` 计数器式设计，天然支持嵌套调用（如怪物 power 回调内部调用 `damage()` 在抑制计数 > 0 时自动跳过钩子）
 
 ### 诱导重放中的 Stub 对象
 
-INDUDED 模式下，从 protocol 数据即时生成轻量 stub 对象充当事件参数，不需要提前定义：
+INDUCED 模式下，从 protocol 数据即时生成轻量 no-op stub 对象，以其实例为参数调用真实游戏方法：
 
 ```java
-// CardStub — 仅含 metadata，无 use() 实现
+// CardStub — 含 metadata，use() 为 no-op
 // 从 protocol 的 card_id + resource_registry 素材清单即时构建
 class CardStub extends AbstractCard {
     String cardID;      // 从 combat_result.card_id 来
     CardType type;      // 从 resource_registry 素材清单查
     CardRarity rarity;
     int cost;
-    // use() 永远不调用 — INDUCED 模式走事件发布
+    @Override
+    void use(AbstractPlayer p, AbstractMonster m) {
+        // no-op — 不重复产生卡牌效果
+    }
 }
 
 class PowerStub extends AbstractPower {
@@ -185,7 +199,7 @@ class PowerStub extends AbstractPower {
 }
 ```
 
-Stub 对象是瞬态的：收到 `combat_result` 时构建 → 注入事件链 → 触发本地订阅者 → 销毁。不需要任何预言能力，因为是响应式生成。
+Stub 对象是瞬态的：收到 `combat_result` 时构建 → 作为参数传入真实方法调用链 → 方法体上的 @SpirePatch 和内部事件链触发 → 销毁。不需要任何预言能力，因为是响应式生成。
 
 ### 房主即所有者时的短路路径
 
@@ -403,20 +417,38 @@ interface QueueEntry {
     → 跳过诱导重放，仅做 UI 更新
 
   非发送者（sender_id != 自己）:
-    → 进入 INDUCED 模式:
-      1. 遍历 operation_sequence 中的步骤:
-         ├─ play_card → 构造 CardStub → publishOnCardUse(stubCard, stubPlayer)
-         ├─ apply_power → 构造 PowerStub → publishPostPowerApply(stubPower)
-         └─ ...
-      2. 本地钩子触发:
-         • 使用自定义接口的遗物被触发 → 本地真实执行 → 产生新效果
-         • 使用 BaseMod 标准钩子的遗物被触发 → 本地真实执行
-         • 效果步骤 (damage/block 等) 用 suppressEvents 仅写数值+VFX
-      3. 若诱导重放产生新效果 → 交给 CombatResultReplayer 收集
-         → 提交给房主（房主插入中央队列尾部处理）
+    → 进入 INDUCED 模式，遍历 operation_sequence:
+
+    事件步骤（不加 suppressEvents）:
+      1. play_card → 构造 CardStub(use()=no-op)
+         → AbstractPlayer.useCard(stubCard, target)
+         → useCard() 上的 @SpirePatch 拦截器全部触发
+         → useCard() 内部 BaseMod.publishOnCardUse() 自然触发
+         → 本地 monster power / relic 回调响应 → 产生新效果
+
+      2. apply_power → 构造 PowerStub
+         → AbstractPlayer.applyPower(stubPower)
+         → BaseMod.publishPostPowerApply() 自然触发
+
+      ...
+
+    效果步骤（suppressEvents 包裹）:
+      3. suppressEvents { creature.damage(info) }
+         → 仅写数值 + VFX，不触发钩子
+
+      4. suppressEvents { creature.addBlock(amount) }
+         → 仅写数值 + VFX，不触发钩子
+
+    → 若诱导重放产生新效果 → 收集并提交给房主（插入中央队列尾部）
 ```
 
-**诱导重放实现了特效的自动传递**：每个人的本地引擎都走一遍事件链，本地遗物正常响应。无论遗物使用 BaseMod 标准钩子还是自定义接口，只要它注册在本地引擎中就能被触发。
+**深层空函数调用的关键规则**：
+- 事件步骤**不加 suppressEvents** — 直接调用真实游戏方法，让 @SpirePatch 拦截器和 BaseMod 事件链全量执行
+- 事件步骤产生的副作用（如怪物 power 回调导致对玩家的 damage）走正常方法调用路径，不被意外抑制
+- 效果步骤用 suppressEvents 包裹 — 禁止重复改变游戏状态
+- `suppressEvents` 的 `AtomicInteger` 计数器天然支持嵌套：若怪物 power 回调内部调用 `damage()` 且此时 suppressEvents 计数值 > 0，则自动跳过该 damage 触发的钩子
+
+**诱导重放实现了被动效果的自动传递**：每个人的本地引擎都走一遍完整的方法调用链，无论效果使用 BaseMod 标准钩子、自定义接口还是 @SpirePatch 深层拦截，只要它注册在本地引擎中就能被触发。
 
 诱导重放产出的新效果进入房主中央队列尾部，保证顺序正确且不打断当前队列执行。
 
@@ -465,6 +497,20 @@ interface QueueEntry {
 ```
 
 怪物动作由图主解引用 → 始终本地执行，无网络往返。图主和房主分离时需经过一次转发。
+
+### 怪物被动效果与远程玩家动作
+
+怪物身上的 power/relic 可能响应玩家打牌等事件（如"玩家打出攻击牌时怪物回2血"）。在图主机器上，这些效果通过 INDUCED 重放的深层空函数调用触发：
+
+```
+玩家 A 打牌 → REAL 模式执行 → combat_result 广播
+图主收到 → INDUCED 模式 → useCard(stubCard, target)
+  → useCard() 上的 @SpirePatch + 内部 publishOnCardUse 触发
+  → 怪物 power 回调执行 → 产生效果（如回血）
+  → 新效果提交房主 → 广播全员
+```
+
+注意事件步骤**不加 suppressEvents**，否则怪物 power 回调产生的效果会被意外抑制。`suppressEvents` 的计数器式设计确保嵌套调用中仅效果步骤自身被抑制。
 
 ## 事件处理
 
@@ -537,29 +583,34 @@ B 的远程卡牌触发 A 的本地遗物 Vajra:
 
 ### 自定义接口遗物与诱导重放
 
-当遗物使用了自定义接口（非 BaseMod 标准 `publishXxx` 钩子）时，远程引用无法直接订阅它的触发条件，因为对方机器上没有这个遗物的定义。诱导重放解决了这个问题：
+深层空函数调用使得无论效果通过何种机制注册——BaseMod 订阅者、自定义接口、`@SpirePatch` 深层拦截——INDUCED 重放都能触发。因为重放调用的是**真实游戏方法**，方法体上的所有拦截器自然执行。
 
 ```
-场景: A 有一个使用自定义接口的遗物（打出攻击牌时生效），B 没有这个 mod
+场景: A 有一个使用自定义 @SpirePatch 的遗物（打出攻击牌时生效），B 没有这个 mod
 
 1. B 打出自己的攻击牌（B 本地 REAL 模式执行，触发 B 本地钩子）
 2. B → 房主: invoke_result → 房主广播 combat_result
 3. A 收到 combat_result（sender_id = B ≠ A，进入 INDUCED 模式）
-4. 诱导重放 play_card 步骤 → 构造 CardStub(type = ATTACK)
-   → BaseMod.publishOnCardUse(stubCard)
-   → 尽管 A 的遗物使用自定义接口，但只要它监听了 BaseMod 的 onCardUse 事件
-      或通过 @SpirePatch 拦截了卡牌使用流程，就能被触发
-   → 如果遗物通过完全定制的方式监听（如直接 @SpirePatch AbstractPlayer.useCard），
-      StaticStub 也可被注入到对应方法的调用链中以触发遗物逻辑
+4. 诱导重放 play_card 步骤 → 构造 CardStub(type = ATTACK, use()=no-op)
+   → AbstractPlayer.useCard(stubCard, target)
+   → useCard() 上的 @SpirePatch 全部触发 → 包括 A 的自定义遗物 patch ✓
+   → useCard() 内部 publishOnCardUse() 自然触发 → BaseMod 订阅者 ✓
+   → stubCard.use() 为 no-op → 不重复产生卡牌效果 ✓
 5. A 的遗物真实执行 → 产生新效果 → 提交给房主
-6. 房主广播新效果 → B 收到新效果 → B 处的遗物 stub 也做诱导重放
-   → B 处只有 VFX（B 没有该遗物的真实逻辑），不产生副作用
+6. 房主广播新效果 → B 收到新效果 → INDUCED 重放 → suppressEvents 写数值 + VFX
+   → B 没有该遗物的真实逻辑 → 效果步骤仅同步状态 ✓
 ```
 
-关键点：
-- 诱导重放**不需要知道遗物用了什么接口**。它把战斗事件广播到所有人的本地引擎，让本地引擎自然处理
-- Stub 对象在操作序列上打通了事件链，不依赖对方机器上的类定义
-- 自定义钩子的覆盖范围取决于 stub 能注入到什么层次的方法调用链中——典型情况下 BaseMod 事件链已覆盖绝大部分场景
+同样适用于怪物 power 场景：
+```
+图主机器上有怪物 power：玩家打牌时怪物回2血（通过 @SpirePatch 实现）
+1. 玩家 A 打牌 → REAL 模式在 A 机器执行
+2. combat_result 广播 → 图主 B 收到 → INDUCED 模式
+3. useCard(stubCard) → @SpirePatch 触发 → 怪物 power 回调 → 怪物回2血
+4. 新效果提交房主队列 → 广播全员 ✓
+```
+
+**注意**：事件步骤不加 suppressEvents 是关键。若 suppressEvents 包裹了 useCard() 调用，怪物 power 回调产生的 damage/gain_block 会被一并抑制，导致副作用丢失。
 
 ### Fallback 效果类型（保持原有）
 
@@ -599,7 +650,7 @@ public class CrossSpireMod {
 ```
 
 抑制的触发场景：
-- 非发送者收到 `combat_result` → 诱导重放时，效果步骤（damage/block/heal 等）用 suppressEvents 仅写入数值和 VFX；事件步骤（play_card/apply_power 等）正常走 BaseMod 事件链触发本地订阅者
+- 非发送者收到 `combat_result` → 诱导重放时，**事件步骤**（play_card/apply_power 等）**不加 suppressEvents**，以 no-op Stub 为参数调用真实游戏方法，让 @SpirePatch 拦截器和 BaseMod 事件链全量执行；**效果步骤**（damage/block/heal 等）用 suppressEvents 仅写入数值和 VFX
 - 在线角色状态写入（HP 变化、遗物获取等）时 suppressEvents 包裹
 - 引用的 REAL 模式解引用在所有者的远端触发钩子 → 结果经房主路由回来 → 本地 INDUCED 模式按上述规则处理
 
@@ -608,8 +659,9 @@ public class CrossSpireMod {
 | 场景 | 是否触发钩子 | 原因 |
 |------|-------------|------|
 | 所有者解引用自己的对象（REAL 模式） | 是 | 计算源点，钩子应触发 |
-| 非发送者诱导重放：事件步骤（play_card 等） | 是 | 让本地引擎"感知"动作，触发本地遗物/能力 |
+| 非发送者诱导重放：事件步骤（play_card 等） | 是 | 不加 suppressEvents，调用真实方法 → @SpirePatch + BaseMod 全量触发 |
 | 非发送者诱导重放：效果步骤（damage 等） | 否（suppressEvents） | 效果数值已由所有者计算，不能重复改变状态 |
+| 诱导重放中嵌套触发（如怪物 power 回调调 damage） | 否（suppressEvents 计数器） | 外层 suppressEvents 已打开，嵌套 damage() 的钩子自动跳过 |
 | 交叉引用中本地遗物被 INDUCED 事件触发 | 是 | 遗物是本地引用，在本地直接执行 |
 
 由于 BaseMod 没有 gold change hook，金币同步需要通过自定义 `@SpirePatch` 直接拦截 `AbstractPlayer.gainGold()` / `loseGold()` 方法。
