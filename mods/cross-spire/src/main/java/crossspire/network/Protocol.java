@@ -194,6 +194,12 @@ public final class Protocol {
         @SerializedName("animation_name") public String animationName;
     }
 
+    // -- turn control --
+
+    public static class PlayerEndTurnMessage extends GameMessage {
+        public PlayerEndTurnMessage() { type = "player_end_turn"; }
+    }
+
     // -- keep legacy types for backward compat with RelayClient --
 
     public static class QueueSubmit extends GameMessage {

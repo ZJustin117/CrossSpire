@@ -91,6 +91,8 @@ public class MessageRouter {
         } else if ("stage_host_election".equals(type) || "stage_host_result".equals(type)
                 || "full_snapshot".equals(type) || "animation_sync".equals(type)) {
             BaseMod.logger.info("MessageRouter " + type + " (reserved, not yet implemented)");
+        } else if ("player_end_turn".equals(type)) {
+            handlePlayerEndTurn();
         }
     }
 
@@ -186,5 +188,17 @@ public class MessageRouter {
             list.add(mgc);
         }
         return list.toArray(new Protocol.EffectDescription[0]);
+    }
+
+    private void handlePlayerEndTurn() {
+        String source = CrossSpireMod.playerId;
+        if (AbstractDungeon.player == null || AbstractDungeon.overlayMenu == null) return;
+        com.megacrit.cardcrawl.ui.buttons.EndTurnButton btn = AbstractDungeon.overlayMenu.endTurnButton;
+        if (btn != null && btn.enabled) {
+            BaseMod.logger.info("MessageRouter player_end_turn: ending turn");
+            EndTurnSyncPatches.suppressEndTurn = true;
+            AbstractDungeon.overlayMenu.endTurnButton.disable(true);
+            EndTurnSyncPatches.suppressEndTurn = false;
+        }
     }
 }

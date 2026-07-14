@@ -122,6 +122,26 @@ public class ProtocolTest {
     }
 
     @Test
+    public void shouldSerializePlayerEndTurnMessage() {
+        Protocol.PlayerEndTurnMessage msg = new Protocol.PlayerEndTurnMessage();
+        msg.source = "alice";
+        msg.seq = 7;
+
+        String json = Protocol.GSON.toJson(msg);
+        Protocol.PlayerEndTurnMessage parsed = Protocol.GSON.fromJson(json, Protocol.PlayerEndTurnMessage.class);
+
+        assertEquals("player_end_turn", parsed.type);
+        assertEquals("alice", parsed.source);
+        assertEquals(7, parsed.seq);
+    }
+
+    @Test
+    public void playerEndTurnMessageHasCorrectType() {
+        Protocol.PlayerEndTurnMessage msg = new Protocol.PlayerEndTurnMessage();
+        assertEquals("player_end_turn", msg.type);
+    }
+
+    @Test
     public void shouldSerializeReferenceMigrateMessage() {
         Protocol.ReferenceMigrateMessage msg = new Protocol.ReferenceMigrateMessage();
         msg.source = "alice";
