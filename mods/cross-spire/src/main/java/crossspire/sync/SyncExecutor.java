@@ -156,8 +156,12 @@ public class SyncExecutor {
             MonsterGroup group = MonsterHelper.getEncounter(key);
             MonsterRoom room = new MonsterRoom();
             room.monsters = group;
+
             AbstractDungeon.getCurrMapNode().room = room;
             room.onPlayerEntry();
+            AbstractDungeon.nextRoom = null;
+            AbstractDungeon.screen = com.megacrit.cardcrawl.dungeons.AbstractDungeon.CurrentScreen.NONE;
+
             BaseMod.logger.info("SyncExecutor combat entered: " + monsterName);
         } catch (Exception e) {
             BaseMod.logger.error("SyncExecutor enterRemoteCombat: " + e.getMessage());
