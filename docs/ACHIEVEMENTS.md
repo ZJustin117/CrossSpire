@@ -281,6 +281,22 @@ CrossSpire development timeline and milestones.
 
 ---
 
+## 2026-07-16 — 稳定性修复
+
+### FlushSnapshot Crash 回退
+- `MonsterIntentBroadcastPatches.FlushSnapshot` patch 的目标方法 `AbstractPlayer.applyStartOfTurnPowers` 不存在 → `NoSuchMethodException` crash
+- 回退为 `OnCreateIntent` 内直接广播单怪意图
+
+### FontHelper NPE 防护
+- 所有 `PostRenderSubscriber` 入口增加 `FontHelper.tipBodyFont == null` 空值检查
+- 文件：`CrossSpireHUD`, `RemoteRenderer`, `LobbyScreen`, `RoomPanel`, `RemoteStatsOverlay`, `QueueDisplay`, `RoomChat`
+
+### D2 战斗进入崩溃修复
+- `SyncExecutor.enterRemoteCombat()` 在 `room.onPlayerEntry()` 后设置 `AbstractDungeon.nextRoom = null`
+- 根因：`onPlayerEntry()` 会创建 `nextRoom` 触发场景过渡渲染，D2 的 minial game state 缺少字体/纹理初始化 → `LevelTransitionTextOverlayEffect.render()` NPE
+
+---
+
 ## 技术栈
 
 | 层 | 技术 |
