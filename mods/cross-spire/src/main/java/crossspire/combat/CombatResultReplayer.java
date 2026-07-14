@@ -29,8 +29,10 @@ public class CombatResultReplayer {
 
         AbstractCard localCard = CardLibrary.getCard(cardId);
         if (localCard != null && opSeq.size() > 0) {
+            replayVfx(opSeq);
             replayWithCard(cardId, opSeq, effects);
         } else {
+            replayVfx(opSeq);
             fallbackEffects(effects, cardId);
         }
     }
@@ -206,6 +208,23 @@ public class CombatResultReplayer {
             BaseMod.logger.info("CombatResultReplayer apply_power: " + powerId + "→" + target + " x" + amount);
         } catch (Exception e) {
             BaseMod.logger.error("CombatResultReplayer apply_power failed (" + powerId + "): " + e.getMessage());
+        }
+    }
+
+    private void replayVfx(JsonArray opSeq) {
+        if (AbstractDungeon.effectList == null || opSeq.size() == 0) return;
+        for (JsonElement el : opSeq) {
+            JsonObject op = el.getAsJsonObject();
+            if (!"vfx".equals(op.has("step") ? op.get("step").getAsString() : "")) continue;
+            String vfxKind = op.has("vfx_kind") ? op.get("vfx_kind").getAsString() : "";
+            float cx = AbstractDungeon.player != null ? AbstractDungeon.player.hb.cX : 0;
+            float cy = AbstractDungeon.player != null ? AbstractDungeon.player.hb.cY : 0;
+
+            if ("ATTACK".equals(vfxKind)) {
+                AbstractDungeon.effectList.add(new com.megacrit.cardcrawl.vfx.combat.FlashAtkImgEffect(cx, cy,
+                    com.megacrit.cardcrawl.actions.AbstractGameAction.AttackEffect.SLASH_HORIZONTAL, false));
+                BaseMod.logger.info("CombatResultReplayer vfx ATTACK");
+            }
         }
     }
 }

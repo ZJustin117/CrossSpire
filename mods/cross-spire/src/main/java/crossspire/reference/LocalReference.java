@@ -53,7 +53,7 @@ public class LocalReference<T> extends Reference<T> {
         complete.seq = 1;
         complete.packetId = refId + "/" + UUID.randomUUID().toString().substring(0, 8);
         complete.effects = captured;
-        complete.operationSequence = new Protocol.OperationStep[0];
+        complete.operationSequence = buildVfxOps(copy, targetId);
 
         if (CrossSpireMod.relayClient != null && CrossSpireMod.relayClient.isOpen()) {
             CrossSpireMod.relayClient.send(Protocol.GSON.toJson(complete));
@@ -64,6 +64,28 @@ public class LocalReference<T> extends Reference<T> {
             }
             BaseMod.logger.info("LocalReference queue_complete: " + cardId + " [" + fx + "]");
         }
+    }
+
+    private Protocol.OperationStep[] buildVfxOps(AbstractCard card, String targetId) {
+        boolean isAttack = card.baseDamage > 0 && card.type == AbstractCard.CardType.ATTACK;
+        List<Protocol.OperationStep> list = new ArrayList<>();
+        if (isAttack) {
+            Protocol.OperationStep atk = new Protocol.OperationStep();
+            atk.step = "vfx";
+            atk.cardId = card.cardID;
+            atk.target = targetId;
+            atk.vfxKind = "ATTACK";
+            list.add(atk);
+        }
+        if (card.baseBlock > 0) {
+            Protocol.OperationStep blk = new Protocol.OperationStep();
+            blk.step = "vfx";
+            blk.cardId = card.cardID;
+            blk.target = "self";
+            blk.vfxKind = "BLOCK";
+            list.add(blk);
+        }
+        return list.toArray(new Protocol.OperationStep[0]);
     }
 
     private Protocol.EffectDescription[] buildEffects(AbstractCard card, String targetId) {

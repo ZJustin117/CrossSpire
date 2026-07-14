@@ -44,6 +44,7 @@ public final class Protocol {
         public String source;
         public String target;
         public int amount;
+        @SerializedName("vfx_kind") public String vfxKind;
     }
 
     public static class QueueComplete extends GameMessage {
