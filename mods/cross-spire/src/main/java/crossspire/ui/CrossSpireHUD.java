@@ -70,6 +70,7 @@ public class CrossSpireHUD implements PostRenderSubscriber, PostUpdateSubscriber
 
     @Override
     public void receivePostRender(SpriteBatch sb) {
+        if (FontHelper.tipBodyFont == null) return;
         ensureTexture();
         if (whitePixel == null) return;
         try {

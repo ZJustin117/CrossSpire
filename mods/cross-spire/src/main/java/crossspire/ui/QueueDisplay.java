@@ -62,6 +62,7 @@ public class QueueDisplay {
     }
 
     public static void render(SpriteBatch sb) {
+        if (com.megacrit.cardcrawl.helpers.FontHelper.tipBodyFont == null) return;
         synchronized (entries) {
             if (entries.isEmpty()) return;
             float y = 200;

@@ -36,6 +36,7 @@ public class RoomPanel {
     public static String getSelectedCharacter() { return selectedCharacter; }
 
     public static void renderStatic(SpriteBatch sb, Texture whitePixel) {
+        if (com.megacrit.cardcrawl.helpers.FontHelper.tipBodyFont == null) return;
         float scale = Settings.xScale;
         float panelX = 30F * scale;
         float panelW = 295F * scale;

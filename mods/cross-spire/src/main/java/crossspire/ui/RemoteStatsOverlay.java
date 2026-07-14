@@ -22,6 +22,7 @@ public class RemoteStatsOverlay {
     private static final Color CHAR_COLOR   = new Color(0.9F, 0.8F, 0.2F, 1.0F);
 
     public static void renderStatic(SpriteBatch sb, Texture whitePixel) {
+        if (com.megacrit.cardcrawl.helpers.FontHelper.tipBodyFont == null) return;
         int count = RemotePlayerRegistry.count();
         if (count == 0) return;
 

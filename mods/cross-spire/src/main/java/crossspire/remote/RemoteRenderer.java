@@ -66,6 +66,7 @@ public class RemoteRenderer implements PostRenderSubscriber, PostUpdateSubscribe
 
     @Override
     public void receivePostRender(SpriteBatch sb) {
+        if (com.megacrit.cardcrawl.helpers.FontHelper.tipBodyFont == null) return;
         try {
             if (!CrossSpireMod.isConnected()) return;
             if (AbstractDungeon.player == null) return;

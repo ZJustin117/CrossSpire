@@ -41,6 +41,7 @@ public class LobbyScreen implements PostInitializeSubscriber, PostRenderSubscrib
     @Override
     public void receivePostRender(SpriteBatch sb) {
         if (!visible) return;
+        if (FontHelper.tipBodyFont == null) return;
 
         String line = "CrossSpire: " + statusText;
         if (CrossSpireMod.isConnected()) {

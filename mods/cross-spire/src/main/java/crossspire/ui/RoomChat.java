@@ -20,6 +20,7 @@ public class RoomChat {
 
     public static void render(SpriteBatch sb) {
         if (messages.isEmpty()) return;
+        if (com.megacrit.cardcrawl.helpers.FontHelper.tipBodyFont == null) return;
         float y = 40;
         for (int i = messages.size() - 1; i >= 0; i--) {
             FontHelper.renderFontLeftTopAligned(sb, FontHelper.tipBodyFont,
