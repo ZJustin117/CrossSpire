@@ -43,8 +43,8 @@ public class RemoteReference<T> extends Reference<T> {
 
         Protocol.InvokeMessage invoke = new Protocol.InvokeMessage();
         invoke.source = CrossSpireMod.playerId;
-        invoke.target = ownerId;
-        invoke.seq = 1;
+        invoke.target = hostId != null && !hostId.isEmpty() ? hostId : ownerId;
+        invoke.seq = CrossSpireMod.nextSeq();
         invoke.refId = refId + "/" + requestId;
         invoke.trigger = "play_card";
         invoke.args = targetId;

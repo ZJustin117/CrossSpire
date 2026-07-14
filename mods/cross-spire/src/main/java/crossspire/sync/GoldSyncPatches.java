@@ -15,7 +15,7 @@ public class GoldSyncPatches {
     public static class GainGold {
         @SpirePostfixPatch
         public static void postfix(AbstractPlayer __instance, int amount) {
-            if (EventSuppression.SUPPRESSION.get() > 0) return;
+            if (EventSuppression.isSuppressed()) return;
             broadcastGold("gain_gold", amount, __instance);
         }
     }
@@ -24,7 +24,7 @@ public class GoldSyncPatches {
     public static class LoseGold {
         @SpirePostfixPatch
         public static void postfix(AbstractPlayer __instance, int amount) {
-            if (EventSuppression.SUPPRESSION.get() > 0) return;
+            if (EventSuppression.isSuppressed()) return;
             broadcastGold("gain_gold", -amount, __instance);
         }
     }

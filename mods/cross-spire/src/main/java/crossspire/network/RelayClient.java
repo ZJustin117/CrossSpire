@@ -12,8 +12,6 @@ import org.java_websocket.handshake.ServerHandshake;
 
 public class RelayClient extends WebSocketClient {
 
-    private Thread heartbeatThread;
-
     public RelayClient(URI serverUri) {
         super(serverUri);
     }
@@ -21,26 +19,7 @@ public class RelayClient extends WebSocketClient {
     @Override
     public void onOpen(ServerHandshake handshake) {
         BaseMod.logger.info("CrossSpire connected to relay server: " + getURI());
-        startHeartbeat();
-    }
-
-    private void startHeartbeat() {
-        heartbeatThread = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                while (isOpen()) {
-                    try { Thread.sleep(15000); } catch (InterruptedException e) { break; }
-                    if (isOpen()) {
-                        JsonObject ping = new JsonObject();
-                        ping.addProperty("type", "ping");
-                        ping.addProperty("seq", 0);
-                        send(ping.toString());
-                    }
-                }
-            }
-        }, "Relay-Heartbeat");
-        heartbeatThread.setDaemon(true);
-        heartbeatThread.start();
+        HeartbeatManager.start();
     }
 
     @Override
@@ -88,6 +67,11 @@ public class RelayClient extends WebSocketClient {
             BaseMod.logger.info("CrossSpire player joined: " + joinedId);
             RemotePlayerRegistry.register(joinedId);
             CrossSpireMod.lobbyState.onPlayerJoined(joinedId);
+        } else if ("player_left".equals(type)) {
+            String leftId = msg.get("playerId").getAsString();
+            BaseMod.logger.info("CrossSpire player left: " + leftId.substring(0, 8));
+            RemotePlayerRegistry.remove(leftId);
+            CrossSpireMod.messageRouter.onPlayerLeft(leftId);
         } else {
             BaseMod.logger.info("CrossSpire routing: type=" + type + " len=" + message.length());
             CrossSpireMod.messageRouter.route(message);
@@ -106,6 +90,7 @@ public class RelayClient extends WebSocketClient {
     @Override
     public void onClose(int code, String reason, boolean remote) {
         BaseMod.logger.info("CrossSpire disconnected: " + code + " " + reason);
+        HeartbeatManager.stop();
     }
 
     @Override

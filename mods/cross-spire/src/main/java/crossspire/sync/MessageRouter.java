@@ -10,6 +10,7 @@ import crossspire.reference.RemoteReference;
 import crossspire.ui.QueueDisplay;
 import crossspire.resource.RemoteResourceManager;
 import crossspire.resource.ResourceRegistryTracker;
+import crossspire.resource.RemoteAssetCache;
 import crossspire.resource.RemoteCharacterResource;
 import crossspire.remote.RemotePlayerRegistry;
 import crossspire.remote.RemotePlayerState;
@@ -128,11 +129,20 @@ public class MessageRouter {
 
     private void handleInvoke(String rawMessage) {
         Protocol.InvokeMessage inv = Protocol.GSON.fromJson(rawMessage, Protocol.InvokeMessage.class);
-        BaseMod.logger.info("MessageRouter invoke: " + inv.refId + " trigger=" + inv.trigger);
+        BaseMod.logger.info("MessageRouter invoke: " + inv.refId + " trigger=" + inv.trigger
+            + " target=" + (inv.target != null ? inv.target.substring(0, 8) : "-"));
 
-        if (inv.target != null && !inv.target.equals(CrossSpireMod.playerId)
-                && !CrossSpireMod.isRoomHost()) {
-            BaseMod.logger.info("MessageRouter invoke not for us: target=" + inv.target.substring(0, 8));
+        if (inv.target != null && !inv.target.equals(CrossSpireMod.playerId)) {
+            if (CrossSpireMod.isRoomHost()) {
+                String owner = extractOwnerFromRef(inv.refId);
+                if (!owner.equals(CrossSpireMod.playerId)) {
+                    inv.target = owner;
+                    CrossSpireMod.relayClient.send(Protocol.GSON.toJson(inv));
+                    BaseMod.logger.info("MessageRouter forwarded invoke to owner=" + owner.substring(0, 8));
+                }
+            } else {
+                BaseMod.logger.info("MessageRouter invoke not for us: target=" + inv.target.substring(0, 8));
+            }
             return;
         }
 
@@ -253,5 +263,20 @@ public class MessageRouter {
             BaseMod.logger.info("MessageRouter animation_sync: " + playerId.substring(0, 8)
                 + " -> " + anim);
         }
+    }
+
+    public void onPlayerLeft(String playerId) {
+        BaseMod.logger.info("MessageRouter onPlayerLeft: " + playerId.substring(0, 8));
+        CrossSpireMod.lobbyState.onPlayerLeft(playerId);
+        RemoteAssetCache.clearCharacters();
+    }
+
+    private static String extractOwnerFromRef(String refId) {
+        if (refId == null) return "";
+        int atIdx = refId.lastIndexOf('@');
+        if (atIdx < 0) return "";
+        String after = refId.substring(atIdx + 1);
+        int slashIdx = after.indexOf('/');
+        return slashIdx > 0 ? after.substring(0, slashIdx) : after;
     }
 }

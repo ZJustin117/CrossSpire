@@ -19,7 +19,7 @@ public class SuppressBaseModPatches {
     public static class SuppressPostBattle {
         @SpirePrefixPatch
         public static SpireReturn<Void> Prefix(AbstractRoom __battleRoom) {
-            if (EventSuppression.SUPPRESSION.get() > 0) return SpireReturn.Return(null);
+            if (EventSuppression.isSuppressed()) return SpireReturn.Return(null);
             return SpireReturn.Continue();
         }
     }
@@ -28,7 +28,7 @@ public class SuppressBaseModPatches {
     public static class SuppressOnPlayerDamaged {
         @SpirePrefixPatch
         public static SpireReturn<Integer> Prefix(int __amount, DamageInfo __info) {
-            if (EventSuppression.SUPPRESSION.get() > 0) return SpireReturn.Return(0);
+            if (EventSuppression.isSuppressed()) return SpireReturn.Return(0);
             return SpireReturn.Continue();
         }
     }
@@ -37,7 +37,7 @@ public class SuppressBaseModPatches {
     public static class SuppressOnPlayerLoseBlock {
         @SpirePrefixPatch
         public static SpireReturn<Integer> Prefix(int __amount) {
-            if (EventSuppression.SUPPRESSION.get() > 0) return SpireReturn.Return(__amount);
+            if (EventSuppression.isSuppressed()) return SpireReturn.Return(__amount);
             return SpireReturn.Continue();
         }
     }
@@ -46,7 +46,7 @@ public class SuppressBaseModPatches {
     public static class SuppressRelicGet {
         @SpirePrefixPatch
         public static SpireReturn<Void> Prefix(AbstractRelic __relic) {
-            if (EventSuppression.SUPPRESSION.get() > 0) return SpireReturn.Return(null);
+            if (EventSuppression.isSuppressed()) return SpireReturn.Return(null);
             return SpireReturn.Continue();
         }
     }
@@ -55,7 +55,7 @@ public class SuppressBaseModPatches {
     public static class SuppressPotionGet {
         @SpirePrefixPatch
         public static SpireReturn<Void> Prefix(AbstractPotion __potion) {
-            if (EventSuppression.SUPPRESSION.get() > 0) return SpireReturn.Return(null);
+            if (EventSuppression.isSuppressed()) return SpireReturn.Return(null);
             return SpireReturn.Continue();
         }
     }
@@ -64,7 +64,7 @@ public class SuppressBaseModPatches {
     public static class SuppressPostPotionUse {
         @SpirePrefixPatch
         public static SpireReturn<Void> Prefix(AbstractPotion __potion) {
-            if (EventSuppression.SUPPRESSION.get() > 0) return SpireReturn.Return(null);
+            if (EventSuppression.isSuppressed()) return SpireReturn.Return(null);
             return SpireReturn.Continue();
         }
     }
@@ -73,7 +73,7 @@ public class SuppressBaseModPatches {
     public static class SuppressOnCardUse {
         @SpirePrefixPatch
         public static SpireReturn<Void> Prefix(AbstractCard __card) {
-            if (EventSuppression.SUPPRESSION.get() > 0) return SpireReturn.Return(null);
+            if (EventSuppression.isSuppressed()) return SpireReturn.Return(null);
             return SpireReturn.Continue();
         }
     }
@@ -82,7 +82,7 @@ public class SuppressBaseModPatches {
     public static class SuppressPostPowerApply {
         @SpirePrefixPatch
         public static SpireReturn<Void> Prefix(AbstractPower __power, AbstractCreature __source, AbstractCreature __target) {
-            if (EventSuppression.SUPPRESSION.get() > 0) return SpireReturn.Return(null);
+            if (EventSuppression.isSuppressed()) return SpireReturn.Return(null);
             return SpireReturn.Continue();
         }
     }
@@ -91,7 +91,7 @@ public class SuppressBaseModPatches {
     public static class SuppressPostDraw {
         @SpirePrefixPatch
         public static SpireReturn<Void> Prefix(AbstractCard __card) {
-            if (EventSuppression.SUPPRESSION.get() > 0) return SpireReturn.Return(null);
+            if (EventSuppression.isSuppressed()) return SpireReturn.Return(null);
             return SpireReturn.Continue();
         }
     }
@@ -100,7 +100,7 @@ public class SuppressBaseModPatches {
     public static class SuppressPostExhaust {
         @SpirePrefixPatch
         public static SpireReturn<Void> Prefix(AbstractCard __card) {
-            if (EventSuppression.SUPPRESSION.get() > 0) return SpireReturn.Return(null);
+            if (EventSuppression.isSuppressed()) return SpireReturn.Return(null);
             return SpireReturn.Continue();
         }
     }
@@ -109,7 +109,7 @@ public class SuppressBaseModPatches {
     public static class SuppressOnPlayerTurnStart {
         @SpirePrefixPatch
         public static SpireReturn<Void> Prefix() {
-            if (EventSuppression.SUPPRESSION.get() > 0) return SpireReturn.Return(null);
+            if (EventSuppression.isSuppressed()) return SpireReturn.Return(null);
             return SpireReturn.Continue();
         }
     }
@@ -118,7 +118,7 @@ public class SuppressBaseModPatches {
     public static class SuppressPostEnergyRecharge {
         @SpirePrefixPatch
         public static SpireReturn<Void> Prefix() {
-            if (EventSuppression.SUPPRESSION.get() > 0) return SpireReturn.Return(null);
+            if (EventSuppression.isSuppressed()) return SpireReturn.Return(null);
             return SpireReturn.Continue();
         }
     }

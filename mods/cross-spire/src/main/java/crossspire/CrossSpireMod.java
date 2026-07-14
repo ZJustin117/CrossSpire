@@ -50,7 +50,7 @@ public class CrossSpireMod {
 
     public static void initialize() {
         BaseMod.logger.info("CrossSpire mod initialized");
-        BaseMod.logger.info("CrossSpire EventSuppression ready, current value=" + EventSuppression.SUPPRESSION.get());
+        BaseMod.logger.info("CrossSpire EventSuppression ready, current value=" + EventSuppression.isSuppressed());
 
         centralQueueManager = new CentralQueueManager();
         p2pManager = new P2PManager();

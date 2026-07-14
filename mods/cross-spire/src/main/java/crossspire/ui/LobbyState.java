@@ -51,6 +51,13 @@ public class LobbyState {
         checkAllReady();
     }
 
+    public void onPlayerLeft(String playerId) {
+        roomSize = Math.max(1, roomSize - 1);
+        readyPlayers.remove(playerId);
+        characterChoices.remove(playerId);
+        BaseMod.logger.info("LobbyState player_left: " + safeSub(playerId) + " size=" + roomSize);
+    }
+
     private void resendOwnReady() {
         if (CrossSpireMod.playerId.isEmpty()) return;
         if (!readyPlayers.contains(CrossSpireMod.playerId)) return;

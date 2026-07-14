@@ -4,7 +4,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public final class EventSuppression {
 
-    public static final AtomicInteger SUPPRESSION = new AtomicInteger(0);
+    static final AtomicInteger SUPPRESSION = new AtomicInteger(0);
 
     public static void suppressEvents(Runnable fn) {
         SUPPRESSION.incrementAndGet();
