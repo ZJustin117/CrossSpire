@@ -56,7 +56,9 @@ public class ResourceRegistryTracker {
         reg.add("relics", jsonArrayFrom(getLocalRelicIds()));
         reg.add("powers", jsonArrayFrom(getLocalPowerIds()));
         reg.add("potions", jsonArrayFrom(getLocalPotionIds()));
-        reg.add("characters", new JsonArray());
+        reg.add("characters", jsonArrayFrom(new String[]{
+            "IRONCLAD", "THE_SILENT", "DEFECT", "WATCHER"
+        }));
 
         CrossSpireMod.relayClient.send(reg.toString());
         BaseMod.logger.info("ResourceRegistryTracker sent registry cards=" + getLocalCardIds().length);

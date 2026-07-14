@@ -9,7 +9,6 @@ import com.megacrit.cardcrawl.monsters.AbstractMonster;
 import crossspire.CrossSpireMod;
 import crossspire.network.Protocol;
 import crossspire.reference.ContentValidator;
-import java.util.UUID;
 
 @SuppressWarnings("unused")
 public class LocalCapturePatches {
@@ -18,23 +17,23 @@ public class LocalCapturePatches {
     public static class OnUseCard {
         @SpirePostfixPatch
         public static void Postfix(AbstractPlayer __instance, AbstractCard card, AbstractMonster target, int energyOnUse) {
-            BaseMod.logger.info("CapturePatches useCard: " + card.cardID + " connected=" + (CrossSpireMod.relayClient != null && CrossSpireMod.relayClient.isOpen()));
             if (CrossSpireMod.relayClient == null || !CrossSpireMod.relayClient.isOpen()) return;
-            if (CrossSpireMod.playerId.isEmpty()) return;
+            if (CrossSpireMod.playerId.isEmpty() || CrossSpireMod.hostId.isEmpty()) return;
 
-            Protocol.QueuePacket pkt = new Protocol.QueuePacket();
-            pkt.packetId = CrossSpireMod.playerId + "/" + UUID.randomUUID().toString().substring(0, 8);
+            Protocol.QueueSubmitMessage pkt = new Protocol.QueueSubmitMessage();
             pkt.senderId = CrossSpireMod.playerId;
             pkt.ownerId = CrossSpireMod.playerId;
-            pkt.timestamp = System.currentTimeMillis();
             pkt.cardId = card.cardID;
             pkt.resourceHash = ContentValidator.hashResource("card", card.cardID);
-            pkt.target = target != null ? target.id : "self";
+            pkt.gameTarget = target != null ? target.id : "self";
+            pkt.timestamp = System.currentTimeMillis();
             pkt.source = CrossSpireMod.playerId;
-            pkt.seq = 1;
+            pkt.seq = CrossSpireMod.nextSeq();
+            pkt.target = CrossSpireMod.hostId;
 
             CrossSpireMod.relayClient.send(Protocol.GSON.toJson(pkt));
-            BaseMod.logger.info("CapturePatches queue_packet: " + card.cardID);
+            BaseMod.logger.info("CapturePatches queue_submit: " + card.cardID + " to host="
+                + CrossSpireMod.hostId.substring(0, 8));
         }
     }
 }

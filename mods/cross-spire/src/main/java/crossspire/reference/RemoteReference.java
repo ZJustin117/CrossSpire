@@ -2,12 +2,10 @@ package crossspire.reference;
 
 import basemod.BaseMod;
 import crossspire.CrossSpireMod;
-import crossspire.EventSuppression;
 import crossspire.network.Protocol;
 import java.util.UUID;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
 
 public class RemoteReference<T> extends Reference<T> {
 
@@ -30,11 +28,18 @@ public class RemoteReference<T> extends Reference<T> {
 
     @Override
     public void dereference(Object... args) {
-        String cardId = refId.split(":")[1].split("@")[0];
+        String cardIdLocal = refId.split(":")[1].split("@")[0];
         String targetId = args.length > 0 ? (String) args[0] : "self";
+
+        if (tryDegrade()) {
+            BaseMod.logger.info("RemoteReference degraded, invoking locally: " + cardIdLocal);
+            new LocalReference<Object>(cardIdLocal, CrossSpireMod.playerId).dereference(targetId);
+            return;
+        }
+
         String requestId = UUID.randomUUID().toString().substring(0, 8);
 
-        BaseMod.logger.info("RemoteReference dereference: " + cardId + " on " + ownerId.substring(0, 8) + " direct=" + direct);
+        BaseMod.logger.info("RemoteReference dereference: " + cardIdLocal + " on " + ownerId.substring(0, 8) + " direct=" + direct);
 
         Protocol.InvokeMessage invoke = new Protocol.InvokeMessage();
         invoke.source = CrossSpireMod.playerId;
@@ -54,7 +59,7 @@ public class RemoteReference<T> extends Reference<T> {
 
         Protocol.InvokeResultMessage result = waitForResult(invoke.refId, TIMEOUT_MS);
         if (result != null) {
-            BaseMod.logger.info("RemoteReference got result for " + cardId + ": " + result.effects.length + " effects");
+            BaseMod.logger.info("RemoteReference got result for " + cardIdLocal + ": " + result.effects.length + " effects");
             Protocol.QueueComplete complete = new Protocol.QueueComplete();
             complete.source = CrossSpireMod.playerId;
             complete.seq = 1;
@@ -65,7 +70,7 @@ public class RemoteReference<T> extends Reference<T> {
                 CrossSpireMod.relayClient.send(Protocol.GSON.toJson(complete));
             }
         } else {
-            BaseMod.logger.info("RemoteReference timeout for " + cardId + " on " + ownerId.substring(0, 8));
+            BaseMod.logger.info("RemoteReference timeout for " + cardIdLocal + " on " + ownerId.substring(0, 8));
         }
     }
 

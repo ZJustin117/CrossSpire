@@ -2,14 +2,18 @@ package crossspire.remote;
 
 import basemod.BaseMod;
 import basemod.interfaces.PostRenderSubscriber;
+import basemod.interfaces.PostUpdateSubscriber;
+import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.megacrit.cardcrawl.core.Settings;
 import com.megacrit.cardcrawl.dungeons.AbstractDungeon;
 import com.megacrit.cardcrawl.helpers.FontHelper;
 import crossspire.CrossSpireMod;
+import crossspire.resource.RemoteCharacterResource;
+import crossspire.resource.RemoteResourceManager;
 
-public class RemoteRenderer implements PostRenderSubscriber {
+public class RemoteRenderer implements PostRenderSubscriber, PostUpdateSubscriber {
 
     private static final float PANEL_X;
     private static final float PANEL_Y_TOP;
@@ -26,6 +30,28 @@ public class RemoteRenderer implements PostRenderSubscriber {
     }
 
     @Override
+    public void receivePostUpdate() {
+        if (!CrossSpireMod.isConnected()) return;
+        if (AbstractDungeon.player == null) return;
+
+        for (RemotePlayerState rp : RemotePlayerRegistry.all()) {
+            RemoteCharacterResource chr = rp.getCharacterResource();
+            if (chr == null) {
+                RemoteCharacterResource loaded = RemoteResourceManager.getCharacter(rp.playerId);
+                rp.setCharacterResource(loaded);
+                chr = loaded;
+            }
+            if (chr != null && chr.isLoaded()) {
+                chr.drawX = Settings.WIDTH * 0.6f;
+                chr.drawY = Settings.HEIGHT * 0.25f;
+                chr.scaleX = 1.0f;
+                chr.scaleY = 1.0f;
+                chr.update(Gdx.graphics.getDeltaTime());
+            }
+        }
+    }
+
+    @Override
     public void receivePostRender(SpriteBatch sb) {
         try {
             if (!CrossSpireMod.isConnected()) return;
@@ -34,12 +60,10 @@ public class RemoteRenderer implements PostRenderSubscriber {
             if (AbstractDungeon.getCurrRoom().monsters == null) return;
             render(sb);
         } catch (Exception e) {
-            // silently ignore during main menu / loading
         }
     }
 
     private void render(SpriteBatch sb) {
-
         int count = RemotePlayerRegistry.count();
         if (count == 0) return;
 
@@ -49,7 +73,13 @@ public class RemoteRenderer implements PostRenderSubscriber {
         y -= LINE_HEIGHT;
 
         for (RemotePlayerState rp : RemotePlayerRegistry.all()) {
-            String hpText = rp.hp + "/" + rp.maxHp + "HP  " + rp.block + "B";
+            RemoteCharacterResource chr = rp.getCharacterResource();
+
+            if (chr != null && chr.isLoaded()) {
+                chr.render(sb);
+            }
+
+            String hpText = rp.hp + "/" + rp.maxHp + "HP  " + rp.block + "B  E:" + rp.energy;
             FontHelper.renderFontLeftTopAligned(sb, FontHelper.tipBodyFont,
                 rp.playerId.substring(0, 8) + " " + hpText,
                 PANEL_X, y, Color.WHITE);

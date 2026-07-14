@@ -58,6 +58,13 @@ public class RelayClient extends WebSocketClient {
         } else if ("room_state".equals(type)) {
             CrossSpireMod.lobbyScreen.setStatus("In room " + msg.get("code").getAsString());
 
+            // Track room host (first-to-join = host)
+            if (msg.has("host") && !msg.get("host").isJsonNull()) {
+                String hostId = msg.get("host").getAsString();
+                CrossSpireMod.hostId = hostId;
+                BaseMod.logger.info("RelayClient room host: " + hostId.substring(0, 8));
+            }
+
             // Register all existing players in the room
             if (msg.has("players")) {
                 com.google.gson.JsonArray players = msg.getAsJsonArray("players");

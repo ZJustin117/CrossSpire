@@ -10,6 +10,7 @@ import crossspire.sync.MessageRouter;
 import crossspire.sync.SyncExecutor;
 import crossspire.combat.CombatResultReplayer;
 import crossspire.combat.QueueManager;
+import crossspire.combat.CentralQueueManager;
 import crossspire.network.P2PManager;
 import crossspire.network.Protocol;
 import crossspire.rng.RngManager;
@@ -18,6 +19,7 @@ import com.megacrit.cardcrawl.characters.AbstractPlayer;
 import crossspire.ui.CrossSpireCommand;
 import crossspire.ui.LobbyScreen;
 import crossspire.ui.ServerPicker;
+import java.util.concurrent.atomic.AtomicInteger;
 import com.google.gson.JsonObject;
 import java.net.URI;
 
@@ -28,20 +30,32 @@ public class CrossSpireMod {
     public static MessageRouter messageRouter;
     public static LobbyScreen lobbyScreen;
     public static QueueManager queueManager;
+    public static CentralQueueManager centralQueueManager;
     public static P2PManager p2pManager;
     public static LobbyState lobbyState;
     public static StageHost stageHost;
     public static RngManager rngManager;
     public static CrossSpireHUD hud;
     public static String playerId = "";
+    public static String hostId = "";
     public static String syncedSeed = null;
     public static AbstractPlayer localPlayer = null;
+    private static final AtomicInteger seqCounter = new AtomicInteger(0);
+
+    public static int nextSeq() {
+        return seqCounter.incrementAndGet();
+    }
+
+    public static boolean isRoomHost() {
+        return !hostId.isEmpty() && hostId.equals(playerId);
+    }
 
     public static void initialize() {
         BaseMod.logger.info("CrossSpire mod initialized");
         BaseMod.logger.info("CrossSpire EventSuppression ready, current value=" + EventSuppression.SUPPRESSION.get());
 
         queueManager = new QueueManager();
+        centralQueueManager = new CentralQueueManager();
         p2pManager = new P2PManager();
         lobbyState = new LobbyState();
         stageHost = new StageHost("");

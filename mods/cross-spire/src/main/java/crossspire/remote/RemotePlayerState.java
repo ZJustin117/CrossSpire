@@ -1,5 +1,7 @@
 package crossspire.remote;
 
+import crossspire.resource.RemoteCharacterResource;
+
 public class RemotePlayerState {
 
     public final String playerId;
@@ -11,6 +13,8 @@ public class RemotePlayerState {
     public String characterClass;
     public String[] powers;
     public int[] powerAmounts;
+    public String currentAnimation = "Idle";
+    private RemoteCharacterResource characterResource;
 
     public RemotePlayerState(String playerId) {
         this.playerId = playerId;
@@ -19,5 +23,13 @@ public class RemotePlayerState {
         this.characterClass = "";
         this.powers = new String[0];
         this.powerAmounts = new int[0];
+    }
+
+    public RemoteCharacterResource getCharacterResource() {
+        return characterResource;
+    }
+
+    public void setCharacterResource(RemoteCharacterResource chr) {
+        this.characterResource = chr;
     }
 }

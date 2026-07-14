@@ -22,7 +22,7 @@ public class MonsterTurnPatches {
             Protocol.EffectDescription[] effects = collectEffects(__instance);
             Protocol.CombatResultMessage result = new Protocol.CombatResultMessage();
             result.source = CrossSpireMod.playerId;
-            result.seq = (int) (System.currentTimeMillis() % 100000);
+            result.seq = CrossSpireMod.nextSeq();
             result.monsterId = __instance.id;
             result.effects = effects;
             result.operationSequence = new Protocol.OperationStep[0];

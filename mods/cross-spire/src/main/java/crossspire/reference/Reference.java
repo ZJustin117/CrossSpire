@@ -8,16 +8,12 @@ public abstract class Reference<T> {
     public final String ownerId;
     public final Type type;
     protected String resourceHash;
-    public final String remoteAddr;
-    public final int remotePort;
 
     protected Reference(String refId, String ownerId, Type type, String resourceHash) {
         this.refId = refId;
         this.ownerId = ownerId;
         this.type = type;
         this.resourceHash = resourceHash;
-        this.remoteAddr = "";
-        this.remotePort = 0;
     }
 
     public abstract void dereference(Object... args);

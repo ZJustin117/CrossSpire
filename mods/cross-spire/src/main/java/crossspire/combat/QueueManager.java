@@ -131,10 +131,10 @@ public class QueueManager {
         pkt.ownerId = CrossSpireMod.playerId;
         pkt.timestamp = System.currentTimeMillis();
         pkt.cardId = cardId;
-        pkt.resourceHash = "";
+        pkt.resourceHash = crossspire.reference.ContentValidator.hashResource("card", cardId);
         pkt.target = target;
         pkt.source = CrossSpireMod.playerId;
-        pkt.seq = 1;
+        pkt.seq = CrossSpireMod.nextSeq();
 
         if (CrossSpireMod.relayClient != null && CrossSpireMod.relayClient.isOpen()) {
             CrossSpireMod.relayClient.send(Protocol.GSON.toJson(pkt));

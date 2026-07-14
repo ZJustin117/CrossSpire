@@ -10,6 +10,9 @@ import crossspire.reference.RemoteReference;
 import crossspire.ui.QueueDisplay;
 import crossspire.resource.RemoteResourceManager;
 import crossspire.resource.ResourceRegistryTracker;
+import crossspire.resource.RemoteCharacterResource;
+import crossspire.remote.RemotePlayerRegistry;
+import crossspire.remote.RemotePlayerState;
 import com.megacrit.cardcrawl.actions.utility.UseCardAction;
 import com.megacrit.cardcrawl.cards.AbstractCard;
 import com.megacrit.cardcrawl.core.AbstractCreature;
@@ -75,8 +78,16 @@ public class MessageRouter {
         } else if ("invoke".equals(type)) {
             handleInvoke(rawMessage);
         } else if ("invoke_result".equals(type)) {
+            BaseMod.logger.info("MessageRouter invoke_result received: " + rawMessage.substring(0, Math.min(120, rawMessage.length())));
             Protocol.InvokeResultMessage result = Protocol.GSON.fromJson(rawMessage, Protocol.InvokeResultMessage.class);
             RemoteReference.onInvokeResult(result);
+            if (CrossSpireMod.isRoomHost()) {
+                CrossSpireMod.centralQueueManager.onInvokeResult(result);
+            }
+            // Host broadcasts combat_result so all clients can INDUCED replay
+            if (CrossSpireMod.isRoomHost()) {
+                broadcastCombatResult(result);
+            }
         } else if ("monster_intent".equals(type)) {
             syncExecutor.handleSync("monster_intent", null, 1, rawMessage);
         } else if ("combat_result".equals(type)) {
@@ -89,10 +100,14 @@ public class MessageRouter {
             Protocol.ReferenceRegisterMessage reg = Protocol.GSON.fromJson(rawMessage, Protocol.ReferenceRegisterMessage.class);
             BaseMod.logger.info("MessageRouter reference_register: " + reg.resourceType + ":" + reg.resourceId);
         } else if ("stage_host_election".equals(type) || "stage_host_result".equals(type)
-                || "full_snapshot".equals(type) || "animation_sync".equals(type)) {
+                || "full_snapshot".equals(type)) {
             BaseMod.logger.info("MessageRouter " + type + " (reserved, not yet implemented)");
+        } else if ("animation_sync".equals(type)) {
+            handleAnimationSync(rawMessage);
         } else if ("player_end_turn".equals(type)) {
             handlePlayerEndTurn();
+        } else if ("queue_submit".equals(type)) {
+            handleQueueSubmit(rawMessage);
         }
     }
 
@@ -147,6 +162,7 @@ public class MessageRouter {
 
         Protocol.InvokeResultMessage result = new Protocol.InvokeResultMessage();
         result.source = CrossSpireMod.playerId;
+        result.target = inv.source;
         result.seq = 1;
         result.refId = inv.refId;
         result.effects = buildInvokeEffects(template, targetId);
@@ -161,6 +177,15 @@ public class MessageRouter {
                 fx.append(effs[i].kind).append("=").append(effs[i].amount);
             }
             BaseMod.logger.info("MessageRouter sent invoke_result: " + inv.refId + " [" + fx + "]");
+
+            // Also broadcast combat_result to all players for induced replay
+            Protocol.CombatResultMessage combatBroadcast = new Protocol.CombatResultMessage();
+            combatBroadcast.source = CrossSpireMod.playerId;
+            combatBroadcast.seq = CrossSpireMod.nextSeq();
+            combatBroadcast.effects = result.effects;
+            combatBroadcast.operationSequence = result.operationSequence;
+            CrossSpireMod.relayClient.send(Protocol.GSON.toJson(combatBroadcast));
+            BaseMod.logger.info("MessageRouter broadcast combat_result: " + fx);
         }
     }
 
@@ -199,6 +224,45 @@ public class MessageRouter {
             EndTurnSyncPatches.suppressEndTurn = true;
             AbstractDungeon.overlayMenu.endTurnButton.disable(true);
             EndTurnSyncPatches.suppressEndTurn = false;
+        }
+    }
+
+    private void handleQueueSubmit(String rawMessage) {
+        if (!CrossSpireMod.isRoomHost()) return;
+        Protocol.QueueSubmitMessage pkt = Protocol.GSON.fromJson(rawMessage, Protocol.QueueSubmitMessage.class);
+        CrossSpireMod.centralQueueManager.onQueueSubmit(pkt);
+    }
+
+    private void broadcastCombatResult(Protocol.InvokeResultMessage result) {
+        Protocol.CombatResultMessage broadcast = new Protocol.CombatResultMessage();
+        broadcast.source = CrossSpireMod.playerId;
+        broadcast.seq = CrossSpireMod.nextSeq();
+        broadcast.effects = result.effects;
+        broadcast.operationSequence = result.operationSequence;
+
+        if (CrossSpireMod.relayClient != null && CrossSpireMod.relayClient.isOpen()) {
+            CrossSpireMod.relayClient.send(Protocol.GSON.toJson(broadcast));
+            BaseMod.logger.info("MessageRouter broadcast combat_result effects="
+                + (result.effects != null ? result.effects.length : 0));
+        }
+    }
+
+    private void handleAnimationSync(String rawMessage) {
+        Protocol.AnimationSyncMessage msg = Protocol.GSON.fromJson(rawMessage, Protocol.AnimationSyncMessage.class);
+        String playerId = msg.playerId;
+        String anim = msg.animationName;
+
+        if (playerId == null || anim == null) return;
+
+        RemotePlayerState rp = RemotePlayerRegistry.get(playerId);
+        if (rp == null) return;
+
+        rp.currentAnimation = anim;
+        RemoteCharacterResource chr = rp.getCharacterResource();
+        if (chr != null && chr.isLoaded()) {
+            chr.setAnimation(anim, true);
+            BaseMod.logger.info("MessageRouter animation_sync: " + playerId.substring(0, 8)
+                + " -> " + anim);
         }
     }
 }
