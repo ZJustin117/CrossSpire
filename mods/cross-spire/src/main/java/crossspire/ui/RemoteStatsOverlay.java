@@ -70,6 +70,9 @@ public class RemoteStatsOverlay {
             hpText += " B:" + rp.block;
             hpColor = BLOCK_COLOR;
         }
+        if (rp.energy > 0) {
+            hpText += " E:" + rp.energy;
+        }
         FontHelper.renderFontLeftTopAligned(sb, FontHelper.tipBodyFont, hpText, x + barW + 4, y, hpColor);
         y -= barH + 4;
 

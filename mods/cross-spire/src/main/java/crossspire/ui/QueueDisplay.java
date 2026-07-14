@@ -2,6 +2,7 @@ package crossspire.ui;
 
 import basemod.BaseMod;
 import basemod.DevConsole;
+import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.megacrit.cardcrawl.helpers.FontHelper;
 import crossspire.CrossSpireMod;
@@ -14,6 +15,7 @@ import java.util.List;
 public class QueueDisplay {
 
     private static final List<Protocol.QueuePacket> displayQueue = Collections.synchronizedList(new ArrayList<Protocol.QueuePacket>());
+    private static String executingPacketId = null;
 
     public static void onPacket(Protocol.QueuePacket pkt) {
         synchronized (displayQueue) {
@@ -32,14 +34,21 @@ public class QueueDisplay {
         BaseMod.logger.info("QueueDisplay added: " + pkt.packetId);
     }
 
+    public static void setExecuting(String packetId) {
+        executingPacketId = packetId;
+    }
+
     public static void onComplete(String packetId) {
         synchronized (displayQueue) {
             for (int i = 0; i < displayQueue.size(); i++) {
                 if (displayQueue.get(i).packetId.equals(packetId)) {
                     displayQueue.remove(i);
-                    return;
+                    break;
                 }
             }
+        }
+        if (packetId.equals(executingPacketId)) {
+            executingPacketId = null;
         }
         BaseMod.logger.info("QueueDisplay complete: " + packetId);
     }
@@ -67,19 +76,44 @@ public class QueueDisplay {
             int size = displayQueue.size();
             float y = 200;
             FontHelper.renderFontLeftTopAligned(sb, FontHelper.tipBodyFont,
-                "Queue (" + size + ")", 10, y, com.badlogic.gdx.graphics.Color.YELLOW);
+                "Queue (" + size + ")", 10, y, Color.YELLOW);
             y -= 16;
             int idx = 0;
             for (Protocol.QueuePacket p : displayQueue) {
-                if (idx++ >= 10) break;
+                if (idx >= 10) break;
                 boolean mine = p.ownerId.equals(CrossSpireMod.playerId);
+                boolean executing = p.packetId.equals(executingPacketId);
                 String sid = p.senderId.isEmpty() ? "??" : p.senderId.substring(0, 8);
-                String line = (idx) + ". " + (mine ? "[MINE]" : "[   ]") + " " + p.cardId + " by " + sid;
+
+                String status = executing ? "[EXEC]" : mine ? "[MINE]" : "[WAIT]";
+                int pos = mine ? minePosition() : -1;
+                String posStr = mine && pos > 0 ? " (pos " + pos + "/" + size + ")" : "";
+                String line = (idx + 1) + ". " + status + " " + p.cardId + " by " + sid + posStr;
+
+                Color colour;
+                if (executing) {
+                    colour = new Color(1.0F, 0.85F, 0.1F, 1.0F);
+                } else if (mine) {
+                    colour = Color.GREEN;
+                } else {
+                    colour = Color.WHITE;
+                }
+
                 FontHelper.renderFontLeftTopAligned(sb, FontHelper.tipBodyFont,
-                    line, 10, y, mine ? com.badlogic.gdx.graphics.Color.GREEN : com.badlogic.gdx.graphics.Color.WHITE);
+                    line, 10, y, colour);
                 y -= 14;
+                idx++;
             }
         }
+    }
+
+    private static int minePosition() {
+        int pos = 0;
+        for (Protocol.QueuePacket p : displayQueue) {
+            pos++;
+            if (p.ownerId.equals(CrossSpireMod.playerId)) return pos;
+        }
+        return -1;
     }
 
     public static int size() {

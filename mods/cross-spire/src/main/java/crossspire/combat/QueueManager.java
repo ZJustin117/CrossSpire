@@ -6,6 +6,7 @@ import crossspire.EventSuppression;
 import crossspire.network.Protocol;
 import crossspire.reference.Reference;
 import crossspire.reference.ReferenceFactory;
+import crossspire.ui.QueueDisplay;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -83,7 +84,9 @@ public class QueueManager {
                 }
             }
 
+            QueueDisplay.setExecuting(pid);
             ref.dereference(head.target);
+            QueueDisplay.onComplete(pid);
 
             executing = false;
             checkHead();
@@ -91,7 +94,7 @@ public class QueueManager {
         } else if (ref.type == Reference.Type.REMOTE) {
             executing = true;
             String pid = head.packetId;
-            BaseMod.logger.info("QueueManager REMOTE dereference: " + head.cardId + " → " + head.ownerId.substring(0, 8));
+            BaseMod.logger.info("QueueManager REMOTE dereference: " + head.cardId + " -> " + head.ownerId.substring(0, 8));
 
             synchronized (packets) {
                 for (int i = 0; i < packets.size(); i++) {
@@ -102,6 +105,7 @@ public class QueueManager {
                 }
             }
 
+            QueueDisplay.setExecuting(pid);
             ref.dereference(head.target);
 
             executing = false;
