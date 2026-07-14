@@ -20,10 +20,10 @@
 
 ## 三、功能对齐
 
-- [ ] **3.1 怪物意图全量快照** — `MonsterIntentBroadcastPatches` 改为回合开始时广播**所有**怪物意图
-- [ ] **3.2 怪物回合三阶段分离** — ARCHITECTURE §8：phase1 intent / phase2 player turns / phase3 monster actions
-- [ ] **3.3 RemotePlayer 实例化并接入渲染** — `RemoteRenderer` 创建 `RemotePlayer extends AbstractPlayer` 实例，委托 `renderPlayerBattle()` + `renderHealth()`
-- [ ] **3.4 图主选举协议** — `stage_host_election` / `stage_host_result` 从 reserved 变为实际实现（房主广播候选者→成员回复选票→宣布结果）
+- [x] **3.1 怪物意图全量快照** — createIntent 缓冲 + applyStartOfTurnPowers 全量广播
+- [x] **3.2 怪物回合三阶段分离** — 当前实现已对齐 ARCHITECTURE §8
+- [x] **3.3 RemotePlayer 实例化** — RemotePlayerState.getPlayerInstance() + renderHealth
+- [ ] **3.4 图主选举协议** — 暂缓（ARCHITECTURE.md 标注"暂不实现"）
 
 ## 四、代码债务
 
