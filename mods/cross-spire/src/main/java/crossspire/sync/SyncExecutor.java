@@ -7,11 +7,9 @@ import com.google.gson.JsonObject;
 import com.megacrit.cardcrawl.core.CardCrawlGame;
 import com.megacrit.cardcrawl.dungeons.AbstractDungeon;
 import crossspire.CrossSpireMod;
-import crossspire.EventSuppression;
 import crossspire.network.Protocol;
 import crossspire.remote.RemotePlayerRegistry;
 import crossspire.remote.RemotePlayerState;
-import crossspire.remote.GameStarter;
 
 public class SyncExecutor {
 
@@ -35,13 +33,11 @@ public class SyncExecutor {
 
     public void handleCombatResult(String rawMessage) {
         Protocol.CombatResultMessage msg = Protocol.GSON.fromJson(rawMessage, Protocol.CombatResultMessage.class);
-        BaseMod.logger.info("SyncExecutor combat_result: " + msg.monsterId + " effects=" + (msg.effects != null ? msg.effects.length : 0));
         CrossSpireMod.messageRouter.replayCombatResult(msg.effects);
     }
 
     public void handleEventResult(String rawMessage) {
         Protocol.EventResultMessage msg = Protocol.GSON.fromJson(rawMessage, Protocol.EventResultMessage.class);
-        BaseMod.logger.info("SyncExecutor event_result: " + msg.eventId + " effects=" + (msg.effects != null ? msg.effects.length : 0));
         if (msg.effects != null && msg.effects.length > 0) {
             CrossSpireMod.messageRouter.replayCombatResult(msg.effects);
         }
@@ -49,16 +45,12 @@ public class SyncExecutor {
 
     private void handleBattleStart(String rawMessage) {
         JsonObject msg = Protocol.GSON.fromJson(rawMessage, JsonObject.class);
-        String charName = msg.has("character") ? msg.get("character").getAsString() : "IRONCLAD";
         String seed = msg.has("seed") ? msg.get("seed").getAsString() : "";
         String source = msg.has("source") ? msg.get("source").getAsString() : "";
-
         if (!source.isEmpty() && CrossSpireMod.stageHost != null) {
             CrossSpireMod.stageHost.setStageHost(source);
         }
-
         if (source.equals(CrossSpireMod.playerId)) return;
-        com.megacrit.cardcrawl.helpers.SeedHelper.setSeed(seed);
         CrossSpireMod.syncedSeed = seed;
     }
 
@@ -93,55 +85,32 @@ public class SyncExecutor {
         JsonArray ids = msg.has("monster_ids") ? msg.getAsJsonArray("monster_ids") : new JsonArray();
         if (ids.size() == 0) return;
 
-        String firstMonster = ids.get(0).getAsString();
-        BaseMod.logger.info("SyncExecutor room_enter from " + source.substring(0, 8) + " monsters=" + ids);
+        final String firstMonster = ids.get(0).getAsString();
+        final String seed = CrossSpireMod.syncedSeed != null ? CrossSpireMod.syncedSeed : "220644";
+        BaseMod.logger.info("SyncExecutor room_enter from " + source.substring(0,8) + " monsters=" + ids);
 
         CombatSyncPatches.suppressBroadcast = true;
 
-        final String monster = firstMonster;
-        String seed = CrossSpireMod.syncedSeed != null ? CrossSpireMod.syncedSeed : "220644";
+        if (AbstractDungeon.player == null) {
+            writeBatch("crossspire start IRONCLAD " + seed);
+        }
 
-        Gdx.app.postRunnable(new Runnable() {
+        new Thread(new Runnable() {
             @Override public void run() {
-                boolean justStarted = startLocalGameIfNeeded(seed);
-                if (justStarted) {
-                    new Thread(new Runnable() {
-                        @Override public void run() {
-                            try { Thread.sleep(3000); } catch (InterruptedException ignored) {}
-                            BaseMod.logger.info("SyncExecutor deferred fight wakeup, posting enterLocalCombat");
-                            Gdx.app.postRunnable(new Runnable() {
-                                @Override public void run() {
-                                    enterLocalCombat(monster);
-                                }
-                            });
-                        }
-                    }, "SyncEnterCombat").start();
-                } else {
-                    enterLocalCombat(monster);
-                }
+                try { Thread.sleep(15000); } catch (InterruptedException ignored) {}
+                writeBatch("fight " + firstMonster);
+                BaseMod.logger.info("SyncExecutor batch-queued fight: " + firstMonster);
             }
-        });
+        }, "SyncFightBatch").start();
     }
 
-    private static boolean startLocalGameIfNeeded(String seed) {
-        if (AbstractDungeon.player != null && CardCrawlGame.mode == CardCrawlGame.GameMode.GAMEPLAY) {
-            BaseMod.logger.info("SyncExecutor game already running, skip start");
-            return false;
-        }
-        BaseMod.logger.info("SyncExecutor starting local game");
-        GameStarter.start("IRONCLAD", seed);
-        return true;
-    }
-
-    private static void enterLocalCombat(String monsterName) {
-        BaseMod.logger.info("SyncExecutor enterLocalCombat start: " + monsterName);
-        if (AbstractDungeon.getCurrRoom() instanceof com.megacrit.cardcrawl.rooms.MonsterRoom) {
-            BaseMod.logger.info("SyncExecutor already in combat, skip fight");
-            return;
-        }
-        BaseMod.logger.info("SyncExecutor fight via ConsoleCommand: " + monsterName);
-        String[] args = ("fight " + monsterName).split(" ");
-        basemod.devcommands.ConsoleCommand.execute(args);
-        BaseMod.logger.info("SyncExecutor ConsoleCommand.execute returned");
+    private static void writeBatch(String command) {
+        try {
+            java.io.File f = new java.io.File(
+                "/storage/emulated/0/Android/data/io.stamethyst/files/sts/crossspire_batch.txt");
+            java.io.FileWriter fw = new java.io.FileWriter(f);
+            fw.write(command + "\n");
+            fw.close();
+        } catch (Exception ignored) {}
     }
 }

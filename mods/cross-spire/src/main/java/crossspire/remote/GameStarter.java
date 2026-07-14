@@ -15,14 +15,6 @@ import java.util.ArrayList;
 public class GameStarter {
 
     public static String start(String characterName, String seed) {
-        return start(characterName, seed, true);
-    }
-
-    public static String startMinimal(String characterName, String seed) {
-        return start(characterName, seed, false);
-    }
-
-    private static String start(String characterName, String seed, boolean createDungeon) {
         if (AbstractDungeon.player != null) {
             DevConsole.log("Game already started, ignoring crossspire start");
             return null;
@@ -53,9 +45,7 @@ public class GameStarter {
             AbstractDungeon.player = player;
             CrossSpireMod.localPlayer = player;
             AbstractDungeon.generateSeeds();
-            if (createDungeon) {
-                new Exordium(player, new ArrayList<String>());
-            }
+            new Exordium(player, new ArrayList<String>());
             CardCrawlGame.mode = CardCrawlGame.GameMode.GAMEPLAY;
         });
 
@@ -65,6 +55,6 @@ public class GameStarter {
     }
 
     public static String start(String characterName) {
-        return start(characterName, null, true);
+        return start(characterName, null);
     }
 }
