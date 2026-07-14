@@ -3,20 +3,15 @@ package crossspire.combat;
 import basemod.BaseMod;
 import com.evacipated.cardcrawl.modthespire.lib.SpirePatch;
 import com.evacipated.cardcrawl.modthespire.lib.SpirePostfixPatch;
-import com.megacrit.cardcrawl.characters.AbstractPlayer;
 import com.megacrit.cardcrawl.dungeons.AbstractDungeon;
 import com.megacrit.cardcrawl.monsters.AbstractMonster;
 import crossspire.CrossSpireMod;
 import crossspire.network.Protocol;
 import crossspire.remote.RemotePlayerRegistry;
 import crossspire.rng.SyncedRng;
-import java.util.ArrayList;
-import java.util.List;
 
 @SuppressWarnings("unused")
 public class MonsterIntentBroadcastPatches {
-
-    private static final List<Protocol.MonsterIntentEntry> intentBuffer = new ArrayList<>();
 
     @SpirePatch(clz = AbstractMonster.class, method = "createIntent", paramtypez = {})
     public static class OnCreateIntent {
@@ -39,35 +34,17 @@ public class MonsterIntentBroadcastPatches {
                 }
             }
 
-            Protocol.MonsterIntentEntry entry = new Protocol.MonsterIntentEntry();
-            entry.monsterId = __instance.id;
-            entry.intent = __instance.intent.name();
-            entry.damage = __instance.getIntentBaseDmg();
-            entry.hits = hits;
-            entry.targetId = targetId;
-            intentBuffer.add(entry);
-        }
-    }
+            Protocol.MonsterIntentMessage msg = new Protocol.MonsterIntentMessage();
+            msg.source = CrossSpireMod.playerId;
+            msg.seq = CrossSpireMod.nextSeq();
+            msg.monsterId = __instance.id;
+            msg.intent = __instance.intent.name();
+            msg.damage = __instance.getIntentBaseDmg();
+            msg.hits = hits;
+            msg.targetId = targetId;
 
-    @SpirePatch(clz = AbstractPlayer.class, method = "applyStartOfTurnPowers", paramtypez = {})
-    public static class FlushSnapshot {
-        @SpirePostfixPatch
-        public static void postfix(AbstractPlayer __instance) {
-            if (CrossSpireMod.stageHost == null || !CrossSpireMod.stageHost.isStageHost()) return;
-            if (CrossSpireMod.relayClient == null || !CrossSpireMod.relayClient.isOpen()) return;
-
-            synchronized (intentBuffer) {
-                if (intentBuffer.isEmpty()) return;
-
-                Protocol.MonsterIntentMessage msg = new Protocol.MonsterIntentMessage();
-                msg.source = CrossSpireMod.playerId;
-                msg.seq = CrossSpireMod.nextSeq();
-                msg.intents = intentBuffer.toArray(new Protocol.MonsterIntentEntry[0]);
-
-                CrossSpireMod.relayClient.send(Protocol.GSON.toJson(msg));
-                BaseMod.logger.info("MonsterIntentBroadcast snapshot: " + intentBuffer.size() + " monsters");
-                intentBuffer.clear();
-            }
+            CrossSpireMod.relayClient.send(Protocol.GSON.toJson(msg));
+            BaseMod.logger.info("MonsterIntentBroadcast: " + __instance.id + " intent=" + msg.intent + " target=" + targetId);
         }
     }
 }
