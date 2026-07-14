@@ -4,9 +4,19 @@ import basemod.BaseMod;
 import com.badlogic.gdx.Gdx;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.megacrit.cardcrawl.characters.AbstractPlayer;
+import com.megacrit.cardcrawl.characters.AbstractPlayer.PlayerClass;
+import com.megacrit.cardcrawl.characters.CharacterManager;
 import com.megacrit.cardcrawl.core.CardCrawlGame;
 import com.megacrit.cardcrawl.dungeons.AbstractDungeon;
+import com.megacrit.cardcrawl.helpers.MonsterHelper;
+import com.megacrit.cardcrawl.helpers.SeedHelper;
+import com.megacrit.cardcrawl.map.MapRoomNode;
+import com.megacrit.cardcrawl.monsters.MonsterGroup;
+import com.megacrit.cardcrawl.rooms.RestRoom;
+import com.megacrit.cardcrawl.rooms.MonsterRoom;
 import crossspire.CrossSpireMod;
+import crossspire.EventSuppression;
 import crossspire.network.Protocol;
 import crossspire.remote.RemotePlayerRegistry;
 import crossspire.remote.RemotePlayerState;
@@ -91,26 +101,80 @@ public class SyncExecutor {
 
         CombatSyncPatches.suppressBroadcast = true;
 
-        if (AbstractDungeon.player == null) {
-            writeBatch("crossspire start IRONCLAD " + seed);
-        }
-
-        new Thread(new Runnable() {
+        Gdx.app.postRunnable(new Runnable() {
             @Override public void run() {
-                try { Thread.sleep(15000); } catch (InterruptedException ignored) {}
-                writeBatch("fight " + firstMonster);
-                BaseMod.logger.info("SyncExecutor batch-queued fight: " + firstMonster);
+                EventSuppression.suppressEvents(() -> {
+                    createGameIfNeeded(seed);
+                    enterRemoteCombat(firstMonster);
+                });
             }
-        }, "SyncFightBatch").start();
+        });
     }
 
-    private static void writeBatch(String command) {
+    private static void createGameIfNeeded(String seed) {
+        if (AbstractDungeon.player != null && CardCrawlGame.mode == CardCrawlGame.GameMode.GAMEPLAY) {
+            BaseMod.logger.info("SyncExecutor game already running, skip create");
+            return;
+        }
+
         try {
-            java.io.File f = new java.io.File(
-                "/storage/emulated/0/Android/data/io.stamethyst/files/sts/crossspire_batch.txt");
-            java.io.FileWriter fw = new java.io.FileWriter(f);
-            fw.write(command + "\n");
-            fw.close();
-        } catch (Exception ignored) {}
+            PlayerClass pc = PlayerClass.valueOf("IRONCLAD");
+            CharacterManager mgr = new CharacterManager();
+            AbstractPlayer player = mgr.setChosenCharacter(pc);
+            if (player == null) return;
+
+            if (seed != null && !seed.isEmpty()) SeedHelper.setSeed(seed);
+
+            AbstractDungeon.player = player;
+            CrossSpireMod.localPlayer = player;
+            AbstractDungeon.generateSeeds();
+
+            MapRoomNode node = new MapRoomNode(0, 0);
+            node.room = new RestRoom();
+            AbstractDungeon.setCurrMapNode(node);
+
+            CardCrawlGame.mode = CardCrawlGame.GameMode.GAMEPLAY;
+            BaseMod.logger.info("SyncExecutor created game state (no Exordium)");
+        } catch (Exception e) {
+            BaseMod.logger.error("SyncExecutor createGameIfNeeded: " + e.getMessage());
+        }
+    }
+
+    private static void enterRemoteCombat(String monsterName) {
+        if (AbstractDungeon.getCurrRoom() instanceof MonsterRoom) {
+            BaseMod.logger.info("SyncExecutor already in combat, skip");
+            return;
+        }
+
+        String key = resolveEncounterKey(monsterName);
+        BaseMod.logger.info("SyncExecutor entering combat: " + monsterName + " key=" + key);
+
+        try {
+            MonsterGroup group = MonsterHelper.getEncounter(key);
+            MonsterRoom room = new MonsterRoom();
+            room.monsters = group;
+            AbstractDungeon.getCurrMapNode().room = room;
+            room.onPlayerEntry();
+            BaseMod.logger.info("SyncExecutor combat entered: " + monsterName);
+        } catch (Exception e) {
+            BaseMod.logger.error("SyncExecutor enterRemoteCombat: " + e.getMessage());
+        }
+    }
+
+    private static String resolveEncounterKey(String name) {
+        String lower = name.toLowerCase();
+        if (lower.contains("cultist")) return "Cultist";
+        if (lower.contains("jaw worm")) return "Jaw Worm";
+        if (lower.contains("looter")) return "Looter";
+        if (lower.contains("blue slaver")) return "Blue Slaver";
+        if (lower.contains("red slaver")) return "Red Slaver";
+        if (lower.contains("fungi beast")) return "Fungi Beast";
+        if (lower.contains("gremlin nob")) return "Gremlin Nob";
+        if (lower.contains("lagavulin")) return "Lagavulin";
+        if (lower.contains("sentry")) return "Sentry";
+        if (lower.contains("slime boss")) return "Slime Boss";
+        if (lower.contains("guardian")) return "The Guardian";
+        if (lower.contains("hexaghost")) return "Hexaghost";
+        return name;
     }
 }
