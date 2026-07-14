@@ -121,7 +121,7 @@ crossspire start DEFECT
 
 ### `crossspire play <card_id> [target]`
 
-在战斗中打出一张卡牌。卡牌通过队列管理器发送到对方设备同步执行。
+在战斗中打出一张卡牌。`LocalCapturePatches` 自动捕获 `useCard` 事件，生成 `queue_submit` 发往房主的 `CentralQueueManager` 调度执行。
 
 ```
 crossspire play Strike_R
@@ -168,17 +168,23 @@ crossspire queue
 
 ## 启动脚本
 
-CrossSpire 支持从文件自动加载命令序列，用于自动化测试：
+CrossSpire 支持从文件自动加载命令序列，用于自动化测试和双设备联机：
 
-- **`crossspire_startup.txt`**: 启动时自动执行（位于 Android 存储根目录）
-- **`crossspire_batch.txt`**: 运行时检测到文件变化时逐行执行
-
-每行一条命令，格式与控制台输入一致：
-
-```
-connect ws://10.0.2.2:9876 CROSS
-start IRONCLAD 220644
-play Strike_R
-play Bash
-info
-```
+- **`crossspire_startup.txt`**: 启动时自动执行一次（位于 Android `files/sts/` 目录），内容示例：
+  ```
+  crossspire connect ws://127.0.0.1:9876 CROSS
+  ```
+- **`crossspire_batch.txt`**: 运行时每 5 秒检测一次，存在时逐行执行后删除。适合推送即时命令：
+  ```bash
+  printf "crossspire start IRONCLAD 220644\n" > /tmp/cs_batch.txt
+  adb -s localhost:15555 push /tmp/cs_batch.txt \
+    /storage/emulated/0/Android/data/io.stamethyst/files/sts/crossspire_batch.txt
+  sleep 15
+  printf "fight Cultist\n" > /tmp/cs_batch.txt    # BaseMod 原生命令，触发 MonsterRoom.onPlayerEntry
+  adb -s localhost:15555 push /tmp/cs_batch.txt \
+    /storage/emulated/0/Android/data/io.stamethyst/files/sts/crossspire_batch.txt
+  sleep 10
+  printf "crossspire play Strike_R\n" > /tmp/cs_batch.txt
+  adb -s localhost:15555 push /tmp/cs_batch.txt \
+    /storage/emulated/0/Android/data/io.stamethyst/files/sts/crossspire_batch.txt
+  ```
