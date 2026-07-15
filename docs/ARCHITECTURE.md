@@ -1,4 +1,6 @@
-# CrossSpire — 杀戮尖塔联机Mod架构设计
+# CrossSpire — 杀戮尖塔联机Mod架构设计 (Plan)
+
+> 本文档是 SDD 架构中的 `plan.md`。用户故事、功能需求与验收标准见 [`spec.md`](./spec.md)。
 
 ## 目录
 

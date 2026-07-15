@@ -1,5 +1,15 @@
 # Repository Rules
 
+## SDD Document Map
+
+| 文件 | SDD 角色 | 内容 |
+|------|---------|------|
+| [`docs/spec.md`](docs/spec.md) | spec | 用户故事、功能需求、验收标准 |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | plan | 架构设计、协议、模块定义、数据模型 |
+| `AGENTS.md` | dev-guide | 本文档 — 开发约定与规则 |
+| [`docs/reference/`](docs/reference/) | reference | BaseMod + ModTheSpire API 参考 |
+| [`shared/cross-spire-protocol/protocol-schema.json`](shared/cross-spire-protocol/protocol-schema.json) | data-model | 协议消息 JSON Schema |
+
 ## Core Philosophy
 
 CrossSpire is an open-source multiplayer mod for Slay the Spire 1, designed with a dual-role projection model and future Slay the Spire 2 cross-game compatibility.
