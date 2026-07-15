@@ -114,19 +114,11 @@ public class CombatResultReplayer {
             AbstractCard.CardRarity.valueOf(cardRarity),
             AbstractCard.CardTarget.valueOf(cardTarget));
 
-        AbstractMonster target = null;
-        if (!"self".equals(targetId) && AbstractDungeon.getCurrRoom() != null) {
-            target = AbstractDungeon.getCurrRoom().monsters.getMonster(targetId);
-        }
-
         try {
-            BaseMod.logger.info("CombatResultReplayer INDUCED useCard: card=" + cardId + " target=" + targetId
-                + " player=" + (AbstractDungeon.player != null ? AbstractDungeon.player.name : "null")
-                + " room=" + (AbstractDungeon.getCurrRoom() != null ? AbstractDungeon.getCurrRoom().getClass().getSimpleName() : "null"));
-            AbstractDungeon.player.useCard(stubCard, target, -1);
-            BaseMod.logger.info("CombatResultReplayer INDUCED useCard done: " + cardId);
+            BaseMod.publishOnCardUse(stubCard);
+            BaseMod.logger.info("CombatResultReplayer INDUCED publishOnCardUse: " + cardId);
         } catch (Exception e) {
-            BaseMod.logger.info("CombatResultReplayer useCard failed (" + cardId + "): " + e.getClass().getName() + ": " + e.getMessage());
+            BaseMod.logger.info("CombatResultReplayer publishOnCardUse failed (" + cardId + "): " + e.getClass().getName() + ": " + e.getMessage());
         }
     }
 

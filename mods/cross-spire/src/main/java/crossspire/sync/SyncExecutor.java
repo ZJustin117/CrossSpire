@@ -5,15 +5,10 @@ import com.badlogic.gdx.Gdx;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.megacrit.cardcrawl.characters.AbstractPlayer;
-import com.megacrit.cardcrawl.characters.AbstractPlayer.PlayerClass;
-import com.megacrit.cardcrawl.characters.CharacterManager;
 import com.megacrit.cardcrawl.core.CardCrawlGame;
 import com.megacrit.cardcrawl.dungeons.AbstractDungeon;
 import com.megacrit.cardcrawl.helpers.MonsterHelper;
-import com.megacrit.cardcrawl.helpers.SeedHelper;
-import com.megacrit.cardcrawl.map.MapRoomNode;
 import com.megacrit.cardcrawl.monsters.MonsterGroup;
-import com.megacrit.cardcrawl.rooms.RestRoom;
 import com.megacrit.cardcrawl.rooms.MonsterRoom;
 import crossspire.CrossSpireMod;
 import crossspire.EventSuppression;
@@ -98,48 +93,34 @@ public class SyncExecutor {
         if (ids.size() == 0) return;
 
         final String firstMonster = ids.get(0).getAsString();
-        final String seed = "220644";
         BaseMod.logger.info("SyncExecutor room_enter from " + source.substring(0,8) + " monsters=" + ids);
 
         CombatSyncPatches.suppressBroadcast = true;
 
         Gdx.app.postRunnable(new Runnable() {
             @Override public void run() {
-                EventSuppression.suppressEvents(() -> {
-                    createGameIfNeeded(seed);
-                    enterRemoteCombat(firstMonster);
-                });
+                createGameIfNeeded();
+                if (AbstractDungeon.player != null) {
+                    Gdx.app.postRunnable(new Runnable() {
+                        @Override public void run() {
+                            EventSuppression.suppressEvents(() -> {
+                                enterRemoteCombat(firstMonster);
+                            });
+                            BaseMod.logger.info("SyncExecutor done: screen=" + AbstractDungeon.screen
+                                + " room=" + (AbstractDungeon.getCurrRoom() != null ? AbstractDungeon.getCurrRoom().getClass().getSimpleName() : "null"));
+                        }
+                    });
+                }
             }
         });
     }
 
-    private static void createGameIfNeeded(String seed) {
+    private void createGameIfNeeded() {
         if (AbstractDungeon.player != null && CardCrawlGame.mode == CardCrawlGame.GameMode.GAMEPLAY) {
             BaseMod.logger.info("SyncExecutor game already running, skip create");
             return;
         }
-
-        try {
-            PlayerClass pc = PlayerClass.valueOf("IRONCLAD");
-            CharacterManager mgr = new CharacterManager();
-            AbstractPlayer player = mgr.setChosenCharacter(pc);
-            if (player == null) return;
-
-            if (seed != null && !seed.isEmpty()) SeedHelper.setSeed(seed);
-
-            AbstractDungeon.player = player;
-            CrossSpireMod.localPlayer = player;
-            AbstractDungeon.generateSeeds();
-
-            MapRoomNode node = new MapRoomNode(0, 0);
-            node.room = new RestRoom();
-            AbstractDungeon.setCurrMapNode(node);
-
-            CardCrawlGame.mode = CardCrawlGame.GameMode.GAMEPLAY;
-            BaseMod.logger.info("SyncExecutor created game state (no Exordium)");
-        } catch (Exception e) {
-            BaseMod.logger.error("SyncExecutor createGameIfNeeded: " + e.getMessage());
-        }
+        crossspire.remote.GameStarter.start("IRONCLAD");
     }
 
     private static void enterRemoteCombat(String monsterName) {
@@ -156,9 +137,11 @@ public class SyncExecutor {
             MonsterRoom room = new MonsterRoom();
             room.monsters = group;
 
+            AbstractDungeon.nextRoom = null;
             AbstractDungeon.getCurrMapNode().room = room;
             room.onPlayerEntry();
             AbstractDungeon.nextRoom = null;
+            AbstractDungeon.screen = com.megacrit.cardcrawl.dungeons.AbstractDungeon.CurrentScreen.NONE;
             AbstractDungeon.screen = com.megacrit.cardcrawl.dungeons.AbstractDungeon.CurrentScreen.NONE;
 
             BaseMod.logger.info("SyncExecutor combat entered: " + monsterName);

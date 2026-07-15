@@ -5,6 +5,7 @@ import com.evacipated.cardcrawl.modthespire.lib.SpirePatch;
 import com.evacipated.cardcrawl.modthespire.lib.SpirePostfixPatch;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.megacrit.cardcrawl.dungeons.AbstractDungeon;
 import com.megacrit.cardcrawl.monsters.AbstractMonster;
 import com.megacrit.cardcrawl.rooms.MonsterRoom;
 import crossspire.CrossSpireMod;
@@ -19,6 +20,10 @@ public class CombatSyncPatches {
         public static void Postfix(MonsterRoom __instance) {
             if (suppressBroadcast) {
                 suppressBroadcast = false;
+                RenderSafetyPatches.remoteCombatActive = true;
+                AbstractDungeon.nextRoom = null;
+                if (AbstractDungeon.topLevelEffects != null) AbstractDungeon.topLevelEffects.clear();
+                if (AbstractDungeon.effectList != null) AbstractDungeon.effectList.clear();
                 return;
             }
             if (!CrossSpireMod.isConnected()) return;

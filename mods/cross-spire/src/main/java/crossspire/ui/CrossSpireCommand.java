@@ -165,7 +165,7 @@ public class CrossSpireCommand extends ConsoleCommand {
             return;
         }
         String cardId = tokens[depth + 1];
-        String targetId = tokens.length > depth + 2 ? tokens[depth + 2] : "self";
+        String targetId = tokens.length > depth + 2 ? tokens[depth + 2] : null;
 
         if (AbstractDungeon.player == null) {
             DevConsole.log("Not in combat. Use crossspire start first.");
@@ -176,6 +176,19 @@ public class CrossSpireCommand extends ConsoleCommand {
         if (card == null) {
             DevConsole.log("Card not found: " + cardId);
             return;
+        }
+
+        if (targetId == null) {
+            if (card.target == AbstractCard.CardTarget.ENEMY
+                || card.target == AbstractCard.CardTarget.SELF_AND_ENEMY) {
+                AbstractMonster first = null;
+                for (AbstractMonster m : AbstractDungeon.getCurrRoom().monsters.monsters) {
+                    if (!m.isDeadOrEscaped()) { first = m; break; }
+                }
+                targetId = first != null ? first.id : "self";
+            } else {
+                targetId = "self";
+            }
         }
 
         if (!"self".equals(targetId)) {
