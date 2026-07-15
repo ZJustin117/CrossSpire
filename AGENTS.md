@@ -14,18 +14,11 @@ CrossSpire is an open-source multiplayer mod for Slay the Spire 1, designed with
 - Always use `@SpirePatch(clz = ..., method = ..., paramtypez = ...)` with explicit `paramtypez` to avoid ambiguous method resolution.
 - Use `@SpirePrefixPatch` / `@SpirePostfixPatch` annotations on static inner classes.
 
-### Relay Server (TypeScript, cross-spire-server/)
-
-- Use `ES2022` module system (`type: "module"`).
-- All protocol types defined in `src/protocol.ts`. Java side mirrors these types in `Protocol.java`.
-- The server is a stateless relay — it routes messages, does not interpret game logic.
-- Room storage is in-memory only (no database). Expired rooms cleaned via interval timer.
-
 ### Shared Protocol (shared/cross-spire-protocol/)
 
 - `protocol-schema.json` is the source of truth for message formats.
-- Java and TypeScript implementations derive their types from this schema.
-- When adding new message types, update the JSON schema first, then both language implementations.
+- Java implementation derives types from this schema via `Protocol.java`.
+- When adding new message types, update the JSON schema first, then the Java implementation.
 
 ## Reference Documentation
 
@@ -69,8 +62,8 @@ The `docs/reference/` directory contains API documentation for the two key moddi
 
 ## Protocol Design Rules
 
-- Messages use `type` + `subtype` pattern (not a flat enum).
+- All reference transport uses the `StandardPacket` envelope (see `docs/ARCHITECTURE.md` §17) with fixed header + `operation` + `payload`.
+- Control messages (heartbeat, join/leave, elections) are not encapsulated as standard packets.
 - Every message has a `seq` field (monotonic integer, per-source) for ordering and deduplication.
-- `Request` messages trigger BaseMod events on the receiver. `StateSync` messages suppress them.
 - `fallback.effects` is always an array — even for single-effect cards — for consistency.
-- Protocol changes should be backward-compatible within a major version. Breaking changes bump the protocol version in `server.ts`.
+- Protocol changes should be backward-compatible within a major version.

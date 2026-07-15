@@ -1066,10 +1066,6 @@ A.ownerId == A.hostId 时:
 | 图主 | 图主持有对象全部变空引用 → 自动保存进度等待重连 → 可投票新图主（暂不实现） |
 | 房主 | 心跳检测全体超时 → 投票选新房主 → 新房主拉取完整状态快照 → 重建中央队列和路由 |
 
-### 中继服务器
-
-在当前阶段使用中继服务器作为房主通道。服务器路由消息到房间内所有人，与星型拓扑逻辑一致。
-
 ## 协议消息定义
 
 ### 标准包（Standard Packet）
@@ -1333,17 +1329,10 @@ CrossSpire/
 ├── ARCHITECTURE.md              # 本文档
 ├── AGENTS.md                    # 仓库规则 + AI Agent 准则
 ├── .gitignore
-├── cross-spire-server/          # 中继服务器 (Node.js/TypeScript)
-│   ├── package.json
-│   ├── tsconfig.json
-│   └── src/
-│       ├── server.ts            # Express + WebSocket 主入口
-│       ├── store.ts             # 房间/票据 内存存储
-│       ├── sequence.ts          # 序列号管理
-│       └── protocol.ts          # TypeScript 协议类型
 ├── shared/                       # 跨语言共享定义
 │   └── cross-spire-protocol/
-│       └── protocol-schema.json # JSON Schema 协议定义
+│       ├── protocol-schema.json # JSON Schema 协议定义
+│       └── entity-mappings/     # 塔1↔塔2 实体映射表
 └── mods/                        # STS1 Mod (Java, ModTheSpire + BaseMod)
     └── cross-spire/
         ├── build.gradle.kts
@@ -1355,7 +1344,6 @@ CrossSpire/
             ├── network/
             │   ├── RoomHostClient.java          # 房主连接管理（星型拓扑）
             │   ├── HeartbeatManager.java        # 心跳检测 + 掉线处理
-            │   ├── RelayClient.java             # 中继服务器回退
             │   └── Protocol.java                # 消息 POJO + 序列化
             ├── reference/
             │   ├── Reference.java               # 引用抽象基类
@@ -1409,7 +1397,7 @@ CrossSpire/
 1. **引用系统语言无关**：Reference<T> 是协议层抽象，Java 和 C# 均可实现
 2. **内容校验跨游戏**：相同 resource_hash 的实体在塔1和塔2应效果一致，可直接本地引用；否则走远程引用+fallback
 3. **实体映射表**：`shared/cross-spire-protocol/entity-mappings/` 维护塔1↔塔2的 card_id / relic_id / character_id 映射
-4. **中继服务器不关心游戏版本**：协议上层转发，不做游戏逻辑
+4. **协议语言无关**：所有消息使用 JSON，Java 和 C# 均可处理。房主路由模式不关心游戏版本
 5. **塔2 Mod 预留相同的模块结构**：C# 实现 `crossspire` 命名空间，复用相同的协议定义
 
 ### 塔2 实现要点（未来）
