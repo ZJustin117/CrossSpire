@@ -28,7 +28,7 @@ public class SuppressBaseModPatches {
     public static class SuppressOnPlayerDamaged {
         @SpirePrefixPatch
         public static SpireReturn<Integer> Prefix(int __amount, DamageInfo __info) {
-            if (EventSuppression.isSuppressed()) return SpireReturn.Return(0);
+            if (EventSuppression.isSuppressed()) return SpireReturn.Return(__amount);
             return SpireReturn.Continue();
         }
     }

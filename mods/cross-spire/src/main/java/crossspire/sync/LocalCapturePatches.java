@@ -7,6 +7,7 @@ import com.megacrit.cardcrawl.cards.AbstractCard;
 import com.megacrit.cardcrawl.characters.AbstractPlayer;
 import com.megacrit.cardcrawl.monsters.AbstractMonster;
 import crossspire.CrossSpireMod;
+import crossspire.EventSuppression;
 import crossspire.network.Protocol;
 import crossspire.reference.ContentValidator;
 
@@ -18,6 +19,7 @@ public class LocalCapturePatches {
         @SpirePostfixPatch
         public static void Postfix(AbstractPlayer __instance, AbstractCard card, AbstractMonster target, int energyOnUse) {
             if (!CrossSpireMod.isConnected()) return;
+            if (EventSuppression.isSuppressed()) return;
             if (CrossSpireMod.playerId.isEmpty() || CrossSpireMod.hostId.isEmpty()) return;
 
             Protocol.QueueSubmitMessage pkt = new Protocol.QueueSubmitMessage();

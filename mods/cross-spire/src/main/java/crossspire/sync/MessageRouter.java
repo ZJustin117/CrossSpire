@@ -1,6 +1,7 @@
 package crossspire.sync;
 
 import basemod.BaseMod;
+import com.badlogic.gdx.Gdx;
 import com.google.gson.JsonObject;
 import crossspire.CrossSpireMod;
 import crossspire.combat.CombatResultReplayer;
@@ -93,8 +94,6 @@ public class MessageRouter {
             }
         } else if ("monster_intent".equals(type)) {
             syncExecutor.handleSync("monster_intent", null, 1, rawMessage);
-        } else if ("combat_result".equals(type)) {
-            syncExecutor.handleCombatResult(rawMessage);
         } else if ("event_result".equals(type)) {
             syncExecutor.handleEventResult(rawMessage);
         } else if ("reference_migrate".equals(type)) {
@@ -111,11 +110,20 @@ public class MessageRouter {
             handlePlayerEndTurn();
         } else if ("queue_submit".equals(type)) {
             handleQueueSubmit(rawMessage);
+            QueueDisplay.resetEndTurn();
         } else if ("queue_update".equals(type)) {
             Protocol.QueueUpdateMessage upd = Protocol.GSON.fromJson(rawMessage, Protocol.QueueUpdateMessage.class);
             QueueDisplay.onUpdate(upd.entries);
         } else if ("queue_empty".equals(type)) {
             QueueDisplay.onQueueEmpty();
+            Gdx.app.postRunnable(new Runnable() {
+                @Override public void run() {
+                    if (AbstractDungeon.overlayMenu != null
+                        && AbstractDungeon.overlayMenu.endTurnButton != null) {
+                        AbstractDungeon.overlayMenu.endTurnButton.enable();
+                    }
+                }
+            });
         }
     }
 
