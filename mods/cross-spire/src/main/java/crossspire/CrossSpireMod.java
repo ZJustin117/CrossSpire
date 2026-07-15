@@ -139,9 +139,7 @@ public class CrossSpireMod {
                 p2pManager.broadcast(message);
             }
         } else {
-            if (!hostId.isEmpty()) {
-                p2pManager.send(hostId, message);
-            }
+            p2pManager.send("host", message);
         }
     }
 
@@ -160,8 +158,14 @@ public class CrossSpireMod {
         }
         BaseMod.logger.info("CrossSpire connect() playerId=" + playerId.substring(0, 8)
             + " isRoomHost=" + ServerPicker.isRoomHost);
-        p2pManager.start();
         if (ServerPicker.isRoomHost) {
+            p2pManager.start();
+            p2pManager.setOnPeerConnectedListener(new P2PManager.OnPeerConnectedListener() {
+                @Override
+                public void onPeerConnected(String peerId) {
+                    onPlayerConnected(peerId);
+                }
+            });
             hostId = playerId;
             roomHost = new RoomHost(playerId);
             lobbyScreen.setStatus("Hosting on :" + p2pManager.getPort());
@@ -203,5 +207,14 @@ public class CrossSpireMod {
             p2pManager.broadcast(joined.toString());
         }
         RemotePlayerRegistry.register(remotePlayerId);
+        lobbyState.onPlayerJoined(remotePlayerId);
+
+        if (roomHost != null) {
+            JsonObject roomState = new JsonObject();
+            roomState.addProperty("type", "room_state");
+            roomState.addProperty("code", ServerPicker.roomCode);
+            roomState.addProperty("host", hostId);
+            send(roomState.toString());
+        }
     }
 }

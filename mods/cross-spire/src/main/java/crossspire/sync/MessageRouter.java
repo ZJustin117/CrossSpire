@@ -39,7 +39,22 @@ public class MessageRouter {
         JsonObject msg = Protocol.GSON.fromJson(rawMessage, JsonObject.class);
         String type = msg.get("type").getAsString();
 
-        if ("connected".equals(type) || "room_state".equals(type) || "player_joined".equals(type)) {
+        if ("connected".equals(type)) {
+            return;
+        }
+
+        if ("room_state".equals(type)) {
+            handleRoomState(msg);
+            return;
+        }
+
+        if ("player_joined".equals(type)) {
+            handlePlayerJoined(msg);
+            return;
+        }
+
+        if ("player_left".equals(type)) {
+            handlePlayerLeft(msg);
             return;
         }
 
@@ -263,6 +278,42 @@ public class MessageRouter {
             BaseMod.logger.info("MessageRouter animation_sync: " + playerId.substring(0, 8)
                 + " -> " + anim);
         }
+    }
+
+    private void handleRoomState(JsonObject msg) {
+        if (msg.has("host") && !msg.get("host").isJsonNull()) {
+            CrossSpireMod.hostId = msg.get("host").getAsString();
+            BaseMod.logger.info("MessageRouter room_state host: " + CrossSpireMod.hostId.substring(0, 8));
+        }
+        if (msg.has("players")) {
+            com.google.gson.JsonArray players = msg.getAsJsonArray("players");
+            CrossSpireMod.lobbyState.onRoomJoined(players.size());
+            RemotePlayerRegistry.clear();
+            for (int i = 0; i < players.size(); i++) {
+                String pid = players.get(i).getAsString();
+                if (!pid.equals(CrossSpireMod.playerId)) {
+                    RemotePlayerRegistry.register(pid);
+                    CrossSpireMod.lobbyState.onPlayerJoined(pid);
+                }
+            }
+        }
+        String code = msg.has("code") ? msg.get("code").getAsString() : "";
+        CrossSpireMod.lobbyScreen.setStatus("In room " + code);
+        ResourceRegistryTracker.sendMyRegistry();
+    }
+
+    private void handlePlayerJoined(JsonObject msg) {
+        String joinedId = msg.get("playerId").getAsString();
+        BaseMod.logger.info("MessageRouter player_joined: " + joinedId.substring(0, 8));
+        RemotePlayerRegistry.register(joinedId);
+        CrossSpireMod.lobbyState.onPlayerJoined(joinedId);
+    }
+
+    private void handlePlayerLeft(JsonObject msg) {
+        String leftId = msg.get("playerId").getAsString();
+        BaseMod.logger.info("MessageRouter player_left: " + leftId.substring(0, 8));
+        RemotePlayerRegistry.remove(leftId);
+        onPlayerLeft(leftId);
     }
 
     public void onPlayerLeft(String playerId) {

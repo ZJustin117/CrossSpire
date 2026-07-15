@@ -14,7 +14,21 @@ public class P2PManager {
     private final String advertisedIp;
     private ServerSocket serverSocket;
     private final Map<String, Socket> connections = new ConcurrentHashMap<String, Socket>();
+    private OnPeerConnectedListener peerConnectedListener = null;
     private boolean running = false;
+
+    public interface OnPeerConnectedListener {
+        void onPeerConnected(String peerId);
+    }
+
+    public void setOnPeerConnectedListener(OnPeerConnectedListener listener) {
+        this.peerConnectedListener = listener;
+    }
+
+    private static String sid(String id) {
+        if (id == null) return "?";
+        return id.length() <= 8 ? id : id.substring(0, 8);
+    }
 
     public P2PManager() {
         java.util.Properties cfg = loadConfig();
@@ -55,8 +69,11 @@ public class P2PManager {
                             String peerId = readPeerId(client);
                             if (peerId != null) {
                                 connections.put(peerId, client);
-                                BaseMod.logger.info("P2PManager accepted connection from " + peerId.substring(0, 8));
+                                BaseMod.logger.info("P2PManager accepted connection from " + sid(peerId));
                                 startReader(peerId, client);
+                                if (peerConnectedListener != null) {
+                                    peerConnectedListener.onPeerConnected(peerId);
+                                }
                             }
                         } catch (IOException e) {
                             if (running) BaseMod.logger.error("P2PManager accept error: " + e.getMessage());
@@ -78,7 +95,7 @@ public class P2PManager {
             w.write(CrossSpireMod.playerId + "\n");
             w.flush();
             connections.put(peerId, socket);
-            BaseMod.logger.info("P2PManager connected to " + peerId.substring(0, 8) + " @" + host + ":" + port);
+            BaseMod.logger.info("P2PManager connected to " + sid(peerId) + " @" + host + ":" + port);
             startReader(peerId, socket);
         } catch (IOException e) {
             BaseMod.logger.error("P2PManager connect error: " + e.getMessage());
@@ -134,7 +151,7 @@ public class P2PManager {
         Protocol.HelloMessage hello = Protocol.GSON.fromJson(rawMessage, Protocol.HelloMessage.class);
         if (hello.source == null || hello.source.equals(CrossSpireMod.playerId)) return;
         if (!connections.containsKey(hello.source)) {
-            BaseMod.logger.info("P2PManager hello from " + hello.source.substring(0, 8) + " @" + hello.ip + ":" + hello.port);
+            BaseMod.logger.info("P2PManager hello from " + sid(hello.source) + " @" + hello.ip + ":" + hello.port);
             connectTo(hello.source, hello.ip, hello.port);
         }
 
@@ -142,7 +159,7 @@ public class P2PManager {
             for (Protocol.MemberInfo peer : hello.peers) {
                 if (peer.id == null || peer.id.equals(CrossSpireMod.playerId)) continue;
                 if (connections.containsKey(peer.id)) continue;
-                BaseMod.logger.info("P2PManager auto-connecting to peer: " + peer.id.substring(0, 8) + " @" + peer.ip + ":" + peer.port);
+                BaseMod.logger.info("P2PManager auto-connecting to peer: " + sid(peer.id) + " @" + peer.ip + ":" + peer.port);
                 connectTo(peer.id, peer.ip, peer.port);
             }
         }
@@ -169,13 +186,13 @@ public class P2PManager {
                         routeP2pMessage(line);
                     }
                 } catch (IOException e) {
-                    BaseMod.logger.info("P2PManager " + peerId.substring(0, 8) + " disconnected");
+                    BaseMod.logger.info("P2PManager " + sid(peerId) + " disconnected");
                 } finally {
                     connections.remove(peerId);
                     try { socket.close(); } catch (IOException ignored) {}
                 }
             }
-        }, "P2P-Reader-" + peerId.substring(0, 8)).start();
+        }, "P2P-Reader-" + sid(peerId)).start();
     }
 
     private void routeP2pMessage(String line) {
