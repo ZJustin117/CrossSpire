@@ -120,11 +120,13 @@ public class CombatResultReplayer {
         }
 
         try {
+            BaseMod.logger.info("CombatResultReplayer INDUCED useCard: card=" + cardId + " target=" + targetId
+                + " player=" + (AbstractDungeon.player != null ? AbstractDungeon.player.name : "null")
+                + " room=" + (AbstractDungeon.getCurrRoom() != null ? AbstractDungeon.getCurrRoom().getClass().getSimpleName() : "null"));
             AbstractDungeon.player.useCard(stubCard, target, -1);
-            BaseMod.logger.info("CombatResultReplayer INDUCED useCard: " + cardId
-                + " → " + targetId);
+            BaseMod.logger.info("CombatResultReplayer INDUCED useCard done: " + cardId);
         } catch (Exception e) {
-            BaseMod.logger.info("CombatResultReplayer useCard failed (" + cardId + "): " + e.getMessage());
+            BaseMod.logger.info("CombatResultReplayer useCard failed (" + cardId + "): " + e.getClass().getName() + ": " + e.getMessage());
         }
     }
 

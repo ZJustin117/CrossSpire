@@ -37,8 +37,10 @@ public class GameStarter {
 
         if (seed != null && seed.length() > 0) {
             SeedHelper.setSeed(seed);
-        } else if (SeedHelper.cachedSeed == null) {
-            SeedHelper.setSeed("");
+        } else {
+            long ts = System.currentTimeMillis();
+            String fallback = String.valueOf(ts % 900000L + 100000L);
+            SeedHelper.setSeed(fallback);
         }
 
         EventSuppression.suppressEvents(() -> {

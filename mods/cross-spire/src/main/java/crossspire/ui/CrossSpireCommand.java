@@ -13,6 +13,8 @@ import crossspire.network.Protocol;
 import crossspire.remote.RemotePlayerRegistry;
 import crossspire.remote.RemotePlayerState;
 import crossspire.sync.QueueSubmitBuilder;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 
 public class CrossSpireCommand extends ConsoleCommand {
 
@@ -146,7 +148,13 @@ public class CrossSpireCommand extends ConsoleCommand {
         DevConsole.log("Starting " + charName + " seed=" + (seed.isEmpty() ? "(auto)" : seed));
         try {
             crossspire.remote.GameStarter.start(charName, seed.isEmpty() ? null : seed);
+            BaseMod.logger.info("CrossSpire start result: player=" + (AbstractDungeon.player != null ? AbstractDungeon.player.name : "null")
+                + " mode=" + CardCrawlGame.mode + " floor=" + AbstractDungeon.floorNum);
         } catch (Exception e) {
+            BaseMod.logger.error("CrossSpire start failed: " + e.getClass().getName() + ": " + e.getMessage());
+            StringWriter sw = new StringWriter();
+            e.printStackTrace(new PrintWriter(sw));
+            BaseMod.logger.error("CrossSpire start stack: " + sw.toString());
             DevConsole.log("Start failed: " + e.getMessage());
         }
     }
