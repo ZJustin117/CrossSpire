@@ -8,14 +8,15 @@ import com.megacrit.cardcrawl.actions.common.ApplyPowerAction;
 import com.megacrit.cardcrawl.cards.AbstractCard;
 import com.megacrit.cardcrawl.cards.DamageInfo;
 import com.megacrit.cardcrawl.dungeons.AbstractDungeon;
-import com.megacrit.cardcrawl.helpers.CardLibrary;
 import com.megacrit.cardcrawl.monsters.AbstractMonster;
 import com.megacrit.cardcrawl.potions.AbstractPotion;
 import com.megacrit.cardcrawl.powers.AbstractPower;
 import com.megacrit.cardcrawl.relics.AbstractRelic;
 import crossspire.EventSuppression;
 import crossspire.CrossSpireMod;
+import crossspire.network.PacketOperation;
 import crossspire.network.Protocol;
+import crossspire.network.StandardPacket;
 
 public class CombatResultReplayer {
 
@@ -46,6 +47,8 @@ public class CombatResultReplayer {
     }
 
     private void replayInduced(JsonArray opSeq, JsonArray effects) {
+        EffectCapture.startCapture();
+
         for (JsonElement el : opSeq) {
             JsonObject op = el.getAsJsonObject();
             String step = op.has("step") ? op.get("step").getAsString() : "";
@@ -65,6 +68,8 @@ public class CombatResultReplayer {
             }
         }
 
+        Protocol.EffectDescription[] newEffects = EffectCapture.stopCapture();
+
         EventSuppression.suppressEvents(() -> {
             for (JsonElement el : effects) {
                 JsonObject eff = el.getAsJsonObject();
@@ -74,6 +79,25 @@ public class CombatResultReplayer {
                 applyEffect(kind, target, amount, eff);
             }
         });
+
+        if (newEffects.length > 0 && CrossSpireMod.isConnected()) {
+            BaseMod.logger.info("CombatResultReplayer submitting " + newEffects.length + " new induced effects");
+            Protocol.CombatResultPayload payload = new Protocol.CombatResultPayload();
+            payload.effects = newEffects;
+            payload.operationSequence = new Protocol.OperationStep[0];
+
+            StandardPacket pkt = new StandardPacket();
+            pkt.packetId = CrossSpireMod.playerId + "-" + CrossSpireMod.nextSeq();
+            pkt.source = CrossSpireMod.playerId;
+            pkt.seq = CrossSpireMod.nextSeq();
+            pkt.timestamp = System.currentTimeMillis();
+            pkt.refId = "combat:induced@" + CrossSpireMod.playerId;
+            pkt.ownerId = CrossSpireMod.playerId;
+            pkt.operation = PacketOperation.COMBAT_RESULT;
+            pkt.payload = Protocol.GSON.toJsonTree(payload).getAsJsonObject();
+
+            CrossSpireMod.send(StandardPacket.toJson(pkt));
+        }
     }
 
     private void inducedUseCard(JsonObject op) {
@@ -81,10 +105,14 @@ public class CombatResultReplayer {
         String targetId = op.has("target") ? op.get("target").getAsString() : "self";
         if (cardId.isEmpty()) return;
 
-        AbstractCard template = CardLibrary.getCard(cardId);
-        AbstractCard stubCard = template != null ? template.makeCopy()
-            : new CardStub(cardId, 1, AbstractCard.CardType.ATTACK,
-                AbstractCard.CardRarity.BASIC, AbstractCard.CardTarget.ENEMY);
+        String cardType = op.has("card_type") ? op.get("card_type").getAsString() : "ATTACK";
+        String cardRarity = op.has("card_rarity") ? op.get("card_rarity").getAsString() : "BASIC";
+        String cardTarget = op.has("card_target") ? op.get("card_target").getAsString() : "ENEMY";
+
+        AbstractCard stubCard = new CardStub(cardId, 1,
+            AbstractCard.CardType.valueOf(cardType),
+            AbstractCard.CardRarity.valueOf(cardRarity),
+            AbstractCard.CardTarget.valueOf(cardTarget));
 
         AbstractMonster target = null;
         if (!"self".equals(targetId) && AbstractDungeon.getCurrRoom() != null) {
@@ -313,8 +341,8 @@ public class CombatResultReplayer {
                 .getConstructor(com.megacrit.cardcrawl.core.AbstractCreature.class, int.class)
                 .newInstance(getPlayer(), amount);
         } catch (Exception e) {
-            BaseMod.logger.error("CombatResultReplayer resolvePower failed (" + powerId + "): " + e.getMessage());
-            return null;
+            BaseMod.logger.info("CombatResultReplayer resolvePower fallback to PowerStub: " + powerId);
+            return new PowerStub(powerId, amount);
         }
     }
 }

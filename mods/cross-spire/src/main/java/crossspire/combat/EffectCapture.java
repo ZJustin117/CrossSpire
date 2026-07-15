@@ -16,9 +16,11 @@ public final class EffectCapture {
         capturing = true;
     }
 
-    public static void stopCapture() {
+    public static Protocol.EffectDescription[] stopCapture() {
         capturing = false;
+        Protocol.EffectDescription[] result = captured.toArray(new Protocol.EffectDescription[0]);
         captured.clear();
+        return result;
     }
 
     public static void record(String kind, String target, int amount) {

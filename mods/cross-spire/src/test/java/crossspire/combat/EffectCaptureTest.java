@@ -60,4 +60,20 @@ public class EffectCaptureTest {
         Protocol.EffectDescription[] effects = EffectCapture.getCaptured();
         assertEquals("should have no effects when not capturing", 0, effects.length);
     }
+
+    @Test
+    public void shouldReturnCapturedEffectsBeforeClear() {
+        EffectCapture.startCapture();
+        EffectCapture.record("damage", "monster_0", 6);
+        EffectCapture.record("gain_block", "self", 5);
+
+        Protocol.EffectDescription[] effects = EffectCapture.stopCapture();
+        assertNotNull(effects);
+        assertEquals("should return captured effects", 2, effects.length);
+        assertEquals("damage", effects[0].kind);
+        assertEquals(6, effects[0].amount);
+        assertEquals("gain_block", effects[1].kind);
+
+        assertEquals("should be empty after stopCapture", 0, EffectCapture.getCaptured().length);
+    }
 }
