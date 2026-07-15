@@ -48,20 +48,20 @@ CrossSpire 是一个开源的杀戮尖塔1联机Mod，目标：
 | 房主 | Room Host | **网络路由角色**。维护到所有客户端的连接（星型拓扑，O(n) 连接）。所有客户端间消息经房主转发。房主维护中央待打出队列并负责调度。房主**不执行游戏逻辑**（除非房主本人恰好是该逻辑的所有者） |
 | 图主 | Stage Host | **游戏逻辑角色**。当前阶段（Act + Floor）地图/事件/怪物的**强所有者**。其他人只能对此建立远程引用（不允许本地引用）。由所有成员投票选定。图主可以就是房主，但两类角色可分离；房主负责把消息路由到位，图主负责在自己的机器上执行地图/怪物逻辑 |
 | 诱导重放 | Induced Replay | 非发送者收到 `combat_result` 时的本地处理模式。将 `operation_sequence` 中的步骤转化为 BaseMod 事件（`publishOnCardUse` 等），触发本地引擎自然感知该动作的发生。重放的 stub 动作本身不改变游戏状态（不扣第二次血），但由此触发的本地遗物/能力正常执行真实逻辑，产生新效果 |
-| 标准包 | Standard Packet | 待打出卡牌的提交包，包含 `{packet_id, sender_id, owner_id, card_id, resource_hash, target}`。客户端发往房主，由房主插入中央队列并管理生命周期 |
+| 标准包 | Standard Packet | 本 Mod 中所有引用（卡牌/遗物/怪物/事件/玩家/素材）的网络传输统一封装。固定头部 `{packet_id, source, seq, timestamp, ref_id, owner_id, resource_hash?, operation}` + `operation` 特定的 `payload`。标准包经房主路由，引用系统据此完成解引用、诱导重放、状态同步等所有操作。控制消息（心跳、加入/离开、投票等）不属于标准包，保持独立格式 |
 
 ### 操作关系
 
 ```
-远程引用解引用（全经房主路由）:
+远程引用解引用（全经房主路由，所有消息为标准包）:
   A 持有指向 C 对象的远程引用
     → A 调用 ref.dereference(args)
     → 引用系统识别为 REMOTE
-    → A → 房主: invoke(refId, ownerId=C, args)
-    → 房主 → C: invoke(refId, args)
+    → A → 房主: StandardPacket { operation: invoke, owner_id: C, payload: { trigger, args } }
+    → 房主转发 → C
     → C 本地执行，触发钩子
-    → C → 房主: invoke_result(refId, effects)
-    → 房主 → A: invoke_result(refId, effects)
+    → C → 房主: StandardPacket { operation: invoke_result, owner_id: A, payload: { effects, operation_sequence } }
+    → 房主转发 → A
     → A 渲染结果（不触发钩子）
 
 本地引用解引用:
@@ -72,10 +72,9 @@ CrossSpire 是一个开源的杀戮尖塔1联机Mod，目标：
 
 房主就是所有者时（最短路径）:
   A 持有指向房主/B 对象的远程引用
-    → A → 房主: invoke(refId, ownerId=B)
-    → 房主识别 ownerId=B → 发现 B 就是自己
-    → 房主本地执行，触发钩子
-    → 房主 → A: invoke_result(refId, effects)
+    → A → 房主: StandardPacket { operation: invoke, owner_id: B }
+    → 房主识别 owner_id == 自己 → 本地执行，触发钩子
+    → 房主 → A: StandardPacket { operation: invoke_result }
     → 仅 1 次网络往返（而非 A→房主→B→房主→A 的 2 次）
 ```
 
@@ -347,35 +346,33 @@ relicRef.triggerOn("onPlayerDamaged"); // 玩家受伤时触发
 5. 队列清空后才允许结束回合
 ```
 
-### 标准包结构
+### 协议消息（使用标准包）
+
+队列相关消息是标准包（参见 §17 协议消息定义）中 `operation` 为 `queue_submit` / `queue_update` 的实例。在此仅列出 payload 字段：
 
 ```typescript
-interface QueueSubmit {
-  type: "queue_submit";
-  sender_id: string;       // 提交者（打出卡牌的玩家）
-  owner_id: string;        // 卡牌所有者（谁负责解引用）
-  seq: number;             // 提交者序列号
-  card_id: string;         // 卡牌 ID
-  resource_hash: string;   // 内容校验用哈希
+// operation = "queue_submit" 的 payload
+interface QueueSubmitPayload {
+  card_id: string;
   target: string;          // 游戏内目标 "monster_0" | "player_b" | "self"
-  timestamp: number;       // 出牌时间戳
 }
 
-interface QueueUpdate {
-  type: "queue_update";
-  source: string;          // 房主 ID
+// operation = "queue_update" 的 payload
+interface QueueUpdatePayload {
   entries: QueueEntry[];   // 完整队列快照
 }
 
 interface QueueEntry {
-  packet_id: string;       // sender_id + seq
-  sender_id: string;
-  owner_id: string;
+  packet_id: string;       // sender_id + seq (从标准包头部提取)
+  source: string;          // 提交者 (从标准包头部提取)
+  owner_id: string;        // 卡牌所有者 (从标准包头部提取)
   card_id: string;
   target: string;
   status: "pending" | "executing" | "done";
 }
 ```
+
+标准包头部提供的字段（`packet_id`, `source`, `owner_id`, `resource_hash`, `timestamp`）与 payload 组合成完整的信息，不再在 payload 中重复。
 
 ### 调度流程
 
@@ -574,43 +571,9 @@ AfterMonsterTurns: @SpirePostfixPatch AbstractPlayer.applyStartOfTurnPowers()
 
 ### 选项可用性
 
-图主在 `event_interface` 中标记每个选项的 `enabled` 状态（如需要金币时金币不足则禁选）。客户端根据此状态灰显不可用选项，防止无效选择。
+图主在 `event_interface` 标准包 payload 中标记每个选项的 `enabled` 状态（如需要金币时金币不足则禁选）。客户端根据此状态灰显不可用选项，防止无效选择。
 
-### 协议消息
-
-```typescript
-// 图主广播事件界面
-interface EventInterface {
-  type: "event_interface";
-  event_id: string;
-  name: string;
-  description: string;
-  options: EventOption[];
-  image_ref?: string;       // 素材引用，走 resource_request 获取
-  phase_key?: string;       // PhasedEvent 当前阶段
-}
-
-interface EventOption {
-  index: number;
-  text: string;
-  enabled: boolean;
-}
-
-// 玩家选择选项
-interface EventSelect {
-  type: "event_select";
-  source: string;
-  option_index: number;
-}
-
-// 事件结果广播
-interface EventResult {
-  type: "event_result";
-  result_type: "done" | "combat" | "next_phase";
-  effects?: EffectDescription[];    // 事件产出的效果（获得遗物/药水/金币/卡牌/HP变化等）
-  next_phase?: string;              // 若 transitionKey，新阶段 key
-}
-```
+事件相关标准包的 payload 结构见 §17 协议消息定义。
 
 ## 所有者交互选择
 
@@ -655,34 +618,7 @@ interface EventResult {
 7. 所有者收到选择结果 → 继续执行 invoke 的剩余逻辑 → 产出 invoke_result
 ```
 
-### 协议消息
-
-```typescript
-interface InteractRequest {
-  type: "interact_request";
-  target: string;            // 调用方 ID（房主据此路由回原调用方）
-  invoke_id: string;         // 关联的 invoke 请求 ID
-  select_type: "card_select" | "hand_select" | "grid_select" | "relic_select" | "target_select";
-  prompt_text: string;
-  options: SelectOption[];   // 可选对象列表
-  min_select: number;
-  max_select: number;
-}
-
-interface SelectOption {
-  id: string;                // card_id / relic_id / target_id
-  name: string;              // 显示名称
-  description?: string;      // 可选描述
-  texture_ref?: string;      // 素材引用（若本地不存在则按需请求）
-}
-
-interface InteractResponse {
-  type: "interact_response";
-  target: string;            // 所有者 ID（房主据此路由回所有者）
-  invoke_id: string;
-  selected: string[];        // 选中对象的 ID 列表
-}
-```
+交互选择标准包的 payload 结构见 §17 协议消息定义。
 
 ### 超时处理
 
@@ -976,20 +912,20 @@ RemoteAssetCache
 
 ### 素材协议消息
 
-素材消息是独立的顶层 `type`，用于在玩家之间传递 Mod 卡牌/遗物/角色等视觉素材。
+素材消息使用标准包格式（§17），用于在玩家之间传递 Mod 卡牌/遗物/角色等视觉素材。素材通过 `owner_id` 路由到来源方或请求方。
 
-| 消息类型 | 方向 | 说明 |
-|----------|------|------|
+| operation | 方向 | 说明 |
+|-----------|------|------|
 | `resource_registry` | C→房主→全员 | 连接时发送本地拥有的素材清单 |
-| `resource_request` | C→房主→特定C | 请求特定素材 (由 `target` 字段指定接收方) |
+| `resource_request` | C→房主→特定C | 请求特定素材 (由 `owner_id` 路由) |
 | `resource_response` | 特定C→房主→请求方 | 素材数据响应 |
 | `animation_sync` | C→房主→全员 | 角色动画切换通知 |
 
+以下为各 operation 的 payload 结构（标准包头部字段 `source`、`owner_id`、`ref_id` 不重复列出）：
+
 ```typescript
-// 素材注册 — 连接时交换一次
-interface ResourceRegistry {
-  type: "resource_registry";
-  source: string;
+// resource_registry payload
+interface ResourceRegistryPayload {
   cards: string[];        // 本地 CardLibrary 拥有的 card_id
   relics: string[];       // 本地 RelicLibrary 拥有的 relic_id
   powers: string[];       // 本地拥有的 power_id
@@ -997,11 +933,8 @@ interface ResourceRegistry {
   characters: string[];   // 本地拥有的角色骨架
 }
 
-// 素材请求 — 懒加载触发，点对点定向
-interface ResourceRequest {
-  type: "resource_request";
-  source: string;
-  target: string;         // 素材来源方 player_id
+// resource_request payload
+interface ResourceRequestPayload {
   resource_type: "card_texture" | "card_large" | "card_small"
                | "relic_texture" | "power_icon48" | "power_icon84"
                | "potion_texture" | "character_skeleton"
@@ -1009,11 +942,8 @@ interface ResourceRequest {
   resource_id: string;    // 如 "Strike_R" 或 "IRONCLAD"
 }
 
-// 素材响应 — 包含 base64 编码的素材数据
-interface ResourceResponse {
-  type: "resource_response";
-  source: string;
-  target: string;
+// resource_response payload
+interface ResourceResponsePayload {
   resource_type: string;
   resource_id: string;
   mime: string;           // "image/png" | "application/json" | "text/plain"
@@ -1021,10 +951,8 @@ interface ResourceResponse {
   checksum: string;       // SHA-256，用于缓存校验
 }
 
-// 动画同步 — 仅在动画切换时推送
-interface AnimationSync {
-  type: "animation_sync";
-  source: string;
+// animation_sync payload
+interface AnimationSyncPayload {
   animation: string;      // "Idle", "Attack", "Hit" 等 Spine 动画名
   track: number;          // track index
   loop: boolean;
@@ -1126,136 +1054,259 @@ A.ownerId == A.hostId 时:
 
 ## 协议消息定义
 
-### 顶层信封
+### 标准包（Standard Packet）
+
+本 Mod 中所有引用对象（卡牌/遗物/怪物/事件/玩家/素材）的网络传输统一封装为标准包。控制消息（心跳、加入/离开、投票等）不属于标准包，保持独立格式。
 
 ```typescript
-interface Message {
-  type: string;          // 消息类型
-  source: string;        // 发送方 ID
-  seq: number;           // 单调序列号
-  target?: string;       // 定向目标 ID（仅 invoke/invoke_result/resource 类消息使用）
-  timestamp: number;     // 发送时间戳
-  // ... type-specific fields
+interface StandardPacket {
+  // ===== 固定头部（所有标准包共有）=====
+  packet_id: string;       // source + seq，唯一标识
+  source: string;          // 发送方 ID
+  seq: number;             // 单调序列号
+  timestamp: number;       // 发送时间戳
+
+  // ===== 引用标识（所有引用传输共有）=====
+  ref_id: string;          // 引用唯一标识 "card:Strike_R@playerA"
+                           //   "monster:Cultist@stageHost"、"event:BigFish@stageHost"
+                           //   "player:playerB@playerB"、"relic:Vajra@playerA"
+  owner_id: string;        // 引用所有者 ID（房主据此路由）
+  resource_hash?: string;  // 内容校验哈希（SHA-256 of resource bytecode）
+
+  // ===== 操作 =====
+  operation: PacketOperation;
+
+  // ===== 操作载荷 =====
+  payload: any;
 }
+
+// operation 枚举
+type PacketOperation =
+  // 队列
+  | "queue_submit" | "queue_update" | "queue_empty"
+  // 引用/调用
+  | "invoke" | "invoke_result" | "reference_register" | "reference_migrate"
+  // 战斗/状态
+  | "combat_result" | "monster_intent" | "player_state" | "full_snapshot"
+  // 事件
+  | "event_interface" | "event_select" | "event_result"
+  // 交互选择
+  | "interact_request" | "interact_response"
+  // 素材
+  | "resource_registry" | "resource_request" | "resource_response" | "animation_sync";
 ```
 
-### 队列消息
+### 操作载荷定义
 
-| type | 方向 | 说明 |
-|------|------|------|
-| `queue_submit` | C→房主 | 客户端提交卡牌到中央队列 |
-| `queue_update` | 房主→全员 | 房主广播当前队列状态 |
-| `queue_empty` | 房主→全员 | 队列清空，可结束回合 |
+各 `operation` 的 `payload` 仅包含该操作独有的字段。引用信息（`ref_id`, `owner_id`, `resource_hash`）、路由信息（`packet_id`, `source`, `seq`, `timestamp`）均从标准包头部提取，不重复。
 
-```typescript
-interface QueueSubmitMessage extends Message {
-  type: "queue_submit";
-  sender_id: string;
-  owner_id: string;
-  card_id: string;
-  resource_hash: string;
-  target: string;
-}
+#### 队列操作
 
-interface QueueUpdateMessage extends Message {
-  type: "queue_update";
-  entries: QueueEntry[];
-}
+```
+operation: "queue_submit"
+  payload: { card_id: string, target: string }
+  说明: 客户端提交卡牌到房主中央队列
+
+operation: "queue_update"
+  payload: { entries: QueueEntry[] }
+  说明: 房主广播当前队列快照
 
 interface QueueEntry {
-  packet_id: string;       // sender_id + seq
-  sender_id: string;
-  owner_id: string;
+  packet_id: string;      // 从源头标准包提取
+  source: string;         // 提交者
+  owner_id: string;       // 卡牌所有者
   card_id: string;
   target: string;
   status: "pending" | "executing" | "done";
 }
+
+operation: "queue_empty"
+  payload: {}
+  说明: 队列清空，可结束回合
 ```
 
-### 引用/调用消息
+#### 引用/调用操作
 
-| type | 方向 | 说明 |
-|------|------|------|
-| `invoke` | C→房主→owner | 远程引用解引用时的网络调用 |
-| `invoke_result` | owner→房主→C | 远程执行结果回传 |
-| `reference_register` | C→房主→全员 | 宣告自己可提供的引用对象清单 |
-| `reference_migrate` | C→房主→newOwner | 引用转移请求 |
+```
+operation: "invoke"
+  payload: {
+    trigger: string;      // 触发接口 onCardUse / atBattleStart / onPlayerDamaged / ...
+    args: any;            // 调用参数
+  }
+  说明: 远程引用解引用时的网络调用（C→房主→owner）
+
+operation: "invoke_result"
+  payload: {
+    effects: EffectDescription[];          // 纯数值效果
+    operation_sequence: OperationStep[];   // 操作序列（用于 INDUCED 重放）
+  }
+  说明: 远程执行结果回传（owner→房主→C）
+
+operation: "reference_register"
+  payload: {
+    available: { ref_id: string, resource_hash: string }[];
+  }
+  说明: 宣告自己可提供的引用对象清单（连接时发送）
+
+operation: "reference_migrate"
+  payload: {
+    new_owner_id: string;  // 迁移目标
+  }
+  说明: 引用转移请求
+```
+
+#### 战斗/状态操作
+
+```
+operation: "combat_result"
+  payload: {
+    effects: EffectDescription[];
+    operation_sequence: OperationStep[];
+    card_id?: string;       // 若为卡牌执行结果则包含
+    monster_id?: string;    // 若为怪物动作则包含
+  }
+  说明: 卡牌/怪物执行结果广播（房主→全员）
+
+operation: "monster_intent"
+  payload: {
+    monsters: { monster_id: string, intent: string }[];
+  }
+  说明: 怪物意图（回合开始时全量快照 + 意图变更时增量推送）
+
+operation: "player_state"
+  payload: {
+    hp: number; max_hp: number; current_block: number;
+    energy: number; energy_per_turn: number;
+    hand_size: number; draw_pile_size: number; discard_pile_size: number;
+    powers: { power_id: string, amount: number }[];
+    relics: string[];       // relic_id 列表
+    potions: (string | null)[];
+  }
+  说明: 在线角色属性更新
+
+operation: "full_snapshot"
+  payload: {
+    players: Record<string, PlayerState>;
+    monsters: Record<string, MonsterState>;
+    floor: number; act: number; seed: number;
+  }
+  说明: 完整阶段状态快照（房主启动/迁移时）
+```
+
+#### 事件操作
+
+```
+operation: "event_interface"
+  payload: {
+    event_id: string;
+    name: string;
+    description: string;
+    options: { index: number, text: string, enabled: boolean }[];
+    image_ref?: string;     // 素材引用，走 resource_request 获取
+    phase_key?: string;     // PhasedEvent 当前阶段
+  }
+  说明: 图主广播事件 UI 界面
+
+operation: "event_select"
+  payload: {
+    option_index: number;
+  }
+  说明: 玩家选择事件选项（C→房主→图主）
+
+operation: "event_result"
+  payload: {
+    result_type: "done" | "combat" | "next_phase";
+    effects?: EffectDescription[];
+    next_phase?: string;
+  }
+  说明: 事件执行结果广播（图主→房主→全员）
+```
+
+#### 交互选择操作
+
+```
+operation: "interact_request"
+  payload: {
+    invoke_ref_id: string;      // 关联的 invoke 引用的 ref_id
+    select_type: "card_select" | "hand_select" | "grid_select" | "relic_select" | "target_select";
+    prompt_text: string;
+    options: { id: string, name: string, description?: string, texture_ref?: string }[];
+    min_select: number;
+    max_select: number;
+  }
+  说明: 所有者执行中需调用方选择（owner→房主→invoker）
+
+operation: "interact_response"
+  payload: {
+    invoke_ref_id: string;
+    selected: string[];      // 选中对象的 ID 列表
+  }
+  说明: 调用方完成选择回传（invoker→房主→owner）
+```
+
+#### 素材操作
+
+```
+operation: "resource_registry"
+  payload: {
+    cards: string[]; relics: string[]; powers: string[];
+    potions: string[]; characters: string[];
+  }
+  说明: 本地素材清单（连接时交换一次）
+
+operation: "resource_request"
+  payload: {
+    resource_type: "card_texture" | "card_large" | "card_small"
+                 | "relic_texture" | "power_icon48" | "power_icon84"
+                 | "potion_texture" | "character_skeleton" | "character_atlas" | "character_png";
+    resource_id: string;
+  }
+  说明: 请求特定素材（C→房主→特定C，由 owner_id 路由）
+
+operation: "resource_response"
+  payload: {
+    resource_type: string;
+    resource_id: string;
+    mime: string;
+    data_base64: string;
+    checksum: string;       // SHA-256，用于缓存校验
+  }
+  说明: 素材数据响应
+
+operation: "animation_sync"
+  payload: {
+    animation: string;
+    track: number;
+    loop: boolean;
+    mix_duration: number;
+  }
+  说明: 角色动画切换
+```
+
+### 控制消息（非标准包）
+
+控制消息不包含引用信息，不封装为标准包，保持独立格式。
 
 ```typescript
-interface InvokeMessage extends Message {
-  type: "invoke";
-  target: string;          // 所有者 ID（房主据此路由）
-  ref_id: string;          // 引用 ID
-  trigger: string;         // 触发接口 (onCardUse / atBattleStart / ...)
-  args: any;               // 调用参数
-}
-
-interface InvokeResultMessage extends Message {
-  type: "invoke_result";
-  target: string;          // 原调用方 ID（房主据此路由）
-  ref_id: string;
-  effects: EffectDescription[];
-  operation_sequence: OperationStep[];
+interface ControlMessage {
+  type: string;            // 消息类型
+  source: string;          // 发送方 ID
+  seq: number;             // 单调序列号
+  timestamp: number;       // 发送时间戳
+  // ... type-specific fields
 }
 ```
 
-### 战斗/状态消息
-
-| type | 方向 | 说明 |
-|------|------|------|
-| `combat_result` | 房主→全员 | 卡牌/怪物执行结果广播 |
-| `monster_intent` | 图主→房主→全员 | 怪物意图（回合开始时全量快照 + 意图变更时增量推送） |
-| `player_state` | 所有者→房主→全员 | 在线角色属性更新 |
-| `full_snapshot` | 房主→全员 | 完整阶段状态快照（房主启动时） |
-
-### 事件消息
-
-| type | 方向 | 说明 |
-|------|------|------|
-| `event_interface` | 图主→房主→全员 | 事件 UI 界面（名称/描述/选项/图片） |
-| `event_select` | C→房主→图主 | 玩家选择事件选项 |
-| `event_result` | 图主→房主→全员 | 事件执行结果 |
-
-### 交互选择消息
-
-| type | 方向 | 说明 |
-|------|------|------|
-| `interact_request` | owner→房主→invoker | 所有者执行中需要调用方进行选择（选牌等） |
-| `interact_response` | invoker→房主→owner | 调用方完成选择，回传结果 |
-
-### 控制消息
-
-| type | 方向 | 说明 |
-|------|------|------|
-| `hello` | C→任意成员 | 加入时宣告身份和网络信息 |
-| `ping` / `pong` | C↔房主 | 心跳保活 |
-| `player_joined` / `player_left` | 房主→全员 | 玩家进出通知 |
-| `room_info` | 任意成员→C | 响应 hello，返回房间完整信息 |
-| `stage_host_election` | 房主→全员 | 新阶段投票发起 |
-| `stage_host_result` | 房主→全员 | 投票结果 |
-| `host_election` | — | 房主掉线后投票选新房主 |
-| `host_result` | — | 新房主选举结果 |
-
-### 素材消息（保持原有）
-
-| type | 方向 | 说明 |
-|------|------|------|
-| `resource_registry` | C→房主→全员 | 本地素材清单 |
-| `resource_request` | C→房主→特定C | 请求特定素材 |
-| `resource_response` | 特定C→房主→请求方 | 素材数据 |
-| `animation_sync` | C→房主→全员 | 角色动画切换 |
-
-### 内容校验哈希
-
-```typescript
-// 附加在引用注册和标准包中
-interface ResourceHash {
-  resource_type: "card" | "relic" | "power" | "monster" | "event" | "potion";
-  resource_id: string;
-  hash: string;           // SHA-256 of resource bytecode
-  version?: string;       // Mod 版本号（可选）
-}
-```
+| type | 方向 | 说明 | 额外字段 |
+|------|------|------|----------|
+| `hello` | C→任意成员 | 加入时宣告身份和网络信息 | `ip, port, player_name` |
+| `ping` / `pong` | C↔房主 | 心跳保活 | — |
+| `player_joined` / `player_left` | 房主→全员 | 玩家进出通知 | `player_id, player_name` |
+| `room_info` | 任意成员→C | 响应 hello，返回房间完整信息 | `name, host, members[], stage_host` |
+| `stage_host_election` | 房主→全员 | 新阶段投票发起 | `candidates[]` |
+| `stage_host_result` | 房主→全员 | 投票结果 | `host_id` |
+| `host_election` | 房主→全员 | 房主掉线后投票选新房主 | `candidates[]` |
+| `host_result` | 房主→全员 | 新房主选举结果 | `host_id` |
 
 ## 项目结构
 
