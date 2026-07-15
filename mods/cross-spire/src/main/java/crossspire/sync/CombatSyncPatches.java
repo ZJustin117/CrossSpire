@@ -22,8 +22,6 @@ public class CombatSyncPatches {
                 suppressBroadcast = false;
                 RenderSafetyPatches.remoteCombatActive = true;
                 AbstractDungeon.nextRoom = null;
-                if (AbstractDungeon.topLevelEffects != null) AbstractDungeon.topLevelEffects.clear();
-                if (AbstractDungeon.effectList != null) AbstractDungeon.effectList.clear();
                 return;
             }
             if (!CrossSpireMod.isConnected()) return;

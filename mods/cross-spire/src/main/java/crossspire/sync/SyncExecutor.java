@@ -139,10 +139,16 @@ public class SyncExecutor {
 
             AbstractDungeon.nextRoom = null;
             AbstractDungeon.getCurrMapNode().room = room;
+            AbstractDungeon.screen = com.megacrit.cardcrawl.dungeons.AbstractDungeon.CurrentScreen.NONE;
             room.onPlayerEntry();
             AbstractDungeon.nextRoom = null;
-            AbstractDungeon.screen = com.megacrit.cardcrawl.dungeons.AbstractDungeon.CurrentScreen.NONE;
-            AbstractDungeon.screen = com.megacrit.cardcrawl.dungeons.AbstractDungeon.CurrentScreen.NONE;
+            if (room.monsters != null) {
+                for (com.megacrit.cardcrawl.monsters.AbstractMonster m : room.monsters.monsters) {
+                    if (!m.isDeadOrEscaped()) {
+                        m.showHealthBar();
+                    }
+                }
+            }
 
             BaseMod.logger.info("SyncExecutor combat entered: " + monsterName);
         } catch (Exception e) {
