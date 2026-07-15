@@ -7,15 +7,7 @@ public final class Protocol {
 
     public static final Gson GSON = new Gson();
 
-    public static class GameMessage {
-        public String type;
-        public String subtype;
-        public String source;
-        public int seq;
-        public String target;
-    }
-
-    // -- distributed broadcast queue --
+    // -- primitive types --
 
     public static class EffectDescription {
         public String kind;
@@ -36,16 +28,12 @@ public final class Protocol {
         public String target;
         public int amount;
         @SerializedName("vfx_kind") public String vfxKind;
+        @SerializedName("card_type") public String cardType;
+        @SerializedName("card_rarity") public String cardRarity;
+        @SerializedName("card_target") public String cardTarget;
     }
 
-    public static class QueueComplete extends GameMessage {
-        public QueueComplete() { type = "queue_complete"; }
-        @SerializedName("packet_id") public String packetId;
-        public EffectDescription[] effects;
-        @SerializedName("operation_sequence") public OperationStep[] operationSequence;
-    }
-
-    // -- state sync --
+    // -- state sync payloads --
 
     public static class RemotePlayerState {
         public int hp;
@@ -60,6 +48,100 @@ public final class Protocol {
         public String[] potions;
     }
 
+    // -- combat payloads --
+
+    public static class CombatResultPayload {
+        @SerializedName("monster_id") public String monsterId;
+        public EffectDescription[] effects;
+        @SerializedName("operation_sequence") public OperationStep[] operationSequence;
+    }
+
+    public static class MonsterIntentEntry {
+        @SerializedName("monster_id") public String monsterId;
+        public String intent;
+        public int damage;
+        public int hits;
+        @SerializedName("target_id") public String targetId;
+    }
+
+    public static class MonsterIntentPayload {
+        @SerializedName("monster_id") public String monsterId;
+        public String intent;
+        public int damage;
+        public int hits;
+        @SerializedName("target_id") public String targetId;
+        public MonsterIntentEntry[] intents;
+    }
+
+    // -- event payloads --
+
+    public static class EventResultPayload {
+        @SerializedName("event_id") public String eventId;
+        public EffectDescription[] effects;
+    }
+
+    public static class QueueEntry {
+        @SerializedName("entry_id") public String entryId;
+        @SerializedName("packet_id") public String packetId;
+        @SerializedName("sender_id") public String senderId;
+        @SerializedName("owner_id") public String ownerId;
+        public String source;
+        @SerializedName("card_id") public String cardId;
+        public boolean upgraded;
+        public String target;
+        public String status;
+    }
+
+    public static class QueueUpdatePayload {
+        public QueueEntry[] entries;
+    }
+
+    public static class QueueSubmitPayload {
+        @SerializedName("card_id") public String cardId;
+        public String target;
+    }
+
+    // -- legacy compat classes (keep until all call sites migrated) --
+
+    // OBSOLETED: use CombatResultPayload instead
+    public static class CombatResultMessage extends GameMessage {
+        public CombatResultMessage() { type = "combat_result"; }
+        @SerializedName("monster_id") public String monsterId;
+        public EffectDescription[] effects;
+        @SerializedName("operation_sequence") public OperationStep[] operationSequence;
+    }
+
+    public static class QueueComplete extends GameMessage {
+        public QueueComplete() { type = "queue_complete"; }
+        @SerializedName("packet_id") public String packetId;
+        public EffectDescription[] effects;
+        @SerializedName("operation_sequence") public OperationStep[] operationSequence;
+    }
+
+    public static class MonsterIntentMessage extends GameMessage {
+        public MonsterIntentMessage() { type = "monster_intent"; }
+        @SerializedName("monster_id") public String monsterId;
+        public String intent;
+        public int damage;
+        public int hits;
+        @SerializedName("target_id") public String targetId;
+        public MonsterIntentEntry[] intents;
+    }
+
+    public static class EventResultMessage extends GameMessage {
+        public EventResultMessage() { type = "event_result"; }
+        @SerializedName("event_id") public String eventId;
+        public EffectDescription[] effects;
+    }
+
+    public static class GameMessage {
+        public String type;
+        public String subtype;
+        public String source;
+        public int seq;
+        public String target;
+    }
+
     public static class PlayerStateMessage extends GameMessage {
         public PlayerStateMessage() { type = "player_state"; }
         public RemotePlayerState player;
@@ -71,8 +153,6 @@ public final class Protocol {
         public String seed;
         public int act;
     }
-
-    // -- join / room messages --
 
     public static class HelloMessage extends GameMessage {
         public HelloMessage() { type = "hello"; }
@@ -88,8 +168,6 @@ public final class Protocol {
         @SerializedName("members") public MemberInfo[] members;
     }
 
-    // -- lobby ready --
-
     public static class PlayerReady extends GameMessage {
         public PlayerReady() { type = "player_ready"; }
         public String character;
@@ -100,8 +178,6 @@ public final class Protocol {
         public String ip;
         public int port;
     }
-
-    // -- reference invoke --
 
     public static class InvokeMessage extends GameMessage {
         public InvokeMessage() { type = "invoke"; }
@@ -116,43 +192,6 @@ public final class Protocol {
         public EffectDescription[] effects;
         @SerializedName("operation_sequence") public OperationStep[] operationSequence;
     }
-
-    // -- monster / combat messages --
-
-    public static class MonsterIntentEntry {
-        @SerializedName("monster_id") public String monsterId;
-        public String intent;
-        public int damage;
-        public int hits;
-        @SerializedName("target_id") public String targetId;
-    }
-
-    public static class MonsterIntentMessage extends GameMessage {
-        public MonsterIntentMessage() { type = "monster_intent"; }
-        @SerializedName("monster_id") public String monsterId;
-        public String intent;
-        public int damage;
-        public int hits;
-        @SerializedName("target_id") public String targetId;
-        public MonsterIntentEntry[] intents;
-    }
-
-    public static class CombatResultMessage extends GameMessage {
-        public CombatResultMessage() { type = "combat_result"; }
-        @SerializedName("monster_id") public String monsterId;
-        public EffectDescription[] effects;
-        @SerializedName("operation_sequence") public OperationStep[] operationSequence;
-    }
-
-    // -- event messages --
-
-    public static class EventResultMessage extends GameMessage {
-        public EventResultMessage() { type = "event_result"; }
-        @SerializedName("event_id") public String eventId;
-        public EffectDescription[] effects;
-    }
-
-    // -- reference management --
 
     public static class ReferenceRegisterMessage extends GameMessage {
         public ReferenceRegisterMessage() { type = "reference_register"; }
@@ -169,8 +208,6 @@ public final class Protocol {
         @SerializedName("resource_id") public String resourceId;
         @SerializedName("resource_hash") public String resourceHash;
     }
-
-    // -- host election / snapshot / animation --
 
     public static class StageHostElectionMessage extends GameMessage {
         public StageHostElectionMessage() { type = "stage_host_election"; }
@@ -195,13 +232,9 @@ public final class Protocol {
         @SerializedName("animation_name") public String animationName;
     }
 
-    // -- turn control --
-
     public static class PlayerEndTurnMessage extends GameMessage {
         public PlayerEndTurnMessage() { type = "player_end_turn"; }
     }
-
-    // -- host-centric queue messages --
 
     public static class QueueSubmitMessage extends GameMessage {
         public QueueSubmitMessage() { type = "queue_submit"; }
@@ -221,18 +254,6 @@ public final class Protocol {
 
     public static class QueueEmptyMessage extends GameMessage {
         public QueueEmptyMessage() { type = "queue_empty"; }
-    }
-
-    public static class QueueEntry {
-        @SerializedName("entry_id") public String entryId;
-        @SerializedName("packet_id") public String packetId;
-        @SerializedName("sender_id") public String senderId;
-        @SerializedName("owner_id") public String ownerId;
-        public String source;
-        @SerializedName("card_id") public String cardId;
-        public boolean upgraded;
-        public String target;
-        public String status;
     }
 
     private Protocol() {}
