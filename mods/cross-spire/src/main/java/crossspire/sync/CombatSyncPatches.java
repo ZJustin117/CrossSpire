@@ -21,7 +21,7 @@ public class CombatSyncPatches {
                 suppressBroadcast = false;
                 return;
             }
-            if (CrossSpireMod.relayClient == null || !CrossSpireMod.relayClient.isOpen()) return;
+            if (!CrossSpireMod.isConnected()) return;
             if (__instance.monsters == null) return;
 
             JsonObject sync = new JsonObject();
@@ -39,7 +39,7 @@ public class CombatSyncPatches {
             sync.add("monster_ids", monsterIds);
             sync.add("monster_hps", monsterHps);
 
-            CrossSpireMod.relayClient.send(sync.toString());
+            CrossSpireMod.send(sync.toString());
             BaseMod.logger.info("CombatSync broadcast room_enter: " + monsterIds);
         }
     }

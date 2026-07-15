@@ -30,7 +30,7 @@ public class GoldSyncPatches {
     }
 
     private static void broadcastGold(String kind, int amount, AbstractPlayer player) {
-        if (CrossSpireMod.relayClient == null || !CrossSpireMod.relayClient.isOpen()) return;
+        if (!CrossSpireMod.isConnected()) return;
 
         Protocol.PlayerStateMessage msg = new Protocol.PlayerStateMessage();
         msg.source = CrossSpireMod.playerId;
@@ -43,7 +43,7 @@ public class GoldSyncPatches {
         msg.player.energy = AbstractDungeon.player != null ? AbstractDungeon.player.energy.energy : 0;
         msg.player.characterClass = player.getClass().getSimpleName();
 
-        CrossSpireMod.relayClient.send(Protocol.GSON.toJson(msg));
+        CrossSpireMod.send(Protocol.GSON.toJson(msg));
         BaseMod.logger.info("GoldSyncPatches " + kind + ": " + amount);
     }
 }

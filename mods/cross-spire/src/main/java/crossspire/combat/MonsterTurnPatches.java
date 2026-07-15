@@ -43,7 +43,7 @@ public class MonsterTurnPatches {
 
     private static void broadcastMonsterEffects(AbstractMonster monster) {
         if (CrossSpireMod.stageHost == null || !CrossSpireMod.stageHost.isStageHost()) return;
-        if (CrossSpireMod.relayClient == null || !CrossSpireMod.relayClient.isOpen()) return;
+        if (!CrossSpireMod.isConnected()) return;
 
         Protocol.EffectDescription[] effects = collectEffects(monster);
         Protocol.CombatResultMessage result = new Protocol.CombatResultMessage();
@@ -53,7 +53,7 @@ public class MonsterTurnPatches {
         result.effects = effects;
         result.operationSequence = new Protocol.OperationStep[0];
 
-        CrossSpireMod.relayClient.send(Protocol.GSON.toJson(result));
+        CrossSpireMod.send(Protocol.GSON.toJson(result));
         BaseMod.logger.info("MonsterTurnPatches preBattle: " + monster.id
             + " effects=" + effects.length);
     }

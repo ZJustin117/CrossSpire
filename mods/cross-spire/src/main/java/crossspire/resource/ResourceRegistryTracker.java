@@ -47,7 +47,7 @@ public class ResourceRegistryTracker {
     }
 
     public static void sendMyRegistry() {
-        if (CrossSpireMod.relayClient == null || !CrossSpireMod.relayClient.isOpen()) return;
+        if (!CrossSpireMod.isConnected()) return;
 
         JsonObject reg = new JsonObject();
         reg.addProperty("type", "resource_registry");
@@ -60,7 +60,7 @@ public class ResourceRegistryTracker {
             "IRONCLAD", "THE_SILENT", "DEFECT", "WATCHER"
         }));
 
-        CrossSpireMod.relayClient.send(reg.toString());
+        CrossSpireMod.send(reg.toString());
         BaseMod.logger.info("ResourceRegistryTracker sent registry cards=" + getLocalCardIds().length);
     }
 

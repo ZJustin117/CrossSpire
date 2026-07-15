@@ -120,8 +120,8 @@ public class MessageRouter {
             reply.target = msg.source;
             reply.seq = msg.seq;
             reply.refId = msg.refId;
-            if (CrossSpireMod.relayClient != null && CrossSpireMod.relayClient.isOpen()) {
-                CrossSpireMod.relayClient.send(Protocol.GSON.toJson(reply));
+            if (CrossSpireMod.isConnected()) {
+                CrossSpireMod.send(Protocol.GSON.toJson(reply));
                 BaseMod.logger.info("MessageRouter sent reference_migrate_ack for: " + msg.refId);
             }
         }
@@ -137,7 +137,7 @@ public class MessageRouter {
                 String owner = extractOwnerFromRef(inv.refId);
                 if (!owner.equals(CrossSpireMod.playerId)) {
                     inv.target = owner;
-                    CrossSpireMod.relayClient.send(Protocol.GSON.toJson(inv));
+                    CrossSpireMod.send(Protocol.GSON.toJson(inv));
                     BaseMod.logger.info("MessageRouter forwarded invoke to owner=" + owner.substring(0, 8));
                 }
             } else {
@@ -176,8 +176,8 @@ public class MessageRouter {
         result.effects = buildInvokeEffects(template, targetId);
         result.operationSequence = new Protocol.OperationStep[0];
 
-        if (CrossSpireMod.relayClient != null && CrossSpireMod.relayClient.isOpen()) {
-            CrossSpireMod.relayClient.send(Protocol.GSON.toJson(result));
+        if (CrossSpireMod.isConnected()) {
+            CrossSpireMod.send(Protocol.GSON.toJson(result));
             StringBuilder fx = new StringBuilder();
             Protocol.EffectDescription[] effs = result.effects;
             for (int i = 0; i < effs.length; i++) {
@@ -239,8 +239,8 @@ public class MessageRouter {
         broadcast.effects = result.effects;
         broadcast.operationSequence = result.operationSequence;
 
-        if (CrossSpireMod.relayClient != null && CrossSpireMod.relayClient.isOpen()) {
-            CrossSpireMod.relayClient.send(Protocol.GSON.toJson(broadcast));
+        if (CrossSpireMod.isConnected()) {
+            CrossSpireMod.send(Protocol.GSON.toJson(broadcast));
             BaseMod.logger.info("MessageRouter broadcast combat_result effects="
                 + (result.effects != null ? result.effects.length : 0));
         }

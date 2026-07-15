@@ -22,7 +22,9 @@ public class CrossSpireCommand extends ConsoleCommand {
         if (tokens.length <= depth) { errorMsg(); return; }
         String sub = tokens[depth].toLowerCase();
 
-        if ("connect".equals(sub)) { cmdConnect(tokens, depth); }
+        if ("host".equals(sub)) { cmdHost(tokens, depth); }
+        else if ("join".equals(sub)) { cmdJoin(tokens, depth); }
+        else if ("connect".equals(sub)) { cmdJoin(tokens, depth); }
         else if ("disconnect".equals(sub)) { cmdDisconnect(); }
         else if ("status".equals(sub)) { cmdStatus(); }
         else if ("info".equals(sub)) { cmdInfo(); }
@@ -35,16 +37,27 @@ public class CrossSpireCommand extends ConsoleCommand {
         else { errorMsg(); }
     }
 
-    private void cmdConnect(String[] tokens, int depth) {
-        if (tokens.length < depth + 3) {
-            DevConsole.log("Usage: crossspire connect <url> <room_code>");
-            return;
-        }
-        ServerPicker.serverUrl = tokens[depth + 1];
-        ServerPicker.roomCode = tokens[depth + 2];
-        DevConsole.log("Connecting to " + ServerPicker.serverUrl + " room " + ServerPicker.roomCode);
+    private void cmdHost(String[] tokens, int depth) {
+        int port = tokens.length > depth + 1 ? Integer.parseInt(tokens[depth + 1]) : 54321;
+        ServerPicker.isRoomHost = true;
+        DevConsole.log("Hosting on port " + port + "...");
+        System.setProperty("crossspire.p2p.port", String.valueOf(port));
         CrossSpireMod.connect();
     }
+
+    private void cmdJoin(String[] tokens, int depth) {
+        if (tokens.length < depth + 2) {
+            DevConsole.log("Usage: crossspire join <ip> [port]");
+            return;
+        }
+        ServerPicker.hostIp = tokens[depth + 1];
+        ServerPicker.hostPort = tokens.length > depth + 2 ? Integer.parseInt(tokens[depth + 2]) : 54321;
+        ServerPicker.isRoomHost = false;
+        DevConsole.log("Joining " + ServerPicker.hostIp + ":" + ServerPicker.hostPort + "...");
+        CrossSpireMod.connect();
+    }
+
+    private void cmdConnect(String[] tokens, int depth) { cmdJoin(tokens, depth); }
 
     private void cmdDisconnect() {
         DevConsole.log("Disconnecting...");
@@ -182,6 +195,6 @@ public class CrossSpireCommand extends ConsoleCommand {
 
     @Override
     public void errorMsg() {
-        DevConsole.log("crossspire: connect <url> <room> | disconnect | status | info | lobby | combat | ready [char] | start [char] [seed] | play <card> [target] | queue");
+        DevConsole.log("crossspire: host [port] | join <ip> [port] | disconnect | status | info | lobby | combat | ready [char] | start [char] [seed] | play <card> [target] | queue");
     }
 }

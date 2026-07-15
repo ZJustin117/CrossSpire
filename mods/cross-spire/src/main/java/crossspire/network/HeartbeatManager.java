@@ -16,11 +16,11 @@ public class HeartbeatManager {
             public void run() {
                 while (!Thread.currentThread().isInterrupted()) {
                     try { Thread.sleep(INTERVAL_MS); } catch (InterruptedException e) { break; }
-                    if (CrossSpireMod.relayClient != null && CrossSpireMod.relayClient.isOpen()) {
+                    if (CrossSpireMod.isConnected()) {
                         JsonObject ping = new JsonObject();
                         ping.addProperty("type", "ping");
                         ping.addProperty("seq", 0);
-                        CrossSpireMod.relayClient.send(ping.toString());
+                        CrossSpireMod.send(ping.toString());
                     }
                 }
             }

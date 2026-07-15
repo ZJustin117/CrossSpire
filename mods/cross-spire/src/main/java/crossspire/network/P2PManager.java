@@ -90,34 +90,16 @@ public class P2PManager {
         return s != null && !s.isClosed();
     }
 
-    public void sendOrRelay(String peerId, String message) {
-        if (isDirect(peerId)) {
-            send(peerId, message);
-        } else {
-            relayViaServer(message);
-        }
-    }
-
-    public void relayViaServer(String message) {
-        if (CrossSpireMod.relayClient != null && CrossSpireMod.relayClient.isOpen()) {
-            CrossSpireMod.relayClient.send(message);
-        }
-    }
-
     public void send(String peerId, String message) {
         Socket s = connections.get(peerId);
-        if (s == null || s.isClosed()) {
-            relayViaServer(message);
-            return;
-        }
+        if (s == null || s.isClosed()) return;
         try {
             BufferedWriter w = new BufferedWriter(new OutputStreamWriter(s.getOutputStream(), "UTF-8"));
             w.write(message + "\n");
             w.flush();
         } catch (IOException e) {
-            BaseMod.logger.error("P2PManager send error, falling back to relay: " + e.getMessage());
+            BaseMod.logger.error("P2PManager send error: " + e.getMessage());
             connections.remove(peerId);
-            relayViaServer(message);
         }
     }
 
@@ -128,7 +110,6 @@ public class P2PManager {
     }
 
     public void sendHello() {
-        if (CrossSpireMod.relayClient == null || !CrossSpireMod.relayClient.isOpen()) return;
         Protocol.HelloMessage hello = new Protocol.HelloMessage();
         hello.ip = advertisedIp;
         hello.port = listenPort;
@@ -145,7 +126,7 @@ public class P2PManager {
         }
         hello.peers = peerList.toArray(new Protocol.MemberInfo[0]);
 
-        CrossSpireMod.relayClient.send(Protocol.GSON.toJson(hello));
+        CrossSpireMod.send(Protocol.GSON.toJson(hello));
         BaseMod.logger.info("P2PManager sent hello: " + advertisedIp + ":" + listenPort + " peers=" + peerList.size());
     }
 

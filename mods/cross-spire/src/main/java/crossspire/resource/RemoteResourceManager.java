@@ -48,7 +48,7 @@ public class RemoteResourceManager {
     }
 
     private static void requestResource(String targetPlayerId, String resourceType, String resourceId) {
-        if (CrossSpireMod.relayClient == null || !CrossSpireMod.relayClient.isOpen()) return;
+        if (!CrossSpireMod.isConnected()) return;
 
         JsonObject req = new JsonObject();
         req.addProperty("type", "resource_request");
@@ -57,7 +57,7 @@ public class RemoteResourceManager {
         req.addProperty("resource_type", resourceType);
         req.addProperty("resource_id", resourceId);
 
-        CrossSpireMod.relayClient.send(req.toString());
+        CrossSpireMod.send(req.toString());
         BaseMod.logger.info("RemoteResourceManager requesting " + resourceType + "/" + resourceId
             + " from " + targetPlayerId.substring(0, 8));
     }

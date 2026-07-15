@@ -14,7 +14,7 @@ public class EventSyncPatches {
         @SpirePostfixPatch
         public static void postfix(AbstractEvent __instance) {
             if (CrossSpireMod.stageHost == null || !CrossSpireMod.stageHost.isStageHost()) return;
-            if (CrossSpireMod.relayClient == null || !CrossSpireMod.relayClient.isOpen()) return;
+            if (!CrossSpireMod.isConnected()) return;
 
             String eventName = __instance.getClass().getSimpleName();
             Protocol.EventResultMessage msg = new Protocol.EventResultMessage();
@@ -22,7 +22,7 @@ public class EventSyncPatches {
             msg.seq = (int) (System.currentTimeMillis() % 100000);
             msg.eventId = eventName;
             msg.effects = new Protocol.EffectDescription[0];
-            CrossSpireMod.relayClient.send(Protocol.GSON.toJson(msg));
+            CrossSpireMod.send(Protocol.GSON.toJson(msg));
             BaseMod.logger.info("EventSyncPatches onEnterRoom: " + eventName);
         }
     }
@@ -32,7 +32,7 @@ public class EventSyncPatches {
         @SpirePostfixPatch
         public static void postfix(AbstractEvent __instance) {
             if (CrossSpireMod.stageHost == null || !CrossSpireMod.stageHost.isStageHost()) return;
-            if (CrossSpireMod.relayClient == null || !CrossSpireMod.relayClient.isOpen()) return;
+            if (!CrossSpireMod.isConnected()) return;
 
             String eventName = __instance.getClass().getSimpleName();
             Protocol.EventResultMessage msg = new Protocol.EventResultMessage();
@@ -40,7 +40,7 @@ public class EventSyncPatches {
             msg.seq = (int) (System.currentTimeMillis() % 100000);
             msg.eventId = eventName;
             msg.effects = new Protocol.EffectDescription[0];
-            CrossSpireMod.relayClient.send(Protocol.GSON.toJson(msg));
+            CrossSpireMod.send(Protocol.GSON.toJson(msg));
             BaseMod.logger.info("EventSyncPatches enterCombat: " + eventName);
         }
     }

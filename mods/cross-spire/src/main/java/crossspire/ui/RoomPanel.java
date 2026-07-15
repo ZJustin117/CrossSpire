@@ -80,7 +80,7 @@ public class RoomPanel {
         float btnH = 26F * scale;
         connBtnY = y;
         renderButton(sb, whitePixel, panelX + 6, y, btnW, btnH,
-            connected ? "Disconnect" : "Connect to Relay", connected ? BTN_RED : BTN_GREEN);
+            connected ? "Disconnect" : (ServerPicker.isRoomHost ? "Host Game" : "Join Game"), connected ? BTN_RED : BTN_GREEN);
         y -= btnH + 2;
 
         String[] chars = {"IRONCLAD", "THE_SILENT", "DEFECT", "WATCHER"};

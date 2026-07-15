@@ -111,8 +111,8 @@ public class CentralQueueManager {
         invoke.trigger = "play_card";
         invoke.args = head.gameTarget;
 
-        if (CrossSpireMod.relayClient != null && CrossSpireMod.relayClient.isOpen()) {
-            CrossSpireMod.relayClient.send(Protocol.GSON.toJson(invoke));
+        if (CrossSpireMod.isConnected()) {
+            CrossSpireMod.send(Protocol.GSON.toJson(invoke));
             CSLog.log("CentralQueueManager sent invoke to " + head.ownerId.substring(0, 8)
                 + " for " + head.cardId);
         }
@@ -129,8 +129,8 @@ public class CentralQueueManager {
         complete.effects = result.effects;
         complete.operationSequence = result.operationSequence;
 
-        if (CrossSpireMod.relayClient != null && CrossSpireMod.relayClient.isOpen()) {
-            CrossSpireMod.relayClient.send(Protocol.GSON.toJson(complete));
+        if (CrossSpireMod.isConnected()) {
+            CrossSpireMod.send(Protocol.GSON.toJson(complete));
         }
 
         String cardId = result.refId.contains("@") ? result.refId.split(":")[1].split("@")[0] : "unknown";
@@ -152,22 +152,22 @@ public class CentralQueueManager {
     }
 
     private void broadcastUpdate() {
-        if (CrossSpireMod.relayClient == null || !CrossSpireMod.relayClient.isOpen()) return;
+        if (!CrossSpireMod.isConnected()) return;
 
         Protocol.QueueUpdateMessage update = new Protocol.QueueUpdateMessage();
         update.source = CrossSpireMod.playerId;
         update.seq = CrossSpireMod.nextSeq();
         update.entries = getEntries();
-        CrossSpireMod.relayClient.send(Protocol.GSON.toJson(update));
+        CrossSpireMod.send(Protocol.GSON.toJson(update));
     }
 
     private void broadcastQueueEmpty() {
-        if (CrossSpireMod.relayClient == null || !CrossSpireMod.relayClient.isOpen()) return;
+        if (!CrossSpireMod.isConnected()) return;
 
         Protocol.QueueEmptyMessage empty = new Protocol.QueueEmptyMessage();
         empty.source = CrossSpireMod.playerId;
         empty.seq = CrossSpireMod.nextSeq();
-        CrossSpireMod.relayClient.send(Protocol.GSON.toJson(empty));
+        CrossSpireMod.send(Protocol.GSON.toJson(empty));
 
         processing = false;
         CSLog.log("CentralQueueManager queue_empty broadcast");

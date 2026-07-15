@@ -18,7 +18,7 @@ public class MonsterIntentBroadcastPatches {
         @SpirePostfixPatch
         public static void postfix(AbstractMonster __instance) {
             if (CrossSpireMod.stageHost == null || !CrossSpireMod.stageHost.isStageHost()) return;
-            if (CrossSpireMod.relayClient == null || !CrossSpireMod.relayClient.isOpen()) return;
+            if (!CrossSpireMod.isConnected()) return;
             if (__instance.isDeadOrEscaped()) return;
 
             SyncedRng rng = CrossSpireMod.rngManager != null
@@ -43,7 +43,7 @@ public class MonsterIntentBroadcastPatches {
             msg.hits = hits;
             msg.targetId = targetId;
 
-            CrossSpireMod.relayClient.send(Protocol.GSON.toJson(msg));
+            CrossSpireMod.send(Protocol.GSON.toJson(msg));
             BaseMod.logger.info("MonsterIntentBroadcast: " + __instance.id + " intent=" + msg.intent + " target=" + targetId);
         }
     }

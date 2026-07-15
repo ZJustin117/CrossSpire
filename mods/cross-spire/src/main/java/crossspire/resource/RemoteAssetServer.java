@@ -39,7 +39,7 @@ public class RemoteAssetServer {
     }
 
     public static void serveResource(String rawMessage) {
-        if (CrossSpireMod.relayClient == null || !CrossSpireMod.relayClient.isOpen()) return;
+        if (!CrossSpireMod.isConnected()) return;
 
         try {
             JsonObject req = new com.google.gson.JsonParser().parse(rawMessage).getAsJsonObject();
@@ -138,7 +138,7 @@ public class RemoteAssetServer {
         resp.addProperty("resource_id", resourceId);
         resp.addProperty("data", dataB64);
 
-        CrossSpireMod.relayClient.send(resp.toString());
+        CrossSpireMod.send(resp.toString());
         BaseMod.logger.info("RemoteAssetServer served " + resourceType + "/" + resourceId
             + " -> " + target.substring(0, 8));
     }

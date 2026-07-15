@@ -55,8 +55,8 @@ public class LocalReference<T> extends Reference<T> {
         complete.effects = captured;
         complete.operationSequence = buildVfxOps(copy, targetId);
 
-        if (CrossSpireMod.relayClient != null && CrossSpireMod.relayClient.isOpen()) {
-            CrossSpireMod.relayClient.send(Protocol.GSON.toJson(complete));
+        if (CrossSpireMod.isConnected()) {
+            CrossSpireMod.send(Protocol.GSON.toJson(complete));
             StringBuilder fx = new StringBuilder();
             for (int i = 0; i < captured.length; i++) {
                 if (i > 0) fx.append(", ");

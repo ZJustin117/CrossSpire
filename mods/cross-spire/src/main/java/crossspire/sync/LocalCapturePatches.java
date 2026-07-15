@@ -17,7 +17,7 @@ public class LocalCapturePatches {
     public static class OnUseCard {
         @SpirePostfixPatch
         public static void Postfix(AbstractPlayer __instance, AbstractCard card, AbstractMonster target, int energyOnUse) {
-            if (CrossSpireMod.relayClient == null || !CrossSpireMod.relayClient.isOpen()) return;
+            if (!CrossSpireMod.isConnected()) return;
             if (CrossSpireMod.playerId.isEmpty() || CrossSpireMod.hostId.isEmpty()) return;
 
             Protocol.QueueSubmitMessage pkt = new Protocol.QueueSubmitMessage();
@@ -31,7 +31,7 @@ public class LocalCapturePatches {
             pkt.seq = CrossSpireMod.nextSeq();
             pkt.target = CrossSpireMod.hostId;
 
-            CrossSpireMod.relayClient.send(Protocol.GSON.toJson(pkt));
+            CrossSpireMod.send(Protocol.GSON.toJson(pkt));
             BaseMod.logger.info("CapturePatches queue_submit: " + card.cardID + " to host="
                 + CrossSpireMod.hostId.substring(0, 8));
         }

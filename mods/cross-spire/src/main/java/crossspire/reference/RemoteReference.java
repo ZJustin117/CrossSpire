@@ -52,9 +52,9 @@ public class RemoteReference<T> extends Reference<T> {
         String json = Protocol.GSON.toJson(invoke);
 
         if (direct) {
-            CrossSpireMod.p2pManager.sendOrRelay(ownerId, json);
+            CrossSpireMod.p2pManager.send(ownerId, json);
         } else {
-            CrossSpireMod.p2pManager.relayViaServer(json);
+            CrossSpireMod.send(json);
         }
 
         Protocol.InvokeResultMessage result = waitForResult(invoke.refId, TIMEOUT_MS);
@@ -66,8 +66,8 @@ public class RemoteReference<T> extends Reference<T> {
             complete.packetId = invoke.refId;
             complete.effects = result.effects;
             complete.operationSequence = result.operationSequence;
-            if (CrossSpireMod.relayClient != null && CrossSpireMod.relayClient.isOpen()) {
-                CrossSpireMod.relayClient.send(Protocol.GSON.toJson(complete));
+            if (CrossSpireMod.isConnected()) {
+                CrossSpireMod.send(Protocol.GSON.toJson(complete));
             }
         } else {
             BaseMod.logger.info("RemoteReference timeout for " + cardIdLocal + " on " + ownerId.substring(0, 8));

@@ -16,7 +16,7 @@ public class AnimationSyncPatches {
         @SpirePostfixPatch
         public static void Postfix(AnimationState __instance, int trackIndex, String animationName, boolean loop) {
 
-            if (CrossSpireMod.relayClient == null || !CrossSpireMod.relayClient.isOpen()) return;
+            if (!CrossSpireMod.isConnected()) return;
             if (CrossSpireMod.playerId.isEmpty()) return;
             if (trackIndex != 0) return;
             if (animationName == null) return;
@@ -42,7 +42,7 @@ public class AnimationSyncPatches {
             msg.playerId = CrossSpireMod.playerId;
             msg.animationName = animationName;
 
-            CrossSpireMod.relayClient.send(Protocol.GSON.toJson(msg));
+            CrossSpireMod.send(Protocol.GSON.toJson(msg));
             BaseMod.logger.info("AnimationSync broadcast: " + animationName);
         }
     }

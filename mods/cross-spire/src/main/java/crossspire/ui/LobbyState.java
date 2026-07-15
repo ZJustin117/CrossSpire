@@ -27,7 +27,7 @@ public class LobbyState {
     public void markLocalReady(String character) {
         myCharacter = character.toUpperCase();
 
-        if (CrossSpireMod.relayClient != null && CrossSpireMod.relayClient.isOpen()) {
+        if (CrossSpireMod.isConnected()) {
             readyPlayers.add(CrossSpireMod.playerId);
             characterChoices.put(CrossSpireMod.playerId, myCharacter);
             broadcastAndCheck(character);
@@ -61,7 +61,7 @@ public class LobbyState {
     private void resendOwnReady() {
         if (CrossSpireMod.playerId.isEmpty()) return;
         if (!readyPlayers.contains(CrossSpireMod.playerId)) return;
-        if (CrossSpireMod.relayClient == null || !CrossSpireMod.relayClient.isOpen()) return;
+        if (!CrossSpireMod.isConnected()) return;
 
         String character = characterChoices.get(CrossSpireMod.playerId);
         if (character == null) character = "IRONCLAD";
@@ -71,7 +71,7 @@ public class LobbyState {
         ready.seq = 1;
         ready.character = character;
 
-        CrossSpireMod.relayClient.send(Protocol.GSON.toJson(ready));
+        CrossSpireMod.send(Protocol.GSON.toJson(ready));
         BaseMod.logger.info("LobbyState resent player_ready as " + character);
     }
 
@@ -92,7 +92,7 @@ public class LobbyState {
     }
 
     private void flushPending() {
-        if (pendingReadyCharacter != null && CrossSpireMod.relayClient != null && CrossSpireMod.relayClient.isOpen() && !CrossSpireMod.playerId.isEmpty()) {
+        if (pendingReadyCharacter != null && CrossSpireMod.isConnected() && !CrossSpireMod.playerId.isEmpty()) {
             String c = pendingReadyCharacter;
             pendingReadyCharacter = null;
             readyPlayers.add(CrossSpireMod.playerId);
@@ -107,7 +107,7 @@ public class LobbyState {
         ready.seq = 1;
         ready.character = character.toUpperCase();
 
-        CrossSpireMod.relayClient.send(Protocol.GSON.toJson(ready));
+        CrossSpireMod.send(Protocol.GSON.toJson(ready));
         BaseMod.logger.info("LobbyState sent player_ready as " + character
             + " ready=" + readyPlayers.size() + "/" + roomSize);
 
@@ -139,8 +139,8 @@ public class LobbyState {
             sync.seq = 1;
             sync.act = 1;
 
-            if (CrossSpireMod.relayClient != null && CrossSpireMod.relayClient.isOpen()) {
-                CrossSpireMod.relayClient.send(Protocol.GSON.toJson(sync));
+            if (CrossSpireMod.isConnected()) {
+                CrossSpireMod.send(Protocol.GSON.toJson(sync));
             }
             BaseMod.logger.info("LobbyState host broadcast seed=" + seed);
             com.megacrit.cardcrawl.helpers.SeedHelper.setSeed(seed);

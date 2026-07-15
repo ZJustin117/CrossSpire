@@ -305,3 +305,80 @@ CrossSpire development timeline and milestones.
 | Mod 客户端 | Java 8 + ModTheSpire + BaseMod + Java-WebSocket + Gson |
 | 测试 | vitest (TS), JUnit 4 (Java), MTS 加载 + 日志验证 |
 | 调试 | ADB 双设备, `crossspire_batch.txt` 指令注入 |
+
+---
+
+## 2026-07-16 (3/3) — 从 Relay 到 P2P 的迁移
+
+### 架构变更：删除中继服务器，换成 P2P 直连
+
+**核心变更：**
+- 删除 `cross-spire-server/` — TypeScript WebSocket relay 服务端 (7 TS 源文件, 19 vitest 测试)
+- 删除 `RelayClient.java` — 移除 `java-websocket` WebSocket 客户端依赖
+- 删除 `org.java-websocket:Java-WebSocket:1.5.3` 依赖 → JAR 从 629KB 减至 450KB
+
+**新增 P2P 统一发送层：**
+- `CrossSpireMod.send(String)` — 统一发送 API，根据 `ServerPicker.isRoomHost` 自动选择路由：
+  - 房主：检查 `target` 字段 → 定向发送或广播
+  - 客户端：所有消息发给房主
+- `CrossSpireMod.connect()` — 重写：房主启动 P2P 监听，客户端连接房主 IP
+- `CrossSpireMod.isConnected()` — 改写为检查 `p2pManager.connectionCount() > 0`
+- 自生成 UUID 作为 `playerId`（不再依赖 relay 服务器分配）
+
+**P2PManager 清理：**
+- 删除 `sendOrRelay()` — 不再回退到 relay
+- 删除 `relayViaServer()` — 不再有 relay 服务器
+- `send()` 方法移除 relay 回退逻辑
+- `sendHello()` 移除 relay 检查
+
+**ServerPicker 重构：**
+- 删除 `serverUrl`（relay URL）
+- 新增 `hostIp` (默认 127.0.0.1) / `hostPort` (默认 54321)
+- 新增 `isRoomHost` (默认 true, 可通过 `-Dcrossspire.room.host=false` 设置)
+- 保留 `isStageHost`（战斗权威标志）
+- 静态初始化 try-catch 安全化（测试环境兼容）
+
+**RoomHost (新) — 房主房间管理：**
+- `RoomHost.java` — 管理连接的玩家列表
+- `addPlayer()` / `removePlayer()` / `hasPlayer()` / `getOtherPlayers()`
+- 6 个 JUnit 测试
+
+**消息路由全局替换 (67 处)：**
+- `CrossSpireMod.relayClient.send()` → `CrossSpireMod.send()`
+- `relayClient != null && relayClient.isOpen()` → `CrossSpireMod.isConnected()`
+- `relayClient == null || !relayClient.isOpen()` → `!CrossSpireMod.isConnected()`
+- 涉及 21 个 Java 文件
+
+**命令系统更新：**
+- `crossspire host [port]` — 以房主身份启动
+- `crossspire join <ip> [port]` — 以客户端身份连接
+- `crossspire connect` — 兼容别名（指向 join）
+- 删除 `crossspire connect <url> <room>` 旧语法
+
+**UI 更新：**
+- `RoomPanel` 按钮文本 "Connect to Relay" → "Host Game" / "Join Game"
+
+**连接流程 (新)：**
+```
+房主: CrossSpireMod.connect() → p2pManager.start() → 监听 54321 → hub
+客户端: CrossSpireMod.connect() → p2pManager.connectTo(hostIp, hostPort) → 发送 playerId
+```
+
+**受影响的统计：**
+| 指标 | 旧值 | 新值 |
+|------|------|------|
+| 传输协议 | WebSocket → Relay | TCP → P2P |
+| 服务器 | TypeScript (Node.js, 19 TS 测试) | 删除 |
+| 依赖 | java-websocket:1.5.3, gson:2.10.1 | gson:2.10.1 (仅) |
+| JAR 大小 | 629 KB | 450 KB |
+| Java 测试 | 48 | 51 (+3) |
+| Java 源文件 | 55 | 56 (+RoomHost, -RelayClient) |
+| TypeScript 源文件 | 7 | 0 |
+| TS 测试 | 19 | 0 |
+
+**设备端验证：**
+- 两台设备 (Redmi Note 8 + Redmi 8) 通过 ADB (`localhost:15555`, `localhost:25555`) 连接
+- JAR 成功推送到两台设备的 `mods_library/CrossSpire.jar`
+- 两台设备均成功启动并进入主菜单 (`main_menu_ready`)
+- P2P 命令 (`crossspire host` / `crossspire join`) 通过 batch watcher 机制发送
+- ⚠️ 日志系统在重启后未刷新，E2E 完整验证待跟进

@@ -16,12 +16,12 @@ public class EndTurnSyncPatches {
     @SpirePostfixPatch
     public static void postfix(EndTurnButton __instance) {
         if (suppressEndTurn) return;
-        if (CrossSpireMod.relayClient == null || !CrossSpireMod.relayClient.isOpen()) return;
+        if (!CrossSpireMod.isConnected()) return;
 
         Protocol.PlayerEndTurnMessage msg = new Protocol.PlayerEndTurnMessage();
         msg.source = CrossSpireMod.playerId;
         msg.seq = (int) (System.currentTimeMillis() % 100000);
-        CrossSpireMod.relayClient.send(Protocol.GSON.toJson(msg));
+        CrossSpireMod.send(Protocol.GSON.toJson(msg));
         BaseMod.logger.info("EndTurnSync broadcast player_end_turn");
     }
 }

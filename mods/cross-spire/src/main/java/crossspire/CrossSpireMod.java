@@ -3,7 +3,6 @@ package crossspire;
 import basemod.BaseMod;
 import basemod.devcommands.ConsoleCommand;
 import com.evacipated.cardcrawl.modthespire.lib.SpireInitializer;
-import crossspire.network.RelayClient;
 import crossspire.ui.CrossSpireHUD;
 import crossspire.remote.StageHost;
 import crossspire.sync.MessageRouter;
@@ -12,6 +11,10 @@ import crossspire.combat.CombatResultReplayer;
 import crossspire.combat.CentralQueueManager;
 import crossspire.network.P2PManager;
 import crossspire.network.Protocol;
+import crossspire.network.RoomHost;
+import crossspire.network.HeartbeatManager;
+import crossspire.remote.RemotePlayerRegistry;
+import crossspire.resource.ResourceRegistryTracker;
 import crossspire.rng.RngManager;
 import crossspire.ui.LobbyState;
 import com.megacrit.cardcrawl.characters.AbstractPlayer;
@@ -19,17 +22,18 @@ import crossspire.ui.CrossSpireCommand;
 import crossspire.ui.LobbyScreen;
 import crossspire.ui.ServerPicker;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.UUID;
 import com.google.gson.JsonObject;
-import java.net.URI;
+import com.google.gson.JsonParser;
 
 @SpireInitializer
 public class CrossSpireMod {
 
-    public static RelayClient relayClient;
     public static MessageRouter messageRouter;
     public static LobbyScreen lobbyScreen;
     public static CentralQueueManager centralQueueManager;
     public static P2PManager p2pManager;
+    public static RoomHost roomHost;
     public static LobbyState lobbyState;
     public static StageHost stageHost;
     public static RngManager rngManager;
@@ -45,7 +49,7 @@ public class CrossSpireMod {
     }
 
     public static boolean isRoomHost() {
-        return !hostId.isEmpty() && hostId.equals(playerId);
+        return ServerPicker.isRoomHost;
     }
 
     public static void initialize() {
@@ -85,7 +89,6 @@ public class CrossSpireMod {
                 f.delete();
             }
         } catch (Exception e) {
-            // ignore — script is optional
         }
         startBatchWatcher();
     }
@@ -126,29 +129,79 @@ public class CrossSpireMod {
         }, "BatchWatcher").start();
     }
 
-    public static void connect() {
-        BaseMod.logger.info("CrossSpire connect() called, url=" + ServerPicker.serverUrl);
-        lobbyScreen.setStatus("Connecting...");
+    public static void send(String message) {
+        if (p2pManager == null) return;
+        if (ServerPicker.isRoomHost) {
+            String target = extractTarget(message);
+            if (target != null && !target.isEmpty()) {
+                p2pManager.send(target, message);
+            } else {
+                p2pManager.broadcast(message);
+            }
+        } else {
+            if (!hostId.isEmpty()) {
+                p2pManager.send(hostId, message);
+            }
+        }
+    }
+
+    private static String extractTarget(String message) {
         try {
-            relayClient = new RelayClient(new URI(ServerPicker.serverUrl));
-            relayClient.connect();
-            BaseMod.logger.info("CrossSpire connecting to relay: " + ServerPicker.serverUrl);
-        } catch (Exception e) {
-            BaseMod.logger.error("CrossSpire relay connection failed: " + e.getMessage());
-            BaseMod.logger.error("CrossSpire relay error stack: " + java.util.Arrays.toString(e.getStackTrace()));
-            lobbyScreen.setStatus("Error: " + e.getMessage());
+            JsonObject obj = new JsonParser().parse(message).getAsJsonObject();
+            if (obj.has("target")) return obj.get("target").getAsString();
+        } catch (Exception ignored) {}
+        return null;
+    }
+
+    public static void connect() {
+        if (playerId.isEmpty()) {
+            playerId = UUID.randomUUID().toString();
+            stageHost.setLocalPlayerId(playerId);
+        }
+        BaseMod.logger.info("CrossSpire connect() playerId=" + playerId.substring(0, 8)
+            + " isRoomHost=" + ServerPicker.isRoomHost);
+        p2pManager.start();
+        if (ServerPicker.isRoomHost) {
+            hostId = playerId;
+            roomHost = new RoomHost(playerId);
+            lobbyScreen.setStatus("Hosting on :" + p2pManager.getPort());
+            HeartbeatManager.start();
+            onRoomJoined();
+        } else {
+            lobbyScreen.setStatus("Connecting to " + ServerPicker.hostIp + ":" + ServerPicker.hostPort);
+            p2pManager.connectTo("host", ServerPicker.hostIp, ServerPicker.hostPort);
+            HeartbeatManager.start();
         }
     }
 
     public static void disconnect() {
-        if (relayClient != null) {
-            relayClient.close();
-            relayClient = null;
+        HeartbeatManager.stop();
+        if (p2pManager != null) {
+            p2pManager.stop();
         }
+        roomHost = null;
         lobbyScreen.setStatus("Disconnected");
     }
 
     public static boolean isConnected() {
-        return relayClient != null && relayClient.isOpen();
+        return p2pManager != null && p2pManager.connectionCount() > 0;
+    }
+
+    public static void onRoomJoined() {
+        lobbyScreen.setStatus("Hosting on :" + p2pManager.getPort());
+        ResourceRegistryTracker.sendMyRegistry();
+        p2pManager.sendHello();
+    }
+
+    public static void onPlayerConnected(String remotePlayerId) {
+        BaseMod.logger.info("CrossSpire player connected: " + remotePlayerId.substring(0, 8));
+        if (roomHost != null) {
+            roomHost.addPlayer(remotePlayerId);
+            JsonObject joined = new JsonObject();
+            joined.addProperty("type", "player_joined");
+            joined.addProperty("playerId", remotePlayerId);
+            p2pManager.broadcast(joined.toString());
+        }
+        RemotePlayerRegistry.register(remotePlayerId);
     }
 }

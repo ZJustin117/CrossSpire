@@ -31,7 +31,7 @@ public class NullReference<T> extends Reference<T> {
     @Override
     public boolean tryMigrate() {
         basemod.BaseMod.logger.info("NullReference migration attempt for " + refId);
-        if (CrossSpireMod.relayClient != null && CrossSpireMod.relayClient.isOpen()) {
+        if (CrossSpireMod.isConnected()) {
             Protocol.ReferenceMigrateMessage msg = new Protocol.ReferenceMigrateMessage();
             msg.source = CrossSpireMod.playerId;
             msg.seq = (int) (System.currentTimeMillis() % 100000);
@@ -39,7 +39,7 @@ public class NullReference<T> extends Reference<T> {
             msg.resourceType = resourceType();
             msg.resourceId = resourceId();
             msg.resourceHash = resourceHash;
-            CrossSpireMod.relayClient.send(Protocol.GSON.toJson(msg));
+            CrossSpireMod.send(Protocol.GSON.toJson(msg));
             basemod.BaseMod.logger.info("NullReference broadcast reference_migrate: " + refId);
         }
         return false;
