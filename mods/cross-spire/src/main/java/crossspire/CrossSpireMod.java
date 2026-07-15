@@ -9,7 +9,7 @@ import crossspire.sync.MessageRouter;
 import crossspire.sync.SyncExecutor;
 import crossspire.combat.CombatResultReplayer;
 import crossspire.combat.CentralQueueManager;
-import crossspire.network.P2PManager;
+import crossspire.network.StarConnectionManager;
 import crossspire.network.Protocol;
 import crossspire.network.RoomHost;
 import crossspire.network.HeartbeatManager;
@@ -31,7 +31,7 @@ public class CrossSpireMod {
     public static MessageRouter messageRouter;
     public static LobbyScreen lobbyScreen;
     public static CentralQueueManager centralQueueManager;
-    public static P2PManager p2pManager;
+    public static StarConnectionManager connectionManager;
     public static RoomHost roomHost;
     public static LobbyState lobbyState;
     public static StageHost stageHost;
@@ -54,7 +54,7 @@ public class CrossSpireMod {
         BaseMod.logger.info("CrossSpire EventSuppression ready, current=" + EventSuppression.isSuppressed());
 
         centralQueueManager = new CentralQueueManager();
-        p2pManager = new P2PManager();
+        connectionManager = new StarConnectionManager();
         lobbyState = new LobbyState();
         stageHost = new StageHost("");
         messageRouter = new MessageRouter(new SyncExecutor(), centralQueueManager, new CombatResultReplayer());
@@ -127,16 +127,16 @@ public class CrossSpireMod {
     }
 
     public static void send(String message) {
-        if (p2pManager == null) return;
+        if (connectionManager == null) return;
         if (ServerPicker.isRoomHost) {
             String target = extractTarget(message);
             if (target != null && !target.isEmpty()) {
-                p2pManager.send(target, message);
+                connectionManager.send(target, message);
             } else {
-                p2pManager.broadcast(message);
+                connectionManager.broadcast(message);
             }
         } else {
-            p2pManager.send("host", message);
+            connectionManager.send("host", message);
         }
     }
 
@@ -156,8 +156,8 @@ public class CrossSpireMod {
         BaseMod.logger.info("CrossSpire connect() playerId=" + playerId.substring(0, 8)
             + " isRoomHost=" + ServerPicker.isRoomHost);
         if (ServerPicker.isRoomHost) {
-            p2pManager.start();
-            p2pManager.setOnPeerConnectedListener(new P2PManager.OnPeerConnectedListener() {
+            connectionManager.start();
+            connectionManager.setOnPeerConnectedListener(new StarConnectionManager.OnPeerConnectedListener() {
                 @Override
                 public void onPeerConnected(String peerId) {
                     onPlayerConnected(peerId);
@@ -165,33 +165,33 @@ public class CrossSpireMod {
             });
             hostId = playerId;
             roomHost = new RoomHost(playerId);
-            lobbyScreen.setStatus("Hosting on :" + p2pManager.getPort());
+            lobbyScreen.setStatus("Hosting on :" + connectionManager.getPort());
             HeartbeatManager.start();
             onRoomJoined();
         } else {
             lobbyScreen.setStatus("Connecting to " + ServerPicker.hostIp + ":" + ServerPicker.hostPort);
-            p2pManager.connectTo("host", ServerPicker.hostIp, ServerPicker.hostPort);
+            connectionManager.connectTo("host", ServerPicker.hostIp, ServerPicker.hostPort);
             HeartbeatManager.start();
         }
     }
 
     public static void disconnect() {
         HeartbeatManager.stop();
-        if (p2pManager != null) {
-            p2pManager.stop();
+        if (connectionManager != null) {
+            connectionManager.stop();
         }
         roomHost = null;
         lobbyScreen.setStatus("Disconnected");
     }
 
     public static boolean isConnected() {
-        return p2pManager != null && p2pManager.connectionCount() > 0;
+        return connectionManager != null && connectionManager.connectionCount() > 0;
     }
 
     public static void onRoomJoined() {
-        lobbyScreen.setStatus("Hosting on :" + p2pManager.getPort());
+        lobbyScreen.setStatus("Hosting on :" + connectionManager.getPort());
         ResourceRegistryTracker.sendMyRegistry();
-        p2pManager.sendHello();
+        connectionManager.sendHello();
     }
 
     public static void onPlayerConnected(String remotePlayerId) {
@@ -201,7 +201,7 @@ public class CrossSpireMod {
             JsonObject joined = new JsonObject();
             joined.addProperty("type", "player_joined");
             joined.addProperty("playerId", remotePlayerId);
-            p2pManager.broadcast(joined.toString());
+            connectionManager.broadcast(joined.toString());
         }
         RemotePlayerRegistry.register(remotePlayerId);
         lobbyState.onPlayerJoined(remotePlayerId);

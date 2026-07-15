@@ -75,7 +75,7 @@ public class MessageRouter {
         } else if ("resource_response".equals(type)) {
             RemoteResourceManager.onResourceResponse(rawMessage);
         } else if ("hello".equals(type)) {
-            CrossSpireMod.p2pManager.onHelloReceived(rawMessage);
+            CrossSpireMod.connectionManager.onHelloReceived(rawMessage);
         } else if ("player_ready".equals(type)) {
             CrossSpireMod.lobbyState.onPlayerReady(rawMessage);
         } else if ("invoke".equals(type)) {

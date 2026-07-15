@@ -7,7 +7,7 @@ import java.net.*;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class P2PManager {
+public class StarConnectionManager {
 
     private static final int DEFAULT_PORT = 54321;
     private final int listenPort;
@@ -30,7 +30,7 @@ public class P2PManager {
         return id.length() <= 8 ? id : id.substring(0, 8);
     }
 
-    public P2PManager() {
+    public StarConnectionManager() {
         java.util.Properties cfg = loadConfig();
         String portProp = System.getProperty("crossspire.p2p.port");
         if (portProp == null) portProp = cfg.getProperty("crossspire.p2p.port");
@@ -58,7 +58,7 @@ public class P2PManager {
         running = true;
         try {
             serverSocket = new ServerSocket(listenPort);
-            BaseMod.logger.info("P2PManager listening on :" + listenPort);
+            BaseMod.logger.info("StarConnectionManager listening on :" + listenPort);
 
             new Thread(new Runnable() {
                 @Override
@@ -69,21 +69,21 @@ public class P2PManager {
                             String peerId = readPeerId(client);
                             if (peerId != null) {
                                 connections.put(peerId, client);
-                                BaseMod.logger.info("P2PManager accepted connection from " + sid(peerId));
+                                BaseMod.logger.info("StarConnectionManager accepted connection from " + sid(peerId));
                                 startReader(peerId, client);
                                 if (peerConnectedListener != null) {
                                     peerConnectedListener.onPeerConnected(peerId);
                                 }
                             }
                         } catch (IOException e) {
-                            if (running) BaseMod.logger.error("P2PManager accept error: " + e.getMessage());
+                            if (running) BaseMod.logger.error("StarConnectionManager accept error: " + e.getMessage());
                         }
                     }
                 }
-            }, "P2P-Accept").start();
+            }, "Star-Accept").start();
 
         } catch (IOException e) {
-            BaseMod.logger.error("P2PManager start error: " + e.getMessage());
+            BaseMod.logger.error("StarConnectionManager start error: " + e.getMessage());
         }
     }
 
@@ -95,10 +95,10 @@ public class P2PManager {
             w.write(CrossSpireMod.playerId + "\n");
             w.flush();
             connections.put(peerId, socket);
-            BaseMod.logger.info("P2PManager connected to " + sid(peerId) + " @" + host + ":" + port);
+            BaseMod.logger.info("StarConnectionManager connected to " + sid(peerId) + " @" + host + ":" + port);
             startReader(peerId, socket);
         } catch (IOException e) {
-            BaseMod.logger.error("P2PManager connect error: " + e.getMessage());
+            BaseMod.logger.error("StarConnectionManager connect error: " + e.getMessage());
         }
     }
 
@@ -115,7 +115,7 @@ public class P2PManager {
             w.write(message + "\n");
             w.flush();
         } catch (IOException e) {
-            BaseMod.logger.error("P2PManager send error: " + e.getMessage());
+            BaseMod.logger.error("StarConnectionManager send error: " + e.getMessage());
             connections.remove(peerId);
         }
     }
@@ -133,35 +133,16 @@ public class P2PManager {
         hello.source = CrossSpireMod.playerId;
         hello.seq = 1;
 
-        java.util.List<Protocol.MemberInfo> peerList = new java.util.ArrayList<Protocol.MemberInfo>();
-        for (Map.Entry<String, Socket> entry : connections.entrySet()) {
-            Protocol.MemberInfo mi = new Protocol.MemberInfo();
-            mi.id = entry.getKey();
-            mi.ip = advertisedIp;
-            mi.port = listenPort;
-            peerList.add(mi);
-        }
-        hello.peers = peerList.toArray(new Protocol.MemberInfo[0]);
-
         CrossSpireMod.send(Protocol.GSON.toJson(hello));
-        BaseMod.logger.info("P2PManager sent hello: " + advertisedIp + ":" + listenPort + " peers=" + peerList.size());
+        BaseMod.logger.info("StarConnectionManager sent hello: " + advertisedIp + ":" + listenPort);
     }
 
     public void onHelloReceived(String rawMessage) {
         Protocol.HelloMessage hello = Protocol.GSON.fromJson(rawMessage, Protocol.HelloMessage.class);
         if (hello.source == null || hello.source.equals(CrossSpireMod.playerId)) return;
         if (!connections.containsKey(hello.source)) {
-            BaseMod.logger.info("P2PManager hello from " + sid(hello.source) + " @" + hello.ip + ":" + hello.port);
+            BaseMod.logger.info("StarConnectionManager hello from " + sid(hello.source) + " @" + hello.ip + ":" + hello.port);
             connectTo(hello.source, hello.ip, hello.port);
-        }
-
-        if (hello.peers != null) {
-            for (Protocol.MemberInfo peer : hello.peers) {
-                if (peer.id == null || peer.id.equals(CrossSpireMod.playerId)) continue;
-                if (connections.containsKey(peer.id)) continue;
-                BaseMod.logger.info("P2PManager auto-connecting to peer: " + sid(peer.id) + " @" + peer.ip + ":" + peer.port);
-                connectTo(peer.id, peer.ip, peer.port);
-            }
         }
     }
 
@@ -186,20 +167,20 @@ public class P2PManager {
                         routeP2pMessage(line);
                     }
                 } catch (IOException e) {
-                    BaseMod.logger.info("P2PManager " + sid(peerId) + " disconnected");
+                    BaseMod.logger.info("StarConnectionManager " + sid(peerId) + " disconnected");
                 } finally {
                     connections.remove(peerId);
                     try { socket.close(); } catch (IOException ignored) {}
                 }
             }
-        }, "P2P-Reader-" + sid(peerId)).start();
+        }, "Star-Reader-" + sid(peerId)).start();
     }
 
     private void routeP2pMessage(String line) {
         try {
             CrossSpireMod.messageRouter.route(line);
         } catch (Exception e) {
-            BaseMod.logger.error("P2PManager route error: " + e.getMessage());
+            BaseMod.logger.error("StarConnectionManager route error: " + e.getMessage());
         }
     }
 

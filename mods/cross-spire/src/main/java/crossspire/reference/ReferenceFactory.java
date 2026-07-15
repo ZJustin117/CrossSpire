@@ -10,7 +10,7 @@ public final class ReferenceFactory {
             return new LocalReference<Object>(cardId, ownerId);
         }
 
-        if (CrossSpireMod.p2pManager != null && CrossSpireMod.p2pManager.hasDirectConnection(ownerId)) {
+        if (CrossSpireMod.connectionManager != null && CrossSpireMod.connectionManager.hasDirectConnection(ownerId)) {
             return new RemoteReference<Object>(cardId, ownerId, resourceHash, true);
         }
 
@@ -27,7 +27,7 @@ public final class ReferenceFactory {
         }
 
         if (CrossSpireMod.stageHost != null && !CrossSpireMod.stageHost.canOwnLocally(resourceType, resourceId)) {
-            if (CrossSpireMod.p2pManager != null && CrossSpireMod.p2pManager.hasDirectConnection(ownerId)) {
+            if (CrossSpireMod.connectionManager != null && CrossSpireMod.connectionManager.hasDirectConnection(ownerId)) {
                 return new RemoteReference<Object>(resourceId, ownerId, resourceHash, true);
             }
             if (CrossSpireMod.isConnected()) {

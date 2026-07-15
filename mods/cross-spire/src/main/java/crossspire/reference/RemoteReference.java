@@ -52,7 +52,7 @@ public class RemoteReference<T> extends Reference<T> {
         String json = Protocol.GSON.toJson(invoke);
 
         if (direct) {
-            CrossSpireMod.p2pManager.send(ownerId, json);
+            CrossSpireMod.connectionManager.send(ownerId, json);
         } else {
             CrossSpireMod.send(json);
         }

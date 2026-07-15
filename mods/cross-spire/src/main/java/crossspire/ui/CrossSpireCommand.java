@@ -72,7 +72,7 @@ public class CrossSpireCommand extends ConsoleCommand {
         DevConsole.log("Connected: " + (c ? "YES" : "NO"));
         DevConsole.log("PlayerId: " + (pid.isEmpty() ? "(none)" : pid));
         DevConsole.log("Room: " + ServerPicker.roomCode);
-        DevConsole.log("P2P peers: " + CrossSpireMod.p2pManager.connectionCount());
+        DevConsole.log("Peers: " + CrossSpireMod.connectionManager.connectionCount());
         DevConsole.log("Queue size: " + CrossSpireMod.centralQueueManager.size());
     }
 
