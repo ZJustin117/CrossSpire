@@ -15,7 +15,6 @@ import crossspire.network.RoomHost;
 import crossspire.network.HeartbeatManager;
 import crossspire.remote.RemotePlayerRegistry;
 import crossspire.resource.ResourceRegistryTracker;
-import crossspire.rng.RngManager;
 import crossspire.ui.LobbyState;
 import com.megacrit.cardcrawl.characters.AbstractPlayer;
 import crossspire.ui.CrossSpireCommand;
@@ -36,11 +35,9 @@ public class CrossSpireMod {
     public static RoomHost roomHost;
     public static LobbyState lobbyState;
     public static StageHost stageHost;
-    public static RngManager rngManager;
     public static CrossSpireHUD hud;
     public static String playerId = "";
     public static String hostId = "";
-    public static String syncedSeed = null;
     public static AbstractPlayer localPlayer = null;
     private static final AtomicInteger seqCounter = new AtomicInteger(0);
 

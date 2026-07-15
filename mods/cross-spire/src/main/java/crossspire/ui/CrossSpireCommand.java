@@ -72,7 +72,6 @@ public class CrossSpireCommand extends ConsoleCommand {
         DevConsole.log("Connected: " + (c ? "YES" : "NO"));
         DevConsole.log("PlayerId: " + (pid.isEmpty() ? "(none)" : pid));
         DevConsole.log("Room: " + ServerPicker.roomCode);
-        DevConsole.log("Seed:  " + (CrossSpireMod.syncedSeed != null ? CrossSpireMod.syncedSeed : "(none)"));
         DevConsole.log("P2P peers: " + CrossSpireMod.p2pManager.connectionCount());
         DevConsole.log("Queue size: " + CrossSpireMod.centralQueueManager.size());
     }
@@ -108,7 +107,6 @@ public class CrossSpireCommand extends ConsoleCommand {
         }
         if (!CrossSpireMod.playerId.isEmpty()) {
             DevConsole.log("StageHost: " + ServerPicker.isStageHost);
-            DevConsole.log("Synced seed: " + (CrossSpireMod.syncedSeed != null ? CrossSpireMod.syncedSeed : "(none)"));
         }
     }
 

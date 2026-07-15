@@ -57,4 +57,17 @@ public class StageHostTest {
         host.setStageHost("bob");
         assertTrue("cards are always local to their owner", host.canOwnLocally("card", "Strike_R"));
     }
+
+    @Test
+    public void shouldProvideNonNullStageRng() {
+        StageHost host = new StageHost("alice");
+        assertNotNull("stageRng should not be null", host.getStageRng());
+    }
+
+    @Test
+    public void shouldReturnSameRngInstanceOnRepeatedCalls() {
+        StageHost host = new StageHost("alice");
+        assertSame("stageRng should be singleton per StageHost",
+                host.getStageRng(), host.getStageRng());
+    }
 }

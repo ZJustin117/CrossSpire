@@ -8,7 +8,8 @@ import com.megacrit.cardcrawl.monsters.AbstractMonster;
 import crossspire.CrossSpireMod;
 import crossspire.network.Protocol;
 import crossspire.remote.RemotePlayerRegistry;
-import crossspire.rng.SyncedRng;
+
+import java.util.Random;
 
 @SuppressWarnings("unused")
 public class MonsterIntentBroadcastPatches {
@@ -21,17 +22,13 @@ public class MonsterIntentBroadcastPatches {
             if (!CrossSpireMod.isConnected()) return;
             if (__instance.isDeadOrEscaped()) return;
 
-            SyncedRng rng = CrossSpireMod.rngManager != null
-                ? CrossSpireMod.rngManager.get("monster_intent_" + __instance.id)
-                : null;
+            Random rng = CrossSpireMod.stageHost.getStageRng();
 
             int hits = 1;
             String targetId = "self";
             if (__instance.getIntentBaseDmg() > 0 && AbstractDungeon.player != null) {
-                if (rng != null) {
-                    int playerCount = 1 + RemotePlayerRegistry.count();
-                    targetId = rng.nextInt(playerCount) == 0 ? "self" : "player_remote";
-                }
+                int playerCount = 1 + RemotePlayerRegistry.count();
+                targetId = rng.nextInt(playerCount) == 0 ? "self" : "player_remote";
             }
 
             Protocol.MonsterIntentMessage msg = new Protocol.MonsterIntentMessage();

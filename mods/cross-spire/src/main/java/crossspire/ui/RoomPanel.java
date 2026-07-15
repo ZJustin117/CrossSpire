@@ -25,7 +25,6 @@ public class RoomPanel {
     private static final Color TITLE_C    = new Color(0.95F, 0.8F, 0.05F, 1.0F);
     private static final Color WHITE_C    = Color.WHITE;
     private static final Color CYAN_C     = Color.CYAN;
-    private static final Color GOLD_C     = Color.GOLD;
     private static final Color RED_C      = new Color(0.85F, 0.2F, 0.2F, 1.0F);
 
     private static String selectedCharacter = "IRONCLAD";
@@ -69,11 +68,6 @@ public class RoomPanel {
             "Room: " + ServerPicker.roomCode, panelX + 6, y, CYAN_C);
         y -= lineH;
 
-        if (CrossSpireMod.syncedSeed != null) {
-            FontHelper.renderFontLeftTopAligned(sb, FontHelper.tipBodyFont,
-                "Seed: " + CrossSpireMod.syncedSeed, panelX + 6, y, GOLD_C);
-            y -= lineH;
-        }
         y -= 4;
 
         float btnW = 145F * scale;
@@ -100,7 +94,7 @@ public class RoomPanel {
         y -= btnH + 2;
 
         playBtnY = y;
-        boolean canPlay = CrossSpireMod.syncedSeed != null;
+        boolean canPlay = isReady;
         renderButton(sb, whitePixel, panelX + 6, y, btnW, btnH,
             "Play", canPlay ? BTN_GREEN : BTN_GREY);
         y -= btnH + 6;
@@ -159,11 +153,10 @@ public class RoomPanel {
             }
 
             if (hitTest(panelX + 6, playBtnY, btnW, btnH, mx, my)
-                && CrossSpireMod.syncedSeed != null) {
+                && isReady) {
                 Gdx.app.postRunnable(new Runnable() {
                     @Override public void run() {
-                        crossspire.remote.GameStarter.start(selectedCharacter,
-                            CrossSpireMod.syncedSeed);
+                        crossspire.remote.GameStarter.start(selectedCharacter);
                     }
                 });
             }

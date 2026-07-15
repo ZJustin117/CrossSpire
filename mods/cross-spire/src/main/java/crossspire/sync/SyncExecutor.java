@@ -64,7 +64,6 @@ public class SyncExecutor {
             CrossSpireMod.stageHost.setStageHost(source);
         }
         if (source.equals(CrossSpireMod.playerId)) return;
-        CrossSpireMod.syncedSeed = seed;
     }
 
     private void handleRemotePlayerSync(String rawMessage) {
@@ -99,7 +98,7 @@ public class SyncExecutor {
         if (ids.size() == 0) return;
 
         final String firstMonster = ids.get(0).getAsString();
-        final String seed = CrossSpireMod.syncedSeed != null ? CrossSpireMod.syncedSeed : "220644";
+        final String seed = "220644";
         BaseMod.logger.info("SyncExecutor room_enter from " + source.substring(0,8) + " monsters=" + ids);
 
         CombatSyncPatches.suppressBroadcast = true;

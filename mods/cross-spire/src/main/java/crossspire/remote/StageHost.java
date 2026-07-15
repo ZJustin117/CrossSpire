@@ -1,11 +1,13 @@
 package crossspire.remote;
 
 import java.util.Arrays;
+import java.util.Random;
 
 public class StageHost {
 
     private String localPlayerId;
     private String hostPlayerId;
+    private final Random stageRng = new Random();
 
     public StageHost(String localPlayerId) {
         this.localPlayerId = localPlayerId;
@@ -25,6 +27,10 @@ public class StageHost {
 
     public boolean isStageHost() {
         return hostPlayerId != null && hostPlayerId.equals(localPlayerId);
+    }
+
+    public Random getStageRng() {
+        return stageRng;
     }
 
     public static String electHost(String[] playerIds) {

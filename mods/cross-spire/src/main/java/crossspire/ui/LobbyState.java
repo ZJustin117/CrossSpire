@@ -144,7 +144,6 @@ public class LobbyState {
             }
             BaseMod.logger.info("LobbyState host broadcast seed=" + seed);
             com.megacrit.cardcrawl.helpers.SeedHelper.setSeed(seed);
-            CrossSpireMod.syncedSeed = seed;
         }
     }
 }
