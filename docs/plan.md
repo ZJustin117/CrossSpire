@@ -7,10 +7,10 @@
 | Phase | 进度 | Commit |
 |-------|------|--------|
 | P1 架构修复 | ✅ 5/5 完成 | `9df0e44` `3ce46d7` `ad8318c` |
-| P2 功能补全 | 🟡 3/10 完成 (T2.1-T2.3, T2.7a-c 新增) | `89bbb1e` `447a216` |
+| P2 功能补全 | 🟡 6/10 完成 (T2.1-T2.3, T2.7d/e/f) | `89bbb1e` `447a216` `1e4070f` |
 | P3 清理稳定 | 🟡 3/8 完成 (T3.2-T3.4) | `0975c5a` |
 | 归档 | 🟡 1/6 完成 (A1) | — |
-| **总** | **12/29** | 45 tests pass |
+| **总** | **15/29** | 51 tests pass |
 
 ## 目录
 
@@ -651,3 +651,40 @@ P3.4 bug修复清单
 - FR-5.2 — Cache LRU + SHA-256 校验 (T3.1)
 - FR-5.1 — ResourceRegistry 查询 API (T3.5)
 - 文档同步 (T3.7)
+
+### 2026-07-15 — P2/T2.7d/e/f 完成
+
+| Task | 变更 | 文件 |
+|------|------|------|
+| T2.7d | cmdPlay 不再调 UseCardAction；改为 construct QueueSubmitMessage → host: centralQueue.onQueueSubmit / client: send(host) | `CrossSpireCommand.java` |
+| T2.7e | LocalCapturePatches: AtomicInteger suppressDepth counter + pushSuppress()；CentralQueueManager.handleOwnItem + MessageRouter.handleInvoke 包裹 pushSuppress | `LocalCapturePatches.java`, `CentralQueueManager.java`, `MessageRouter.java` |
+| T2.7f | QueueSubmitBuilder 提取公共 builder；LocalReference type→combat_result；buildVfxOps 加 cardType/rarity/target | `QueueSubmitBuilder.java`(新), `LocalReference.java` |
+| |
+| 异步防回弹: pushSuppress() 在 addToBottom 前 → Postfix 中 decAndGet 释放 |
+| 测试: QueueSubmitBuilderTest(4) + LocalCapturePatchesTest(2) → 51 total |
+
+### 卡牌执行 SDD 链路 (已实现)
+
+```
+cmdPlay("Strike_R")
+  host:  → QueueSubmitBuilder.build → centralQueue.onQueueSubmit → processNext
+            → handleOwnItem → pushSuppress → dereference → UseCardAction(排队)
+            → buildEffects(baseDamage) + buildVfxOps → combat_result(广播)
+            → markDone → queue_empty(广播)
+
+  client: → QueueSubmitBuilder.build → send(host)
+            → host.MessageRouter.handleQueueSubmit → centralQueue.onQueueSubmit
+            → sendInvoke → client.MessageRouter.handleInvoke
+            → pushSuppress → UseCardAction(排队) → invoke_result → host
+            → broadcastCombatResult → D2 CombatResultReplayer → INDUCED 扣血
+
+  UseCardAction 异步执行 (下一帧):
+    → AbstractPlayer.useCard → BaseMod hooks + Strike_R.use → DamageAction → monster.damage(6)
+    → LocalCapturePatches.Postfix: suppressDepth>0 → decAndGet → return (不重复 capture) ✓
+```
+
+### E2E 测试状态
+
+JAR 已推送到两台设备 (localhost:15555, 25555)，JUnit 51/51 通过。
+自动 E2E 受阻于 Amethyst launcher 需要手动点击"Play"启动 STS 引擎。
+手动验证流程: launcher 点 Play → 等 main_menu → batch 命令自动执行。
