@@ -309,8 +309,63 @@ relicRef.triggerOn("onPlayerDamaged"); // 玩家受伤时触发
    • 其他人对怪物只能建立远程引用 → 渲染走 fallback 或操作重放
 
 3. 事件权威
-   • 图主决定事件选项（未来可扩展投票）
+    • 图主决定事件选项（未来可扩展投票）
 ```
+
+### 图主选举
+
+图主按阶段确定，所有人必须达成共识。与房间标注机制对称，使用普通 JSON（非标准包）经房主路由。
+
+#### 选举消息
+
+```
+stage_vote        C→房主      {"type":"stage_vote","source":"<id>","candidate":"<target_id>"}
+stage_votes       房主→全员   {"type":"stage_votes","source":"<host>","votes":{"a":"bob","b":"bob"}}
+stage_host_result  房主→全员  {"type":"stage_host_result","source":"<host>","host_id":"<id>"}
+```
+
+#### 选举流程
+
+```
+1. 房主发起投票 → 广播 stage_votes {votes: {}}
+2. 每个玩家 crossspire vote <player_id> → stage_vote 到房主
+3. 房主聚合 → 广播 stage_votes
+4. 全部在线玩家投给同一 candidate → 房主广播 stage_host_result
+5. 全员 local: stageHost.setStageHost(result.host_id)
+   新图主开始执行阶段职责
+```
+
+#### 共识条件
+
+与房间标注相同——全员一致制。房主维护投票表 `Map<playerId, candidateId>`，每次收 stage_vote 后检测是否所有在线玩家投同一候选。无超时、不走默认选择。
+
+#### 掉线重选
+
+**图主掉线**（心跳超时）:
+- 房主广播 `player_left`
+- 房主发起新一轮投票：广播 `stage_votes {votes: {}}`
+- 在线玩家重新 `crossspire vote <id>`
+- 选出新图主 → 新图主接管阶段职责
+
+**图主重连**:
+- 图主发送 `hello` 重连房主
+- 房主返回 `room_info` + `full_snapshot`
+- 若当前无活跃图主（投票未完成）→ 恢复原图主身份
+- 若已有新图主（投票已出结果）→ 作为普通客户端加入
+
+**普通客户端掉线**（非图主）:
+- 不影响图主身份
+- 当前投票中移除此玩家的票 → 可能导致共识重新检测（若原先因该玩家而达不成共识则可能立即达成）
+
+#### 与房主角色的关系
+
+- **房主**：仅做投票聚合与共识检测，不执行游戏逻辑
+- **图主–房主同体**：消息仍在本地路由，无网络往返
+- **图主≠房主**：`stage_host_result` 经房主广播全员
+
+#### 命令入口
+
+`crossspire vote <player_id>` — 标注选举的图主，重复标注即覆盖。
 
 ### 强所有权
 

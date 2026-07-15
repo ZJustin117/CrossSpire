@@ -198,6 +198,37 @@ THEN  房主继续等待，不做任何房间切换
       无自动超时或默认选择——等待全员达成一致
 ```
 
+### US-4b 图主选举
+
+**作为** 联机玩家
+**我想要** 在每阶段开始前投票选出图主
+**以便** 明确地图/怪物/事件的责任人，且所有人对图主身份达成共识
+
+**验收标准：**
+
+```
+GIVEN 一个阶段（楼层）将要开始，队伍需要确定图主
+WHEN  房主发起图主投票（发送空的 stage_votes）
+THEN  所有玩家输入 crossspire vote <player_id> 标注自己选举的图主
+      房主收集投票 → 每次收到 stage_vote 后广播 stage_votes
+
+GIVEN 所有在线玩家均投票给同一 player_id
+WHEN  房主检测到全员一致
+THEN  房主广播 stage_host_result {host_id: "<id>"}
+      全员 local setStageHost(result.host_id)
+      新图主开始执行阶段职责（地图生成 / 房间类型决定）
+
+GIVEN 玩家 A 已投票 bob，后改为 alice
+WHEN  再次输入 crossspire vote alice
+THEN  房主更新 A 的投票 → 广播 stage_votes
+      重新检测共识
+
+GIVEN 不同玩家投票给不同候选者
+WHEN  尚无全员一致
+THEN  房主继续等待，不做任何切换
+      无自动超时或默认选择——等待全员达成一致
+```
+
 ### US-5 Mod 素材互通
 
 **作为** 使用自定义 Mod 角色/卡牌/遗物的玩家
@@ -253,7 +284,15 @@ WHEN  全员检测图主心跳超时
 THEN  图主持有的地图/怪物/事件引用全部变空引用
       自动保存当前进度到本地磁盘
       全员界面显示"等待图主..."
-      不尝试自动迁移（当前版本）
+      房主发起重新投票 → 在线玩家重新 vote → 选出新图主
+       新图主接管阶段（重建地图引用 / 怪物状态）
+
+GIVEN 图主掉线后重新连入
+WHEN  图主发送 hello 重连
+THEN  房主返回 room_info + full_snapshot
+      检查当前是否有活跃图主
+      若尚无（投票未完成）→ 恢复原图主身份
+      若已有新图主（投票已选出）→ 作为普通客户端加入
 
 GIVEN 房主掉线
 WHEN  全员检测房主心跳超时
@@ -353,6 +392,8 @@ THEN  塔2 客户端实现相同的 StandardPacket 协议 + Reference<T> 抽象
 | FR-4.6 | 所有者交互选择：invoke 中触发的选择面板（选牌/选目标等）回传给调用方 UI | US-4, US-7 |
 | FR-4.7 | 命令标注：`crossspire room <index>` 标注下一个房间，重复标注即覆盖，发 `room_pin` 到房主 | US-4a |
 | FR-4.8 | 共识检测：房主维护全体标注表，全员选择同一 room index 时通知图主执行房间进入 | US-4a |
+| FR-4.9 | 图主选举：`crossspire vote <player_id>` 标注选举，全员一致即确认，`stage_vote/stage_votes/stage_host_result` | US-4b |
+| FR-4.10 | 图主掉线重选：心跳超时 → 等待 → 重新投票选新图主；图主重连则恢复(若尚未选出新图主) | US-4b, US-6 |
 
 ### FR-5 素材系统
 
@@ -395,7 +436,7 @@ THEN  塔2 客户端实现相同的 StandardPacket 协议 + Reference<T> 抽象
 - 1-4 人联机（集中在 4 人场景）
 - 塔1 基础角色 + Mod 角色同房
 - 房主路由星型拓扑
-- 图主掉线 → 暂停等待，不迁移
+- 图主掉线 → 等待重连，可重新投票选新图主
 - 事件不投票（一人选择即生效）
 
 ### 当前版本不做
