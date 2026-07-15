@@ -51,6 +51,7 @@ public class LocalReference<T> extends Reference<T> {
         Protocol.QueueComplete complete = new Protocol.QueueComplete();
         complete.source = ownerId;
         complete.seq = CrossSpireMod.nextSeq();
+        complete.type = "combat_result";
         complete.packetId = refId + "/" + UUID.randomUUID().toString().substring(0, 8);
         complete.effects = captured;
         complete.operationSequence = buildVfxOps(copy, targetId);
@@ -74,6 +75,9 @@ public class LocalReference<T> extends Reference<T> {
         playCard.cardId = card.cardID;
         playCard.source = ownerId;
         playCard.target = targetId;
+        playCard.cardType = card.type.name();
+        playCard.cardRarity = card.rarity.name();
+        playCard.cardTarget = card.target.name();
         list.add(playCard);
 
         boolean isAttack = card.baseDamage > 0 && card.type == AbstractCard.CardType.ATTACK;

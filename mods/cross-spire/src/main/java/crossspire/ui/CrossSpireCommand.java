@@ -3,9 +3,7 @@ package crossspire.ui;
 import basemod.BaseMod;
 import basemod.DevConsole;
 import basemod.devcommands.ConsoleCommand;
-import com.megacrit.cardcrawl.actions.utility.UseCardAction;
 import com.megacrit.cardcrawl.cards.AbstractCard;
-import com.megacrit.cardcrawl.core.AbstractCreature;
 import com.megacrit.cardcrawl.core.CardCrawlGame;
 import com.megacrit.cardcrawl.dungeons.AbstractDungeon;
 import com.megacrit.cardcrawl.helpers.CardLibrary;
@@ -14,6 +12,7 @@ import crossspire.CrossSpireMod;
 import crossspire.network.Protocol;
 import crossspire.remote.RemotePlayerRegistry;
 import crossspire.remote.RemotePlayerState;
+import crossspire.sync.QueueSubmitBuilder;
 
 public class CrossSpireCommand extends ConsoleCommand {
 
@@ -160,7 +159,7 @@ public class CrossSpireCommand extends ConsoleCommand {
         String cardId = tokens[depth + 1];
         String targetId = tokens.length > depth + 2 ? tokens[depth + 2] : "self";
 
-        if (AbstractDungeon.player == null || AbstractDungeon.actionManager == null) {
+        if (AbstractDungeon.player == null) {
             DevConsole.log("Not in combat. Use crossspire start first.");
             return;
         }
@@ -171,24 +170,23 @@ public class CrossSpireCommand extends ConsoleCommand {
             return;
         }
 
-        AbstractCreature target;
-        if ("self".equals(targetId)) {
-            target = AbstractDungeon.player;
-        } else {
+        if (!"self".equals(targetId)) {
             AbstractMonster m = AbstractDungeon.getCurrRoom().monsters.getMonster(targetId);
             if (m == null || m.isDeadOrEscaped()) {
                 DevConsole.log("Target not found: " + targetId);
                 return;
             }
-            target = m;
         }
 
-        AbstractCard copy = card.makeCopy();
-        copy.current_x = AbstractDungeon.player.hb.cX;
-        copy.current_y = AbstractDungeon.player.hb.cY;
+        Protocol.QueueSubmitMessage pkt = QueueSubmitBuilder.build(cardId, targetId);
 
-        AbstractDungeon.actionManager.addToBottom(new UseCardAction(copy, target));
-        DevConsole.log("Playing " + cardId + " → " + targetId);
+        if (CrossSpireMod.isRoomHost()) {
+            CrossSpireMod.centralQueueManager.onQueueSubmit(pkt);
+            DevConsole.log("Queue submit (host): " + cardId + " → " + targetId);
+        } else {
+            CrossSpireMod.send(Protocol.GSON.toJson(pkt));
+            DevConsole.log("Queue submit (client): " + cardId + " → " + targetId);
+        }
     }
 
     @Override

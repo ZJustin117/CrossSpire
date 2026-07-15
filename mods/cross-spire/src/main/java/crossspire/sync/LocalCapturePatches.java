@@ -9,10 +9,16 @@ import com.megacrit.cardcrawl.monsters.AbstractMonster;
 import crossspire.CrossSpireMod;
 import crossspire.EventSuppression;
 import crossspire.network.Protocol;
-import crossspire.reference.ContentValidator;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @SuppressWarnings("unused")
 public class LocalCapturePatches {
+
+    private static final AtomicInteger suppressDepth = new AtomicInteger(0);
+
+    public static void pushSuppress() {
+        suppressDepth.incrementAndGet();
+    }
 
     @SpirePatch(clz = AbstractPlayer.class, method = "useCard", paramtypez = {AbstractCard.class, AbstractMonster.class, int.class})
     public static class OnUseCard {
@@ -20,18 +26,14 @@ public class LocalCapturePatches {
         public static void Postfix(AbstractPlayer __instance, AbstractCard card, AbstractMonster target, int energyOnUse) {
             if (!CrossSpireMod.isConnected()) return;
             if (EventSuppression.isSuppressed()) return;
-            if (CrossSpireMod.playerId.isEmpty() || CrossSpireMod.hostId.isEmpty()) return;
 
-            Protocol.QueueSubmitMessage pkt = new Protocol.QueueSubmitMessage();
-            pkt.senderId = CrossSpireMod.playerId;
-            pkt.ownerId = CrossSpireMod.playerId;
-            pkt.cardId = card.cardID;
-            pkt.resourceHash = ContentValidator.hashResource("card", card.cardID);
-            pkt.gameTarget = target != null ? target.id : "self";
-            pkt.timestamp = System.currentTimeMillis();
-            pkt.source = CrossSpireMod.playerId;
-            pkt.seq = CrossSpireMod.nextSeq();
-            pkt.target = CrossSpireMod.hostId;
+            if (suppressDepth.get() > 0) {
+                suppressDepth.decrementAndGet();
+                return;
+            }
+
+            String targetId = target != null ? target.id : "self";
+            Protocol.QueueSubmitMessage pkt = QueueSubmitBuilder.build(card.cardID, targetId);
 
             CrossSpireMod.send(Protocol.GSON.toJson(pkt));
             BaseMod.logger.info("CapturePatches queue_submit: " + card.cardID + " to host="

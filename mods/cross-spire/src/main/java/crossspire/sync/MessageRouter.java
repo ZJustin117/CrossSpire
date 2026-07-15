@@ -189,6 +189,7 @@ public class MessageRouter {
             AbstractMonster m = AbstractDungeon.getCurrRoom().monsters.getMonster(targetId);
             if (m != null) target = m;
         }
+        LocalCapturePatches.pushSuppress();
         AbstractDungeon.actionManager.addToBottom(new UseCardAction(copy, target));
 
         Protocol.InvokeResultMessage result = new Protocol.InvokeResultMessage();

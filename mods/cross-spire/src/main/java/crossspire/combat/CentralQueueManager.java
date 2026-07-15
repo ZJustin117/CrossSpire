@@ -99,6 +99,7 @@ public class CentralQueueManager {
 
     private void handleOwnItem(Protocol.QueueSubmitMessage head) {
         CSLog.log("CentralQueueManager own item: " + head.cardId);
+        crossspire.sync.LocalCapturePatches.pushSuppress();
         crossspire.reference.LocalReference<Object> ref = new crossspire.reference.LocalReference<Object>(head.cardId, CrossSpireMod.playerId);
         ref.dereference(head.gameTarget);
 
