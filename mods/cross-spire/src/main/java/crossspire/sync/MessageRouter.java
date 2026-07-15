@@ -194,7 +194,7 @@ public class MessageRouter {
         Protocol.InvokeResultMessage result = new Protocol.InvokeResultMessage();
         result.source = CrossSpireMod.playerId;
         result.target = inv.source;
-        result.seq = 1;
+        result.seq = CrossSpireMod.nextSeq();
         result.refId = inv.refId;
         result.effects = buildInvokeEffects(template, targetId);
         result.operationSequence = new Protocol.OperationStep[0];

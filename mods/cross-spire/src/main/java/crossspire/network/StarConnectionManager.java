@@ -131,7 +131,7 @@ public class StarConnectionManager {
         hello.ip = advertisedIp;
         hello.port = listenPort;
         hello.source = CrossSpireMod.playerId;
-        hello.seq = 1;
+        hello.seq = CrossSpireMod.nextSeq();
 
         CrossSpireMod.send(Protocol.GSON.toJson(hello));
         BaseMod.logger.info("StarConnectionManager sent hello: " + advertisedIp + ":" + listenPort);

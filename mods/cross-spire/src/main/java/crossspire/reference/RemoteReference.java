@@ -62,7 +62,7 @@ public class RemoteReference<T> extends Reference<T> {
             BaseMod.logger.info("RemoteReference got result for " + cardIdLocal + ": " + result.effects.length + " effects");
             Protocol.QueueComplete complete = new Protocol.QueueComplete();
             complete.source = CrossSpireMod.playerId;
-            complete.seq = 1;
+            complete.seq = CrossSpireMod.nextSeq();
             complete.packetId = invoke.refId;
             complete.effects = result.effects;
             complete.operationSequence = result.operationSequence;

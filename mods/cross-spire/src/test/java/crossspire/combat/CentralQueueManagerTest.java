@@ -110,4 +110,21 @@ public class CentralQueueManagerTest {
         assertNotNull(entries[0].packetId);
         assertTrue(entries[0].packetId.contains("/"));
     }
+
+    @Test
+    public void shouldDedupRepeatedSubmits() {
+        CentralQueueManager mgr = new CentralQueueManager();
+
+        Protocol.QueueSubmitMessage pkt = new Protocol.QueueSubmitMessage();
+        pkt.cardId = "Strike_R";
+        pkt.timestamp = 100;
+        pkt.senderId = "alice";
+        pkt.source = "alice";
+        pkt.seq = 1;
+        pkt.ownerId = "alice";
+
+        mgr.onQueueSubmit(pkt);
+        mgr.onQueueSubmit(pkt);
+        assertEquals("duplicate should be ignored", 1, mgr.size());
+    }
 }

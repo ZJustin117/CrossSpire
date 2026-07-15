@@ -6,7 +6,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
-import java.util.UUID;
 
 public class CentralQueueManager {
 
@@ -22,10 +21,11 @@ public class CentralQueueManager {
     };
 
     public void onQueueSubmit(Protocol.QueueSubmitMessage pkt) {
-        pkt.packetId = pkt.senderId + "/" + UUID.randomUUID().toString().substring(0, 8);
+        String dedupKey = pkt.senderId + "/" + pkt.seq;
+        pkt.packetId = dedupKey;
         synchronized (queue) {
             for (Protocol.QueueSubmitMessage existing : queue) {
-                if (existing.packetId != null && existing.packetId.equals(pkt.packetId)) return;
+                if (existing.packetId != null && existing.packetId.equals(dedupKey)) return;
             }
             queue.add(pkt);
             Collections.sort(queue, ORDER);
@@ -62,6 +62,7 @@ public class CentralQueueManager {
     }
 
     public void markDone(String packetId) {
+        boolean wasEmpty;
         synchronized (queue) {
             for (int i = 0; i < queue.size(); i++) {
                 if (packetId.equals(queue.get(i).packetId)) {
@@ -69,9 +70,10 @@ public class CentralQueueManager {
                     break;
                 }
             }
+            wasEmpty = queue.isEmpty();
         }
         broadcastUpdate();
-        if (queue.isEmpty()) {
+        if (wasEmpty) {
             broadcastQueueEmpty();
         } else {
             processNext();
@@ -79,12 +81,13 @@ public class CentralQueueManager {
     }
 
     private void processNext() {
+        Protocol.QueueSubmitMessage head;
         synchronized (queue) {
             if (queue.isEmpty()) { processing = false; return; }
             processing = true;
+            head = queue.get(0);
         }
 
-        Protocol.QueueSubmitMessage head = queue.get(0);
         CSLog.log("CentralQueueManager process: " + head.cardId + " owner=" + head.ownerId);
 
         if (head.ownerId != null && head.ownerId.equals(CrossSpireMod.playerId)) {
@@ -135,11 +138,9 @@ public class CentralQueueManager {
 
         String cardId = result.refId.contains("@") ? result.refId.split(":")[1].split("@")[0] : "unknown";
         synchronized (queue) {
-            for (int i = 0; i < queue.size(); i++) {
-                Protocol.QueueSubmitMessage q = queue.get(i);
+            for (Protocol.QueueSubmitMessage q : queue) {
                 if (q.ownerId.equals(result.source) && q.cardId.equals(cardId)) {
-                    q.packetId = result.refId;
-                    markDone(result.refId);
+                    markDone(q.packetId);
                     return;
                 }
             }

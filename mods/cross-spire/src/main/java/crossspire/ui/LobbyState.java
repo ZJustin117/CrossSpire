@@ -68,7 +68,7 @@ public class LobbyState {
 
         Protocol.PlayerReady ready = new Protocol.PlayerReady();
         ready.source = CrossSpireMod.playerId;
-        ready.seq = 1;
+        ready.seq = CrossSpireMod.nextSeq();
         ready.character = character;
 
         CrossSpireMod.send(Protocol.GSON.toJson(ready));
@@ -104,7 +104,7 @@ public class LobbyState {
     private void broadcastAndCheck(String character) {
         Protocol.PlayerReady ready = new Protocol.PlayerReady();
         ready.source = CrossSpireMod.playerId;
-        ready.seq = 1;
+        ready.seq = CrossSpireMod.nextSeq();
         ready.character = character.toUpperCase();
 
         CrossSpireMod.send(Protocol.GSON.toJson(ready));
@@ -136,7 +136,7 @@ public class LobbyState {
             sync.character = myCharacter;
             sync.seed = seed;
             sync.source = CrossSpireMod.playerId;
-            sync.seq = 1;
+            sync.seq = CrossSpireMod.nextSeq();
             sync.act = 1;
 
             if (CrossSpireMod.isConnected()) {

@@ -34,7 +34,7 @@ public class NullReference<T> extends Reference<T> {
         if (CrossSpireMod.isConnected()) {
             Protocol.ReferenceMigrateMessage msg = new Protocol.ReferenceMigrateMessage();
             msg.source = CrossSpireMod.playerId;
-            msg.seq = (int) (System.currentTimeMillis() % 100000);
+            msg.seq = CrossSpireMod.nextSeq();
             msg.refId = refId;
             msg.resourceType = resourceType();
             msg.resourceId = resourceId();

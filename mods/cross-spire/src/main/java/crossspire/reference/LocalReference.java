@@ -50,7 +50,7 @@ public class LocalReference<T> extends Reference<T> {
 
         Protocol.QueueComplete complete = new Protocol.QueueComplete();
         complete.source = ownerId;
-        complete.seq = 1;
+        complete.seq = CrossSpireMod.nextSeq();
         complete.packetId = refId + "/" + UUID.randomUUID().toString().substring(0, 8);
         complete.effects = captured;
         complete.operationSequence = buildVfxOps(copy, targetId);

@@ -34,7 +34,7 @@ public class GoldSyncPatches {
 
         Protocol.PlayerStateMessage msg = new Protocol.PlayerStateMessage();
         msg.source = CrossSpireMod.playerId;
-        msg.seq = (int) (System.currentTimeMillis() % 100000);
+        msg.seq = CrossSpireMod.nextSeq();
         msg.player = new Protocol.RemotePlayerState();
         msg.player.hp = player.currentHealth;
         msg.player.maxHp = player.maxHealth;

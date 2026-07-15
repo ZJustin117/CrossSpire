@@ -19,7 +19,7 @@ public class EventSyncPatches {
             String eventName = __instance.getClass().getSimpleName();
             Protocol.EventResultMessage msg = new Protocol.EventResultMessage();
             msg.source = CrossSpireMod.playerId;
-            msg.seq = (int) (System.currentTimeMillis() % 100000);
+            msg.seq = CrossSpireMod.nextSeq();
             msg.eventId = eventName;
             msg.effects = new Protocol.EffectDescription[0];
             CrossSpireMod.send(Protocol.GSON.toJson(msg));
@@ -37,7 +37,7 @@ public class EventSyncPatches {
             String eventName = __instance.getClass().getSimpleName();
             Protocol.EventResultMessage msg = new Protocol.EventResultMessage();
             msg.source = CrossSpireMod.playerId;
-            msg.seq = (int) (System.currentTimeMillis() % 100000);
+            msg.seq = CrossSpireMod.nextSeq();
             msg.eventId = eventName;
             msg.effects = new Protocol.EffectDescription[0];
             CrossSpireMod.send(Protocol.GSON.toJson(msg));
