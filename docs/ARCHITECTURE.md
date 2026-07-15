@@ -11,15 +11,16 @@
 7. [房主中央队列：战斗流程](#房主中央队列战斗流程)
 8. [怪物回合](#怪物回合)
 9. [事件处理](#事件处理)
-10. [Mod 兼容性设计：内容校验与分层引用](#mod-兼容性设计内容校验与分层引用)
-11. [BaseMod 事件抑制机制](#basemod-事件抑制机制)
-12. [素材传递系统](#素材传递系统)
-13. [在线角色：独立 AbstractPlayer 实例与渲染集成](#在线角色独立-abstractplayer-实例与渲染集成)
-14. [RNG 同步策略](#rng-同步策略)
-15. [网络拓扑](#网络拓扑)
-16. [协议消息定义](#协议消息定义)
-17. [项目结构](#项目结构)
-18. [未来塔2兼容性预留](#未来塔2兼容性预留)
+10. [所有者交互选择](#所有者交互选择)
+11. [Mod 兼容性设计：内容校验与分层引用](#mod-兼容性设计内容校验与分层引用)
+12. [BaseMod 事件抑制机制](#basemod-事件抑制机制)
+13. [素材传递系统](#素材传递系统)
+14. [在线角色：独立 AbstractPlayer 实例与渲染集成](#在线角色独立-abstractplayer-实例与渲染集成)
+15. [RNG 同步策略](#rng-同步策略)
+16. [网络拓扑](#网络拓扑)
+17. [协议消息定义](#协议消息定义)
+18. [项目结构](#项目结构)
+19. [未来塔2兼容性预留](#未来塔2兼容性预留)
 
 ---
 
@@ -530,16 +531,162 @@ AfterMonsterTurns: @SpirePostfixPatch AbstractPlayer.applyStartOfTurnPowers()
 
 ## 事件处理
 
-事件由图主持有：
+事件由图主强所有。图主机器上是事件的唯一真实实例，其他客户端只持有该事件的远程引用（不允许本地引用）。
+
+### 事件接口捕获与广播
+
+图主通过 BaseMod 钩子捕获事件的完整 UI 界面，并广播给所有成员：
 
 ```
-1. 图主决定事件类型和选项
-2. 图主本地执行事件逻辑
-3. 图主 → 房主: stage_sync（事件结果）
-4. 房主转发 → 全员同步
+进入事件房间:
+  1. 图主根据地图状态决定事件类型 → 实例化 AbstractEvent
+  2. 图主捕获事件接口:
+     - 事件 ID、名称
+     - 事件描述文本 (DESCRIPTIONS)
+     - 选项文本 (OPTIONS)：AbstractImageEvent 的 dialogOption 列表
+     - 事件图片路径或素材引用
+     - 当前阶段 (PhasedEvent 的 phaseKey)
+  3. 图主 → 房主: event_interface {
+       event_id, name, description, options: [{index, text, enabled?}],
+       image_ref?, phase_key?, event_type?
+     }
+  4. 房主转发 → 全员渲染事件 UI
 ```
 
-未来可扩展投票模式（兼容塔2），当前版本暂不实现。
+每个成员的屏幕上显示相同的事件界面（与图主本地看到的完全一致）。使用素材传递系统获取事件图片（若本地未缓存则按需请求）。
+
+### 选项选择流程
+
+```
+玩家选择选项:
+  1. 玩家在事件 UI 中选择一个选项 → 发 event_select { option_index } 到房主
+  2. 房主转发 → 图主
+  3. 图主在其实例上调用 event.buttonEffect(option_index)
+     → 事件逻辑在图主本地执行（REAL 模式，触发钩子）
+  4. 事件结果：
+     a. 若 transitionKey (PhasedEvent 换阶段) → 图主重新捕获新阶段界面 → 广播 event_interface
+     b. 若 openMap (事件结束) → 图主广播 event_result（含所有产出）
+     c. 若进入战斗 → 图主走战斗流程
+  5. 房主转发结果 → 全员同步
+```
+
+**注意**：任何玩家都可以选择事件选项——事件交互不是"调用方选择"，而是"图主接收指令后执行"。多个玩家同时选择时，图主按接收顺序处理（先到的选择生效，后续到达时若事件已结束则忽略）。
+
+### 选项可用性
+
+图主在 `event_interface` 中标记每个选项的 `enabled` 状态（如需要金币时金币不足则禁选）。客户端根据此状态灰显不可用选项，防止无效选择。
+
+### 协议消息
+
+```typescript
+// 图主广播事件界面
+interface EventInterface {
+  type: "event_interface";
+  event_id: string;
+  name: string;
+  description: string;
+  options: EventOption[];
+  image_ref?: string;       // 素材引用，走 resource_request 获取
+  phase_key?: string;       // PhasedEvent 当前阶段
+}
+
+interface EventOption {
+  index: number;
+  text: string;
+  enabled: boolean;
+}
+
+// 玩家选择选项
+interface EventSelect {
+  type: "event_select";
+  source: string;
+  option_index: number;
+}
+
+// 事件结果广播
+interface EventResult {
+  type: "event_result";
+  result_type: "done" | "combat" | "next_phase";
+  effects?: EffectDescription[];    // 事件产出的效果（获得遗物/药水/金币/卡牌/HP变化等）
+  next_phase?: string;              // 若 transitionKey，新阶段 key
+}
+```
+
+## 所有者交互选择
+
+当图主或卡牌所有者在执行过程中需要玩家进行交互选择（如选牌、选择目标等），通过捕获 BaseMod 界面并回传给发起方实现。
+
+### 适用场景
+
+| 场景 | 举例 | 所有者 |
+|------|------|--------|
+| 卡牌效果要求选牌 | "选择手牌中一张牌丢弃"、"选择牌堆中一张牌加入手牌" | 卡牌所有者 |
+| 遗物效果要求选择 | "选择一张攻击牌升级"、"选择一种药水丢弃" | 遗物所有者（通常也是卡牌所有者所在机器） |
+| 药水效果要求选择 | "选择一张卡牌消耗" | 药水所有者 |
+| 事件要求选牌 | "选择一张卡牌移除" | 图主 |
+
+### 交互选择流程
+
+```
+1. 所有者在执行 invoke 过程中，触发了需要交互的逻辑
+   → 通过 @SpirePatch 拦截 GridCardSelectScreen / HandCardSelectScreen 等选择界面
+   → 捕获选择参数: { select_type, valid_cards[], prompt_text, min_select, max_select }
+
+2. 所有者 → 房主: interact_request {
+     invoke_id,                    // 关联的 invoke 请求
+     select_type,                  // "card_select" | "hand_select" | "grid_select" 等
+     options: [...],               // 可选对象列表（card_id, relic_id, potion_id 等）
+     prompt_text,
+     min_select,
+     max_select
+   }
+
+3. 房主转发 → 原始调用方（发起这个 invoke 的玩家）
+
+4. 调用方显示选择 UI（本地渲染选择界面，复用游戏原生的选择控件）
+
+5. 调用方选择完毕 → 房主: interact_response {
+     invoke_id,
+     selected: [...]               // 略过选中的对象 ID 列表
+   }
+
+6. 房主转发 → 所有者
+
+7. 所有者收到选择结果 → 继续执行 invoke 的剩余逻辑 → 产出 invoke_result
+```
+
+### 协议消息
+
+```typescript
+interface InteractRequest {
+  type: "interact_request";
+  target: string;            // 调用方 ID（房主据此路由回原调用方）
+  invoke_id: string;         // 关联的 invoke 请求 ID
+  select_type: "card_select" | "hand_select" | "grid_select" | "relic_select" | "target_select";
+  prompt_text: string;
+  options: SelectOption[];   // 可选对象列表
+  min_select: number;
+  max_select: number;
+}
+
+interface SelectOption {
+  id: string;                // card_id / relic_id / target_id
+  name: string;              // 显示名称
+  description?: string;      // 可选描述
+  texture_ref?: string;      // 素材引用（若本地不存在则按需请求）
+}
+
+interface InteractResponse {
+  type: "interact_response";
+  target: string;            // 所有者 ID（房主据此路由回所有者）
+  invoke_id: string;
+  selected: string[];        // 选中对象的 ID 列表
+}
+```
+
+### 超时处理
+
+若调用方在超时时间内未响应用交互请求，所有者按默认策略处理（取第一个选项 / 随机选择 / 取消交互），并通过房主通知调用方交互已超时。
 
 ## Mod 兼容性设计：内容校验与分层引用
 
@@ -1059,8 +1206,22 @@ interface InvokeResultMessage extends Message {
 | `combat_result` | 房主→全员 | 卡牌/怪物执行结果广播 |
 | `monster_intent` | 图主→房主→全员 | 怪物意图（回合开始时全量快照 + 意图变更时增量推送） |
 | `player_state` | 所有者→房主→全员 | 在线角色属性更新 |
-| `stage_sync` | 图主→房主→全员 | 地图/事件/怪物状态推送 |
 | `full_snapshot` | 房主→全员 | 完整阶段状态快照（房主启动时） |
+
+### 事件消息
+
+| type | 方向 | 说明 |
+|------|------|------|
+| `event_interface` | 图主→房主→全员 | 事件 UI 界面（名称/描述/选项/图片） |
+| `event_select` | C→房主→图主 | 玩家选择事件选项 |
+| `event_result` | 图主→房主→全员 | 事件执行结果 |
+
+### 交互选择消息
+
+| type | 方向 | 说明 |
+|------|------|------|
+| `interact_request` | owner→房主→invoker | 所有者执行中需要调用方进行选择（选牌等） |
+| `interact_response` | invoker→房主→owner | 调用方完成选择，回传结果 |
 
 ### 控制消息
 
@@ -1148,11 +1309,12 @@ CrossSpire/
             │   ├── RemotePlayer.java           # extends AbstractPlayer
             │   ├── RemotePlayerRegistry.java   # 在线角色注册表
             │   ├── RemoteRenderer.java         # 实现 RenderSubscriber
-            │   └── StageHost.java              # 图主：地图/事件/怪物权威
+            │   └── StageHost.java              # 图主：地图/事件/怪物权威 + 事件接口捕获
             ├── combat/
             │   ├── CentralQueueManager.java    # 房主中央队列调度
             │   ├── LocalCapturePatches.java    # 捕获本地操作 → 提交到房主
-            │   └── CombatResultReplayer.java   # 操作重放 + suppressEvents
+            │   ├── CombatResultReplayer.java   # 操作重放 + suppressEvents
+            │   └── InteractionCapture.java     # 捕获 BaseMod 选择面板 → interact_request
             └── ui/
                 ├── LobbyScreen.java            # 加入房间界面
                 ├── ServerPicker.java           # IP:port:password 输入
