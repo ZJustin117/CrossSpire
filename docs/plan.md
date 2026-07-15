@@ -2,6 +2,16 @@
 
 > 本文档是 SDD 迁移的实施设计方案。现状审计结论见 codebase audit，需求见 `spec.md`，架构设计见 `ARCHITECTURE.md`。
 
+## 执行状态
+
+| Phase | 进度 | Commit |
+|-------|------|--------|
+| P1 架构修复 | ✅ 5/5 完成 | `9df0e44` `3ce46d7` `ad8318c` |
+| P2 功能补全 | 🟡 3/7 完成 (T2.1-T2.3) | `89bbb1e` `447a216` |
+| P3 清理稳定 | 🟡 3/8 完成 (T3.2-T3.4) | `0975c5a` |
+| 归档 | 🟡 1/6 完成 (A1) | — |
+| **总** | **12/26** | 45 tests pass |
+
 ## 目录
 
 1. [迁移策略总览](#迁移策略总览)
@@ -527,3 +537,66 @@ P3.4 bug修复清单
 4. ✅ `RemoteCharacterResource` 骨骼渲染 — 可用
 5. ✅ 13 种 fallback 效果 `applyEffect()` — 可用
 6. ✅ UI 面板(F1-F4, Lobby, RoomPanel, Chat, ServerPicker) — 可用
+
+---
+
+## 实施记录
+
+### 2026-07-15 — P1 架构修复完成
+
+| Task | 变更 | 文件 |
+|------|------|------|
+| T1.1 | 删除 SyncedRng/RngManager/RngSyncPatches + 对应测试 | -3 main, -2 test |
+| | StageHost 加 stageRng, MonsterIntentBroadcastPatches 改用 | +2 main |
+| | 清除 syncedSeed/rngManager 所有引用 (7 文件) | ~7 main |
+| T1.2 | 新建 StandardPacket + PacketOperation | +2 main, +1 test |
+| | Protocol.java 新增 payload 类, 保留 legacy compat 类 | ~1 main |
+| T1.3 | P2PManager → StarConnectionManager, 删 onHelloReceived 互连逻辑 | rename |
+| | 全局引用重命名 (10 处, 6 文件) | ~6 main |
+| T1.4 | 删除 BroadcastManager | -1 main |
+| | P1 验证: 41 tests pass, JAR 454KB, 双设备启动 OK |
+
+### 2026-07-15 — P2/T2.1-T2.3 完成
+
+| Task | 变更 | 文件 |
+|------|------|------|
+| T2.1 | CombatResultReplayer: 始终用 CardStub, PowerStub fallback, 新效果回 host 队列 | 2 main |
+| | EffectCapture.stopCapture: snapshot→clear → return | 1 main + 1 test |
+| T2.2 | EndTurnSyncPatches: Prefix gate + Postfix broadcast | 1 main |
+| | MessageRouter: queue_empty → enable EndTurnButton | 1 main |
+| T2.3 | MonsterTurnPatches: usePreBattleAction → applyStartOfTurnPowers HP delta | 1 main |
+| |
+| 附带修复 | SuppressBaseModPatches: publishOnPlayerDamaged Return(0)→Return(__amount) | |
+| | LocalCapturePatches: +EventSuppression guard | |
+| | MessageRouter: 删除 duplicate combat_result branch | |
+| |
+| P2.1 验证: 45 tests pass | |
+
+### 2026-07-15 — P3/T3.2-T3.4 完成
+
+| Task | 变更 | 文件 |
+|------|------|------|
+| T3.2 | CentralQueueManager: dedup→source+seq, sync processNext/markDone | 1 main + 1 test |
+| T3.3 | seq 统一: 9 文件 seq=1/time%→nextSeq() | 9 main |
+| |
+| P3 验证: 45 tests pass, JAR 454KB, 双设备 game_ready 无 crash | |
+
+### 当前状态 (12/26)
+
+**已完成 SDD 需求**:
+- FR-6.1/6.2/6.3 — 独立本地 RNG 策略 ✅
+- NFR-7 — StandardPacket 信封引入 (基础设施就位, 全量迁移待 T2+) ✅
+- ARCH §16 — 星型拓扑 (P2P 互连代码已清) ✅
+- FR-2.4/3.4 — 诱导重放: stub-only + PowerStub fallback + 效果回收集 ✅
+- FR-2.5 — EndTurnButton gate ✅
+- FR-2.6 — 怪物回合 HP 增量法 ✅
+- Protocol Design Rules — 全域 monotonic seq ✅
+- AGENTS/Code — EventSuppression guard 全覆盖 ✅
+
+**剩余 SDD 需求**:
+- FR-1.5 — 房主迁移 (T2.4)
+- FR-4.3~4.5 — 事件系统补全 (T2.5)
+- FR-4.6 — 所有者交互选择 (T2.6)
+- FR-5.2 — Cache LRU + SHA-256 校验 (T3.1)
+- FR-5.1 — ResourceRegistry 查询 API (T3.5)
+- 文档同步 (T3.7)
