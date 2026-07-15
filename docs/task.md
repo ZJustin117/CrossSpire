@@ -7,10 +7,10 @@
 | Phase | 任务数 | 完成 | 待做 | 推迟 |
 |-------|--------|------|------|------|
 | P1 架构修复 | 5 | 5 | 0 | 0 |
-| P2 功能补全 | 7 | 3 | 4 | 0 |
+| P2 功能补全 | 10 | 3 | 7 | 0 |
 | P3 清理稳定 | 8 | 3 | 5 | 0 |
 | 归档 | 6 | 1 | 5 | 0 |
-| **合计** | **26** | **12** | **14** | **0** |
+| **合计** | **29** | **12** | **17** | **0** |
 
 ---
 
@@ -71,6 +71,52 @@
 - [ ] `HeartbeatManagerTest.testTimeoutDetection`
 - [ ] `RoomHostTest.testHostMigration`
 - [ ] `RoomHostTest.testFullSnapshotRebuild`
+
+### T2.7a 房间标注命令 · priority(medium)
+
+**影响**: `spec.md` FR-4.7, US-4a
+
+| # | 步骤 | 文件 |
+|---|------|------|
+| 1 | CrossSpireCommand 加 `room` 子命令: 解析 `<index>`, 构造 `room_pin` 消息, 发往房主 | `ui/CrossSpireCommand.java` |
+| 2 | MessageRouter 加 `room_pin` → 房主转发到 RoomHost | `sync/MessageRouter.java` |
+| 3 | CrossSpireCommand.errorMsg 加 `room <index>` 到帮助文本 | `ui/CrossSpireCommand.java` |
+
+**测试**:
+- [ ] `CrossSpireCommandTest.testRoomPinSent` (新建)
+
+### T2.7b 房主聚合 + 共识检测 · priority(medium)
+
+**影响**: `spec.md` FR-4.8, US-4a
+
+| # | 步骤 | 文件 |
+|---|------|------|
+| 1 | RoomHost 加 `Map<String, Integer> playerPins`, `pinRoom(playerId, index)`, `checkConsensus()` | `network/RoomHost.java` |
+| 2 | MessageRouter `room_pin` handler: 房主调 `roomHost.pinRoom()` → checkConsensus → 若一致广播 `room_consensus`; 否则广播 `room_pins` | `sync/MessageRouter.java` |
+
+`checkConsensus()` 逻辑:
+```java
+boolean checkConsensus() {
+    if (playerPins.isEmpty() || playerPins.size() != getPlayerCount()) return false;
+    int first = playerPins.values().iterator().next();
+    return playerPins.values().stream().allMatch(v -> v == first);
+}
+```
+
+**测试**:
+- [ ] `RoomHostTest.testPinAndConsensus`
+- [ ] `RoomHostTest.testNoConsensusWhenDivergent`
+
+### T2.7c 共识触发图主执行 · priority(medium)
+
+| # | 步骤 | 文件 |
+|---|------|------|
+| 1 | MessageRouter 加 `room_consensus` handler: 图主收到 → 调 SyncExecutor.executeRoomConsensus(roomIndex) | `sync/MessageRouter.java` |
+| 2 | SyncExecutor.executeRoomConsensus(): Gdx.app.postRunnable → 图主本地导航到房间 → 触发 CombatSyncPatches 自动广播 room_enter | `sync/SyncExecutor.java` |
+| 3 | 导航实现: `AbstractDungeon.getCurrMapNode()` 获取当前节点 → 遍历 connected nodes → 取第 roomIndex 个 → 走现有 `enterRemoteCombat` 或 goToRoom | `sync/SyncExecutor.java` |
+
+**测试**:
+- [ ] 手动双设备: D1 host+stageHost, D2 client → 双方 `crossspire room 0` → 检查图主是否进入房间、D2 是否同步
 
 ### T2.5 事件系统补全 · priority(medium)
 

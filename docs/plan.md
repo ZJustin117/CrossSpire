@@ -7,10 +7,10 @@
 | Phase | 进度 | Commit |
 |-------|------|--------|
 | P1 架构修复 | ✅ 5/5 完成 | `9df0e44` `3ce46d7` `ad8318c` |
-| P2 功能补全 | 🟡 3/7 完成 (T2.1-T2.3) | `89bbb1e` `447a216` |
+| P2 功能补全 | 🟡 3/10 完成 (T2.1-T2.3, T2.7a-c 新增) | `89bbb1e` `447a216` |
 | P3 清理稳定 | 🟡 3/8 完成 (T3.2-T3.4) | `0975c5a` |
 | 归档 | 🟡 1/6 完成 (A1) | — |
-| **总** | **12/26** | 45 tests pass |
+| **总** | **12/29** | 45 tests pass |
 
 ## 目录
 
@@ -393,6 +393,56 @@ class StandardPacket {
 
 ---
 
+### 2.7 房间标注与共识 (FR-4.7/FR-4.8, US-4a)
+
+**现状**: 地图导航完全未实现。当前只有 `CombatSyncPatches` 在 `MonsterRoom.onPlayerEntry()` 时广播 `room_enter`。
+
+**方案**:
+
+1. **房间索引**: 用整数 index（0-based），对应当前地板 `DungeonMap` 中当前节点可达房间列表的第 N 个。
+
+2. **消息定义** (普通 JSON，非标准包):
+   ```
+   room_pin      C→房主      {"type":"room_pin","source":"<id>","room":1}
+   room_pins     房主→全员   {"type":"room_pins","source":"<host>","pins":{"a":1,"b":1}}
+   room_consensus 房主→图主   {"type":"room_consensus","source":"<host>","room":1}
+   ```
+
+3. **命令**: `crossspire room <index>` — CrossSpireCommand 新增子命令，构造 `room_pin` 发往房主。
+
+4. **房主聚合**: `RoomHost` 新增 `Map<String, Integer> playerPins`：
+   ```java
+   void pinRoom(String playerId, int roomIndex) {
+       playerPins.put(playerId, roomIndex);
+   }
+   int checkConsensus() {
+       if (playerPins.size() != getPlayerCount()) return -1; // 不完整
+       int first = playerPins.values().iterator().next();
+       return playerPins.values().stream().allMatch(v -> v == first) ? first : -1;
+   }
+   ```
+
+5. **共识触发**: 房主每次收 pin 后检测 — 若 return >=0 → 发送 `room_consensus` 给图主。
+
+6. **图主执行**: MessageRouter 收到 `room_consensus` → `SyncExecutor.executeRoomConsensus(roomIndex)`:
+   - `Gdx.app.postRunnable` 中操作
+   - 获取 `AbstractDungeon.getCurrMapNode()` 的 connected nodes
+   - 取第 roomIndex 个 → 调 `goToRoom(key)` 或直接设 node.room
+   - 触发 `MonsterRoom.onPlayerEntry()` → CombatSyncPatches 自动广播 `room_enter`
+
+7. **再标注**: 覆盖旧值。每次标注后广播最新 `room_pins`。
+
+8. **无超时**: 不采用投票或默认选择——走全员一致，玩家自行协商。
+
+**文件清单**:
+- 修改: `ui/CrossSpireCommand.java`, `network/RoomHost.java`, `sync/MessageRouter.java`, `sync/SyncExecutor.java`
+
+**验证**:
+- 单元测试: `RoomHostTest.testPinAndConsensus`, `testNoConsensusWhenDivergent`
+- 双设备: D1 host, D2 client → 双方 `crossspire room 0` → D2 同步进入同一房间
+
+---
+
 ## Phase 3: 清理与稳定
 
 ### 3.1 Cache 修复 (FR-5.2)
@@ -597,6 +647,7 @@ P3.4 bug修复清单
 - FR-1.5 — 房主迁移 (T2.4)
 - FR-4.3~4.5 — 事件系统补全 (T2.5)
 - FR-4.6 — 所有者交互选择 (T2.6)
+- FR-4.7/4.8 — 房间标注与共识 (T2.7a/b/c) [新]
 - FR-5.2 — Cache LRU + SHA-256 校验 (T3.1)
 - FR-5.1 — ResourceRegistry 查询 API (T3.5)
 - 文档同步 (T3.7)
