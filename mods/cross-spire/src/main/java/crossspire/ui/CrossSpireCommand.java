@@ -204,6 +204,7 @@ public class CrossSpireCommand extends ConsoleCommand {
         if (CrossSpireMod.isRoomHost()) {
             CrossSpireMod.centralQueueManager.onQueueSubmit(pkt);
             DevConsole.log("Queue submit (host): " + cardId + " → " + targetId);
+            BaseMod.logger.info("CrossSpire cmdPlay HOST: submit " + cardId + "→" + targetId + " queueSize=" + CrossSpireMod.centralQueueManager.size());
         } else {
             CrossSpireMod.send(Protocol.GSON.toJson(pkt));
             DevConsole.log("Queue submit (client): " + cardId + " → " + targetId);

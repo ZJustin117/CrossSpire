@@ -30,6 +30,7 @@ public class CentralQueueManager {
             queue.add(pkt);
             Collections.sort(queue, ORDER);
         }
+        CSLog.log("CentralQueueManager added: " + pkt.cardId + " size=" + queue.size());
         broadcastUpdate();
         if (!processing) processNext();
     }
@@ -98,7 +99,7 @@ public class CentralQueueManager {
     }
 
     private void handleOwnItem(Protocol.QueueSubmitMessage head) {
-        CSLog.log("CentralQueueManager own item: " + head.cardId);
+        CSLog.log("CentralQueueManager own item: " + head.cardId + " target=" + head.gameTarget);
         crossspire.sync.LocalCapturePatches.pushSuppress();
         crossspire.reference.LocalReference<Object> ref = new crossspire.reference.LocalReference<Object>(head.cardId, CrossSpireMod.playerId);
         ref.dereference(head.gameTarget);
