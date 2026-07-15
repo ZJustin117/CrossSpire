@@ -72,6 +72,10 @@ public class SyncExecutor {
         if (p.has("hp")) rp.hp = p.get("hp").getAsInt();
         if (p.has("max_hp")) rp.maxHp = p.get("max_hp").getAsInt();
         if (p.has("block")) rp.block = p.get("block").getAsInt();
+        if (p.has("hp") || p.has("block")) {
+            BaseMod.logger.info("SyncExecutor remote HP: " + source.substring(0, 8)
+                + " hp=" + rp.hp + "/" + rp.maxHp + " block=" + rp.block);
+        }
         if (p.has("gold")) rp.gold = p.get("gold").getAsInt();
         if (p.has("energy")) rp.energy = p.get("energy").getAsInt();
         if (p.has("character_class")) rp.characterClass = p.get("character_class").getAsString();

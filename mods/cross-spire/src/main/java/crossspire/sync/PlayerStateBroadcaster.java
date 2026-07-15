@@ -1,5 +1,6 @@
 package crossspire.sync;
 
+import basemod.BaseMod;
 import com.megacrit.cardcrawl.characters.AbstractPlayer;
 import crossspire.CrossSpireMod;
 import crossspire.network.Protocol;
@@ -30,5 +31,7 @@ public final class PlayerStateBroadcaster {
             energy, player.gold, player.getClass().getSimpleName()
         );
         CrossSpireMod.send(Protocol.GSON.toJson(msg));
+        BaseMod.logger.info("PlayerStateBroadcaster: HP=" + msg.player.hp + "/" + msg.player.maxHp
+            + " B=" + msg.player.block + " E=" + msg.player.energy + " G=" + msg.player.gold);
     }
 }
