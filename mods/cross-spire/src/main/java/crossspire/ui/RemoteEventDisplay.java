@@ -109,7 +109,7 @@ public class RemoteEventDisplay {
                 if (optionDisabled[i]) return;
                 String msg = EventMessageSender.buildEventSelect(
                     CrossSpireMod.playerId, i);
-                CrossSpireMod.send(msg);
+                CrossSpireMod.send((String) msg);
                 hide();
             }
         }

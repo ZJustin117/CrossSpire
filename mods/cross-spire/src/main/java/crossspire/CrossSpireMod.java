@@ -13,6 +13,7 @@ import crossspire.network.StarConnectionManager;
 import crossspire.network.Protocol;
 import crossspire.network.RoomHost;
 import crossspire.network.HeartbeatManager;
+import crossspire.network.StandardPacket;
 import crossspire.remote.RemotePlayerRegistry;
 import crossspire.resource.ResourceRegistryTracker;
 import crossspire.ui.LobbyState;
@@ -143,6 +144,10 @@ public class CrossSpireMod {
         } else {
             connectionManager.send("host", message);
         }
+    }
+
+    public static void send(StandardPacket pkt) {
+        send(StandardPacket.toJson(pkt));
     }
 
     private static String extractTarget(String message) {

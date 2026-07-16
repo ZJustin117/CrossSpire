@@ -8,8 +8,10 @@ import crossspire.CrossSpireMod;
 import crossspire.combat.CombatResultReplayer;
 import crossspire.combat.CentralQueueManager;
 import crossspire.network.HeartbeatManager;
+import crossspire.network.PacketOperation;
 import crossspire.network.Protocol;
 import crossspire.network.StageVoteSender;
+import crossspire.network.StandardPacket;
 import crossspire.reference.RemoteReference;
 import crossspire.ui.QueueDisplay;
 import crossspire.ui.RemoteEventDisplay;
@@ -42,6 +44,13 @@ public class MessageRouter {
 
     public void route(String rawMessage) {
         JsonObject msg = Protocol.GSON.fromJson(rawMessage, JsonObject.class);
+
+        // StandardPacket detection: if JSON has "operation" field, it's a new-format packet
+        if (msg.has("operation")) {
+            routeStandardPacket(rawMessage);
+            return;
+        }
+
         String type = msg.get("type").getAsString();
         String source = msg.has("source") ? msg.get("source").getAsString() : "";
 
@@ -470,6 +479,33 @@ public class MessageRouter {
                     CrossSpireMod.playerId, pinsJson);
                 CrossSpireMod.send(pinsMsg);
             }
+        }
+    }
+
+    private void routeStandardPacket(String rawMessage) {
+        StandardPacket pkt = StandardPacket.fromJson(rawMessage);
+        String op = pkt.operation;
+        JsonObject payload = pkt.payload != null ? pkt.payload : new JsonObject();
+
+        // Add source/seq into payload for handlers that read them
+        if (!payload.has("source")) payload.addProperty("source", pkt.source);
+
+        if (PacketOperation.QUEUE_SUBMIT.equals(op)) {
+            Protocol.QueueSubmitMessage qsm = Protocol.GSON.fromJson(payload.toString(), Protocol.QueueSubmitMessage.class);
+            handleQueueSubmit(Protocol.GSON.toJson(qsm));
+        } else if (PacketOperation.INVOKE.equals(op)) {
+            String raw = Protocol.GSON.toJson(payload);
+            // compatibility — old handler uses InvokeMessage format
+            JsonObject invokeObj = new JsonObject();
+            invokeObj.addProperty("type", "invoke");
+            invokeObj.addProperty("source", pkt.source);
+            invokeObj.add("args", payload.get("args"));
+            invokeObj.add("ref_id", payload.get("ref_id"));
+            invokeObj.addProperty("trigger", payload.has("trigger") ? payload.get("trigger").getAsString() : "");
+            invokeObj.addProperty("target", pkt.ownerId);
+            handleInvoke(Protocol.GSON.toJson(invokeObj));
+        } else {
+            BaseMod.logger.info("MessageRouter stdpkt: " + op + " (not yet routed)");
         }
     }
 }

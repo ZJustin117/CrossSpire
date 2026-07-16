@@ -215,7 +215,7 @@ public class CrossSpireCommand extends ConsoleCommand {
             DevConsole.log("Queue submit (host): " + cardId + " → " + targetId);
             BaseMod.logger.info("CrossSpire cmdPlay HOST: submit " + cardId + "→" + targetId + " queueSize=" + CrossSpireMod.centralQueueManager.size());
         } else {
-            CrossSpireMod.send(Protocol.GSON.toJson(pkt));
+            CrossSpireMod.send((String) Protocol.GSON.toJson(pkt));
             DevConsole.log("Queue submit (client): " + cardId + " → " + targetId);
         }
     }
@@ -238,7 +238,7 @@ public class CrossSpireCommand extends ConsoleCommand {
                 CrossSpireMod.messageRouter.handleRoomPin(msg);
             }
         } else {
-            CrossSpireMod.send(msg);
+            CrossSpireMod.send((String) msg);
         }
         BaseMod.logger.info("CrossSpire roomPin: " + roomIndex + " host=" + CrossSpireMod.isRoomHost());
         DevConsole.log("Room pin: " + roomIndex);
@@ -246,7 +246,7 @@ public class CrossSpireCommand extends ConsoleCommand {
 
     private void cmdSnapshot() {
         String snap = FullSnapshotSender.build();
-        CrossSpireMod.send(snap);
+        CrossSpireMod.send((String) snap);
         DevConsole.log("Full snapshot sent");
     }
 
@@ -262,7 +262,7 @@ public class CrossSpireCommand extends ConsoleCommand {
                 CrossSpireMod.messageRouter.handleStageVote(msg);
             }
         } else {
-            CrossSpireMod.send(msg);
+            CrossSpireMod.send((String) msg);
         }
         DevConsole.log("Voted for: " + candidate);
     }
