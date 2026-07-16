@@ -5,6 +5,7 @@ import com.evacipated.cardcrawl.modthespire.lib.SpirePatch;
 import com.evacipated.cardcrawl.modthespire.lib.SpirePostfixPatch;
 import com.megacrit.cardcrawl.events.AbstractEvent;
 import crossspire.CrossSpireMod;
+import crossspire.network.EventMessageSender;
 import crossspire.network.Protocol;
 
 public class EventSyncPatches {
@@ -42,6 +43,20 @@ public class EventSyncPatches {
             msg.effects = new Protocol.EffectDescription[0];
             CrossSpireMod.send(Protocol.GSON.toJson(msg));
             BaseMod.logger.info("EventSyncPatches enterCombat: " + eventName);
+        }
+    }
+
+    @SpirePatch(clz = AbstractEvent.class, method = "openMap", paramtypez = {})
+    public static class OnOpenMap {
+        @SpirePostfixPatch
+        public static void postfix(AbstractEvent __instance) {
+            if (CrossSpireMod.stageHost == null || !CrossSpireMod.stageHost.isStageHost()) return;
+            if (!CrossSpireMod.isConnected()) return;
+
+            String eventId = __instance.getClass().getSimpleName();
+            String result = EventMessageSender.buildEventResult(eventId, 0, 0);
+            CrossSpireMod.send(result);
+            BaseMod.logger.info("EventSyncPatches event_result/openMap: " + eventId);
         }
     }
 }

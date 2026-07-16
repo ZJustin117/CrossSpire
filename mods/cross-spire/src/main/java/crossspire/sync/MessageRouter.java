@@ -6,6 +6,7 @@ import com.google.gson.JsonObject;
 import crossspire.CrossSpireMod;
 import crossspire.combat.CombatResultReplayer;
 import crossspire.combat.CentralQueueManager;
+import crossspire.network.HeartbeatManager;
 import crossspire.network.Protocol;
 import crossspire.reference.RemoteReference;
 import crossspire.ui.QueueDisplay;
@@ -114,6 +115,29 @@ public class MessageRouter {
             syncExecutor.handleSync("monster_intent", null, 1, rawMessage);
         } else if ("event_result".equals(type)) {
             syncExecutor.handleEventResult(rawMessage);
+        } else if ("event_select".equals(type)) {
+            if (CrossSpireMod.stageHost != null && CrossSpireMod.stageHost.isStageHost()) {
+                JsonObject sel = Protocol.GSON.fromJson(rawMessage, JsonObject.class);
+                int idx = sel.has("option_index") ? sel.get("option_index").getAsInt() : -1;
+                BaseMod.logger.info("MessageRouter event_select: option=" + idx);
+                if (AbstractDungeon.getCurrRoom() != null
+                    && AbstractDungeon.getCurrRoom().event != null
+                    && idx >= 0) {
+                    try {
+                        java.lang.reflect.Method m = AbstractDungeon.getCurrRoom().event.getClass()
+                            .getMethod("buttonEffect", int.class);
+                        m.setAccessible(true);
+                        m.invoke(AbstractDungeon.getCurrRoom().event, idx);
+                    } catch (Exception ex) {
+                        BaseMod.logger.error("MessageRouter event_select invoke failed: " + ex.getMessage());
+                    }
+                }
+            }
+        } else if ("event_interface".equals(type)) {
+            JsonObject ei = Protocol.GSON.fromJson(rawMessage, JsonObject.class);
+            String name = ei.has("event_id") ? ei.get("event_id").getAsString() : "?";
+            int opts = ei.has("options") ? ei.getAsJsonArray("options").size() : 0;
+            BaseMod.logger.info("MessageRouter event_interface: " + name + " options=" + opts);
         } else if ("reference_migrate".equals(type)) {
             handleReferenceMigrate(rawMessage);
         } else if ("reference_register".equals(type)) {
