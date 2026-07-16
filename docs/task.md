@@ -7,11 +7,10 @@
 | Phase | 任务数 | 完成 | 待做 | 推迟 |
 |-------|--------|------|------|------|
 | P1 架构修复 | 5 | 5 | 0 | 0 |
-| P2 功能补全 | 10 | 9 | 1 | 0 |
-| P3 清理稳定 | 8 | 6 | 1 | 1 |
-| T2.7a/b/c done, T3.5/3.6 done, A2/A6 done | | | | |
-| 归档 | 6 | 3 | 3 | 0 |
-| **合计** | **29** | **23** | **5** | **1** |
+| P2 功能补全 | 10 | 9 | 0 | 1 |
+| P3 清理稳定 | 8 | 7 | 0 | 1 |
+| 归档 | 6 | 5 | 1 | 0 |
+| **合计** | **29** | **26** | **1** | **2** |
 
 ---
 
@@ -57,21 +56,18 @@
 
 **Commit**: `447a216`
 
-### T2.4 房主选举与迁移 · priority(medium)
+### T2.4 房主选举与迁移 · priority(medium) 🟡 (4/6, 2 延期)
 
-| # | 步骤 | 文件 |
+| # | 步骤 | 状态 |
 |---|------|------|
-| 1 | HeartbeatManager 补全: peerLastSeen Map, pong handler, 5s 超时检测线程, onPeerTimeout callback | `network/HeartbeatManager.java` |
-| 2 | RoomHost.onPeerTimeout(): removePlayer → 广播 player_left → 若掉线者是 host → triggerHostElection | `network/RoomHost.java` |
-| 3 | MessageRouter 加 pong 处理 + 调用 heartbeatManager.handlePong() | `sync/MessageRouter.java` |
-| 4 | 房主选举流程: electHost (按 ID 排序), 广播 host_migration | `network/RoomHost.java` |
-| 5 | CrossSpireMod 加 reconnectToNewHost() | `CrossSpireMod.java` |
-| 6 | FullSnapshot 收集与分发 | `sync/SyncExecutor.java` |
+| 1 | HeartbeatManager pong + timeout detection | [x] |
+| 2 | RoomHost.onPeerTimeout + player_left | [x] |
+| 3 | MessageRouter pong handler | [x] |
+| 4 | CrossSpireMod timeout listener | [x] |
+| 5 | reconnectToNewHost | [-] depends on US-4b vote command |
+| 6 | FullSnapshot | [-] depends on US-4b vote command |
 
-**测试**:
-- [ ] `HeartbeatManagerTest.testTimeoutDetection`
-- [ ] `RoomHostTest.testHostMigration`
-- [ ] `RoomHostTest.testFullSnapshotRebuild`
+**Commit**: `a679734`
 
 ### T2.7a 房间标注命令 · priority(medium)
 
