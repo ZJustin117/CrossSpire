@@ -19,12 +19,13 @@ public final class EventMessageSender {
      * @param disabled    true if option is greyed out (same index)
      */
     public static String buildEventInterface(
-            String eventId, String description,
+            String eventId, String eventClass, String description,
             String[] optionTexts, boolean[] disabled) {
         JsonObject obj = new JsonObject();
         obj.addProperty("type", "event_interface");
         obj.addProperty("source", CrossSpireMod.playerId);
         obj.addProperty("event_id", eventId);
+        obj.addProperty("event_class", eventClass);
         obj.addProperty("description", description);
 
         JsonArray options = new JsonArray();

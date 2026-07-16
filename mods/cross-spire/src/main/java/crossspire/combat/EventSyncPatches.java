@@ -3,8 +3,12 @@ package crossspire.combat;
 import basemod.BaseMod;
 import com.evacipated.cardcrawl.modthespire.lib.SpirePatch;
 import com.evacipated.cardcrawl.modthespire.lib.SpirePostfixPatch;
+import com.evacipated.cardcrawl.modthespire.lib.SpirePrefixPatch;
+import com.evacipated.cardcrawl.modthespire.lib.SpireReturn;
+import com.megacrit.cardcrawl.dungeons.AbstractDungeon;
 import com.megacrit.cardcrawl.events.AbstractEvent;
 import crossspire.CrossSpireMod;
+import crossspire.EventSuppression;
 import crossspire.network.EventMessageSender;
 import crossspire.network.Protocol;
 import java.lang.reflect.Field;
@@ -15,16 +19,12 @@ public class EventSyncPatches {
     public static class OnEnterRoom {
         @SpirePostfixPatch
         public static void postfix(AbstractEvent __instance) {
-            BaseMod.logger.info("EventSyncOnEnterRoom: " + __instance.getClass().getSimpleName()
-                + " isRoomHost=" + CrossSpireMod.isRoomHost()
-                + " isStageHost=" + (CrossSpireMod.stageHost != null && CrossSpireMod.stageHost.isStageHost())
-                + " connected=" + CrossSpireMod.isConnected()
-                + " localId=" + (CrossSpireMod.playerId.isEmpty() ? "?" : CrossSpireMod.playerId.substring(0, 8)));
             if (CrossSpireMod.stageHost == null) return;
             if (!CrossSpireMod.stageHost.isStageHost() && !CrossSpireMod.isRoomHost()) return;
             if (!CrossSpireMod.isConnected()) return;
 
             String eventId = __instance.getClass().getSimpleName();
+            String eventClass = __instance.getClass().getName();
 
             String description = "";
             try {
@@ -40,22 +40,14 @@ public class EventSyncPatches {
                 Field optionsField = __instance.getClass().getField("OPTIONS");
                 optionTexts = (String[]) optionsField.get(null);
                 disabled = new boolean[optionTexts.length];
-                if (__instance.optionsSelected != null) {
-                    for (int i = 0; i < optionTexts.length && i < __instance.optionsSelected.size(); i++) {
-                        disabled[i] = __instance.optionsSelected.get(i) != null;
-                    }
-                }
-            } catch (Exception e) {
-                optionTexts = new String[0];
-                disabled = new boolean[0];
-            }
+            } catch (Exception ignored) {}
 
             if (optionTexts.length > 0) {
                 String msg = EventMessageSender.buildEventInterface(
-                    eventId, description, optionTexts, disabled);
-                CrossSpireMod.send(msg);
+                    eventId, eventClass, description, optionTexts, disabled);
+                CrossSpireMod.send((String) msg);
                 BaseMod.logger.info("EventSyncPatches event_interface: " + eventId
-                    + " options=" + optionTexts.length);
+                    + " class=" + eventClass + " options=" + optionTexts.length);
             } else {
                 Protocol.EventResultMessage msg = new Protocol.EventResultMessage();
                 msg.source = CrossSpireMod.playerId;
@@ -63,7 +55,6 @@ public class EventSyncPatches {
                 msg.eventId = eventId;
                 msg.effects = new Protocol.EffectDescription[0];
                 CrossSpireMod.send(Protocol.GSON.toJson(msg));
-                BaseMod.logger.info("EventSyncPatches onEnterRoom: " + eventId + " (no options)");
             }
         }
     }
@@ -82,7 +73,6 @@ public class EventSyncPatches {
             msg.eventId = eventName;
             msg.effects = new Protocol.EffectDescription[0];
             CrossSpireMod.send(Protocol.GSON.toJson(msg));
-            BaseMod.logger.info("EventSyncPatches enterCombat: " + eventName);
         }
     }
 
@@ -95,8 +85,71 @@ public class EventSyncPatches {
 
             String eventId = __instance.getClass().getSimpleName();
             String result = EventMessageSender.buildEventResult(eventId, 0, 0);
-            CrossSpireMod.send(result);
+            CrossSpireMod.send((String) result);
             BaseMod.logger.info("EventSyncPatches event_result/openMap: " + eventId);
+        }
+    }
+
+    @SpirePatch(clz = AbstractEvent.class, method = "buttonEffect", paramtypez = {int.class})
+    public static class Sandbox {
+        @SpirePrefixPatch
+        public static SpireReturn<Void> Prefix(AbstractEvent __instance, int buttonPressed) {
+            if (!CrossSpireMod.isConnected()) return SpireReturn.Continue();
+            if (CrossSpireMod.stageHost.isStageHost()) {
+                BaseMod.logger.info("EventSandbox REAL mode: "
+                    + __instance.getClass().getSimpleName() + " button=" + buttonPressed);
+                return SpireReturn.Continue();
+            }
+
+            String eventId = __instance.getClass().getSimpleName();
+            BaseMod.logger.info("EventSandbox start: " + eventId + " button=" + buttonPressed);
+
+            int savedHp = 0;
+            int savedBlock = 0;
+            if (AbstractDungeon.player != null) {
+                savedHp = AbstractDungeon.player.currentHealth;
+                savedBlock = AbstractDungeon.player.currentBlock;
+            }
+
+            EventCapture.startTranscript(eventId);
+            EventCapture.appendButtonEffect(buttonPressed);
+
+            EventSuppression.suppressEvents(() -> {
+                try {
+                    java.lang.reflect.Method m = __instance.getClass()
+                        .getDeclaredMethod("buttonEffect", int.class);
+                    m.setAccessible(true);
+                    m.invoke(__instance, buttonPressed);
+                } catch (Exception e) {
+                    BaseMod.logger.error("EventSandbox buttonEffect failed: " + e.getMessage());
+                }
+            });
+
+            try {
+                if (AbstractDungeon.gridSelectScreen != null
+                    && AbstractDungeon.gridSelectScreen.selectedCards != null
+                    && !AbstractDungeon.gridSelectScreen.selectedCards.isEmpty()) {
+                    java.util.ArrayList<com.megacrit.cardcrawl.cards.AbstractCard> sel =
+                        AbstractDungeon.gridSelectScreen.selectedCards;
+                    String[] cardIds = new String[sel.size()];
+                    for (int i = 0; i < sel.size(); i++) cardIds[i] = sel.get(i).cardID;
+                    EventCapture.appendCardSelect(cardIds);
+                    EventCapture.appendConfirm();
+                    sel.clear();
+                }
+            } catch (Exception ignored) {}
+
+            if (AbstractDungeon.player != null) {
+                AbstractDungeon.player.currentHealth = savedHp;
+                AbstractDungeon.player.currentBlock = savedBlock;
+            }
+
+            String transcript = EventCapture.buildTranscript();
+            CrossSpireMod.send((String) transcript);
+            BaseMod.logger.info("EventSandbox transcript: " + eventId
+                + " button=" + buttonPressed);
+
+            return SpireReturn.Return(null);
         }
     }
 }

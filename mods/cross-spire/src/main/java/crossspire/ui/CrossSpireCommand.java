@@ -368,7 +368,8 @@ public class CrossSpireCommand extends ConsoleCommand {
         } catch (Exception ignored) {}
 
         if (optionTexts.length > 0) {
-            String msg = EventMessageSender.buildEventInterface(eventId, description, optionTexts, disabled);
+            String msg = EventMessageSender.buildEventInterface(
+                eventId, ev.getClass().getName(), description, optionTexts, disabled);
             CrossSpireMod.send((String) msg);
             BaseMod.logger.info("CrossSpire cevent event_interface: " + eventId + " options=" + optionTexts.length);
         }

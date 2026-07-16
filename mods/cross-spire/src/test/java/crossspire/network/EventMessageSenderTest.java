@@ -14,13 +14,15 @@ public class EventMessageSenderTest {
         boolean[] disabled = {false, false, true};
 
         String json = EventMessageSender.buildEventInterface(
-            "Big Fish", "A large fish blocks your path.",
+            "Big Fish", "com.megacrit.cardcrawl.events.exordium.BigFish",
+            "A large fish blocks your path.",
             optionTexts, disabled
         );
 
         JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
         assertEquals("event_interface", obj.get("type").getAsString());
         assertEquals("Big Fish", obj.get("event_id").getAsString());
+        assertEquals("com.megacrit.cardcrawl.events.exordium.BigFish", obj.get("event_class").getAsString());
         assertEquals("A large fish blocks your path.", obj.get("description").getAsString());
 
         JsonArray options = obj.getAsJsonArray("options");
