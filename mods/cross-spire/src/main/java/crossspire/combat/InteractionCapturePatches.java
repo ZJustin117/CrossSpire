@@ -30,7 +30,12 @@ public class InteractionCapturePatches {
             String msg = InteractMessageSender.buildInteractRequest(
                 CrossSpireMod.playerId, "card_select", options,
                 tipMsg != null ? tipMsg : "Select a card", selectAmount, anyNumber ? 99 : selectAmount);
-            CrossSpireMod.send((String) msg);
+
+            if (CrossSpireMod.isRoomHost()) {
+                CrossSpireMod.messageRouter.handleInteractRequest(msg);
+            } else {
+                CrossSpireMod.send((String) msg);
+            }
             BaseMod.logger.info("InteractionCapturePatches gridCardSelect: cards="
                 + options.length + " select=" + selectAmount);
         }

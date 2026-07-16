@@ -44,6 +44,7 @@ public class CrossSpireCommand extends ConsoleCommand {
         else if ("snapshot".equals(sub)) { cmdSnapshot(); }
         else if ("vote".equals(sub)) { cmdStageVote(tokens, depth); }
         else if ("select".equals(sub)) { cmdInteractSelect(tokens, depth); }
+        else if ("cevent".equals(sub)) { cmdCrossEvent(tokens, depth); }
         else { errorMsg(); }
     }
 
@@ -312,6 +313,36 @@ public class CrossSpireCommand extends ConsoleCommand {
             gcs.confirmButton.hb.clicked = true;
             BaseMod.logger.info("CrossSpire select: confirmed " + cardId);
         }
+    }
+
+    private void cmdCrossEvent(String[] tokens, int depth) {
+        if (tokens.length <= depth + 1) {
+            DevConsole.log("Usage: crossspire cevent <event_name...>");
+            return;
+        }
+        StringBuilder eventKey = new StringBuilder(tokens[depth + 1]);
+        for (int i = depth + 2; i < tokens.length; i++) {
+            eventKey.append(' ').append(tokens[i]);
+        }
+        String key = eventKey.toString();
+        BaseMod.logger.info("CrossSpire cevent key=" + key);
+        com.megacrit.cardcrawl.events.AbstractEvent ev = com.megacrit.cardcrawl.helpers.EventHelper.getEvent(key);
+        BaseMod.logger.info("CrossSpire cevent getEvent=" + (ev != null ? ev.getClass().getSimpleName() : "null"));
+        if (ev == null) {
+            DevConsole.log("Unknown event: " + key);
+            return;
+        }
+        com.megacrit.cardcrawl.map.MapRoomNode node = new com.megacrit.cardcrawl.map.MapRoomNode(
+            com.megacrit.cardcrawl.dungeons.AbstractDungeon.currMapNode.x,
+            com.megacrit.cardcrawl.dungeons.AbstractDungeon.currMapNode.y);
+        node.room = new com.megacrit.cardcrawl.rooms.EventRoom();
+        node.room.event = ev;
+        BaseMod.logger.info("CrossSpire cevent setting room event=" + ev.getClass().getSimpleName());
+        com.megacrit.cardcrawl.dungeons.AbstractDungeon.currMapNode.room = node.room;
+        ev.onEnterRoom();
+        com.megacrit.cardcrawl.dungeons.AbstractDungeon.getCurrRoom().onPlayerEntry();
+        BaseMod.logger.info("CrossSpire cevent onPlayerEntry done");
+        DevConsole.log("Entered event: " + key);
     }
 
     @Override

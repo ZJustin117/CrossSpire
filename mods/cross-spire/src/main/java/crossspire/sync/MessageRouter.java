@@ -35,6 +35,7 @@ public class MessageRouter {
     private final SyncExecutor syncExecutor;
     private final CentralQueueManager centralQueue;
     private final CombatResultReplayer resultReplayer;
+    private static String eventSelectionRequester = null;
 
     public MessageRouter(SyncExecutor syncExecutor, CentralQueueManager centralQueue, CombatResultReplayer resultReplayer) {
         this.syncExecutor = syncExecutor;
@@ -130,23 +131,7 @@ public class MessageRouter {
             syncExecutor.handleEventResult(rawMessage);
             RemoteEventDisplay.hide();
         } else if ("event_select".equals(type)) {
-            if (CrossSpireMod.stageHost != null && CrossSpireMod.stageHost.isStageHost()) {
-                JsonObject sel = Protocol.GSON.fromJson(rawMessage, JsonObject.class);
-                int idx = sel.has("option_index") ? sel.get("option_index").getAsInt() : -1;
-                BaseMod.logger.info("MessageRouter event_select: option=" + idx);
-                if (AbstractDungeon.getCurrRoom() != null
-                    && AbstractDungeon.getCurrRoom().event != null
-                    && idx >= 0) {
-                    try {
-                        java.lang.reflect.Method m = AbstractDungeon.getCurrRoom().event.getClass()
-                            .getMethod("buttonEffect", int.class);
-                        m.setAccessible(true);
-                        m.invoke(AbstractDungeon.getCurrRoom().event, idx);
-                    } catch (Exception ex) {
-                        BaseMod.logger.error("MessageRouter event_select invoke failed: " + ex.getMessage());
-                    }
-                }
-            }
+            handleEventSelect(rawMessage, source);
         } else if ("event_interface".equals(type)) {
             JsonObject ei = Protocol.GSON.fromJson(rawMessage, JsonObject.class);
             String name = ei.has("event_id") ? ei.get("event_id").getAsString() : "?";
@@ -158,8 +143,6 @@ public class MessageRouter {
                 RemoteEventDisplay.show(name, desc, options);
             }
         } else if ("reference_migrate".equals(type)) {
-            handleReferenceMigrate(rawMessage);
-        } else if ("reference_register".equals(type)) {
             Protocol.ReferenceRegisterMessage reg = Protocol.GSON.fromJson(rawMessage, Protocol.ReferenceRegisterMessage.class);
             BaseMod.logger.info("MessageRouter reference_register: " + reg.resourceType + ":" + reg.resourceId);
         } else if ("full_snapshot".equals(type)) {
@@ -200,14 +183,9 @@ public class MessageRouter {
                 SyncExecutor.executeRoomConsensus(room);
             }
         } else if ("interact_request".equals(type)) {
-            JsonObject ir = Protocol.GSON.fromJson(rawMessage, JsonObject.class);
-            String caller = ir.has("source") ? ir.get("source").getAsString() : "";
-            BaseMod.logger.info("MessageRouter interact_request from " + caller.substring(0, 8)
-                + " type=" + (ir.has("select_type") ? ir.get("select_type").getAsString() : "?"));
+            handleInteractRequest(rawMessage);
         } else if ("interact_response".equals(type)) {
-            JsonObject ir = Protocol.GSON.fromJson(rawMessage, JsonObject.class);
-            String owner = ir.has("source") ? ir.get("source").getAsString() : "";
-            BaseMod.logger.info("MessageRouter interact_response from " + owner.substring(0, 8));
+            handleInteractResponse(rawMessage);
         }
     }
 
@@ -516,5 +494,111 @@ public class MessageRouter {
         } else {
             BaseMod.logger.info("MessageRouter stdpkt: " + op + " (not yet routed)");
         }
+    }
+
+    private void handleEventSelect(String rawMessage, String source) {
+        JsonObject sel = Protocol.GSON.fromJson(rawMessage, JsonObject.class);
+        int idx = sel.has("option_index") ? sel.get("option_index").getAsInt() : -1;
+
+        if (CrossSpireMod.stageHost != null && CrossSpireMod.stageHost.isStageHost()) {
+            BaseMod.logger.info("MessageRouter event_select: option=" + idx + " from " + source.substring(0, 8));
+            eventSelectionRequester = source;
+            if (AbstractDungeon.getCurrRoom() != null
+                && AbstractDungeon.getCurrRoom().event != null
+                && idx >= 0) {
+                try {
+                    java.lang.reflect.Method m = AbstractDungeon.getCurrRoom().event.getClass()
+                        .getMethod("buttonEffect", int.class);
+                    m.setAccessible(true);
+                    m.invoke(AbstractDungeon.getCurrRoom().event, idx);
+                } catch (Exception ex) {
+                    BaseMod.logger.error("MessageRouter event_select invoke failed: " + ex.getMessage());
+                }
+            }
+        } else {
+            CrossSpireMod.send((String) rawMessage);
+        }
+    }
+
+    public void handleInteractRequest(String rawMessage) {
+        JsonObject ir = Protocol.GSON.fromJson(rawMessage, JsonObject.class);
+        String caller = ir.has("source") ? ir.get("source").getAsString() : "";
+        BaseMod.logger.info("MessageRouter interact_request from " + caller.substring(0, 8));
+
+        if (CrossSpireMod.isRoomHost() && eventSelectionRequester != null
+                && !eventSelectionRequester.equals(CrossSpireMod.playerId)) {
+            CrossSpireMod.connectionManager.send(eventSelectionRequester, rawMessage);
+            BaseMod.logger.info("MessageRouter forwarded interact_request to "
+                + eventSelectionRequester.substring(0, 8));
+        } else if (!CrossSpireMod.stageHost.isStageHost()) {
+            receiveInteractRequest(ir);
+        }
+    }
+
+    private void receiveInteractRequest(JsonObject ir) {
+        if (!CrossSpireMod.isConnected()) return;
+        if (AbstractDungeon.player == null) return;
+
+        String selectType = ir.has("select_type") ? ir.get("select_type").getAsString() : "card_select";
+        String prompt = ir.has("prompt") ? ir.get("prompt").getAsString() : "Select a card";
+        int minSelect = ir.has("min_select") ? ir.get("min_select").getAsInt() : 1;
+        boolean anyNumber = ir.has("max_select") ? ir.get("max_select").getAsInt() > 1 : false;
+
+        if (!"card_select".equals(selectType)) return;
+
+        JsonArray optArr = ir.has("options") ? ir.getAsJsonArray("options") : null;
+        if (optArr == null || optArr.size() == 0) return;
+
+        com.megacrit.cardcrawl.cards.CardGroup pool = new com.megacrit.cardcrawl.cards.CardGroup(
+            com.megacrit.cardcrawl.cards.CardGroup.CardGroupType.UNSPECIFIED);
+        for (int i = 0; i < optArr.size(); i++) {
+            String cid = optArr.get(i).getAsString();
+            pool.group.add(new crossspire.combat.CardStub(cid, 1,
+                com.megacrit.cardcrawl.cards.AbstractCard.CardType.ATTACK,
+                com.megacrit.cardcrawl.cards.AbstractCard.CardRarity.BASIC,
+                com.megacrit.cardcrawl.cards.AbstractCard.CardTarget.ENEMY));
+        }
+
+        AbstractDungeon.gridSelectScreen.open(pool, minSelect, prompt, anyNumber);
+        BaseMod.logger.info("MessageRouter opened remote GridCardSelectScreen: cards="
+            + optArr.size() + " select=" + minSelect);
+    }
+
+    private void handleInteractResponse(String rawMessage) {
+        JsonObject ir = Protocol.GSON.fromJson(rawMessage, JsonObject.class);
+        BaseMod.logger.info("MessageRouter interact_response received");
+
+        if (CrossSpireMod.isRoomHost()) {
+            if (CrossSpireMod.stageHost != null && CrossSpireMod.stageHost.isStageHost()) {
+                applyInteractResponse(ir);
+            } else if (CrossSpireMod.stageHost != null) {
+                String stageHostId = CrossSpireMod.stageHost.getStageHostId();
+                if (stageHostId != null) {
+                    CrossSpireMod.connectionManager.send(stageHostId, rawMessage);
+                    BaseMod.logger.info("MessageRouter forwarded interact_response to stage host");
+                }
+            }
+        } else if (CrossSpireMod.stageHost.isStageHost()) {
+            applyInteractResponse(ir);
+        }
+    }
+
+    private void applyInteractResponse(JsonObject ir) {
+        if (AbstractDungeon.gridSelectScreen == null) return;
+        com.megacrit.cardcrawl.screens.select.GridCardSelectScreen gcs = AbstractDungeon.gridSelectScreen;
+        if (gcs.selectedCards == null) return;
+        JsonArray sel = ir.has("selected") ? ir.getAsJsonArray("selected") : new JsonArray();
+        for (int i = 0; i < sel.size(); i++) {
+            String cid = sel.get(i).getAsString();
+            com.megacrit.cardcrawl.cards.AbstractCard stub = new crossspire.combat.CardStub(cid, 1,
+                com.megacrit.cardcrawl.cards.AbstractCard.CardType.ATTACK,
+                com.megacrit.cardcrawl.cards.AbstractCard.CardRarity.BASIC,
+                com.megacrit.cardcrawl.cards.AbstractCard.CardTarget.ENEMY);
+            gcs.selectedCards.add(stub);
+        }
+        if (gcs.confirmButton != null) {
+            gcs.confirmButton.hb.clicked = true;
+        }
+        BaseMod.logger.info("MessageRouter injected " + sel.size() + " cards + confirmed");
     }
 }
