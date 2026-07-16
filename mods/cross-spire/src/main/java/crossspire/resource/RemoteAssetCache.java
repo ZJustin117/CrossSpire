@@ -5,20 +5,31 @@ import com.badlogic.gdx.graphics.g2d.TextureAtlas;
 import com.esotericsoftware.spine.SkeletonData;
 import com.esotericsoftware.spine.SkeletonJson;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import basemod.BaseMod;
 
 public class RemoteAssetCache {
 
-    private static final int MAX_MEMORY_ENTRIES = 64;
+    private static final int MAX_MEMORY_ENTRIES = 256;
     private static final long EXPIRE_MS = 30L * 24 * 60 * 60 * 1000;
-    private static final Map<String, Texture> textureCache = new ConcurrentHashMap<String, Texture>();
+    private static final Map<String, Texture> textureCache = Collections.synchronizedMap(
+        new LinkedHashMap<String, Texture>(32, 0.75f, true) {
+            @Override
+            protected boolean removeEldestEntry(Map.Entry<String, Texture> eldest) {
+                if (size() > MAX_MEMORY_ENTRIES) {
+                    try { eldest.getValue().dispose(); } catch (Exception ignored) {}
+                    return true;
+                }
+                return false;
+            }
+        });
     private static final Map<String, RemoteCharacterResource> characterCache = new ConcurrentHashMap<String, RemoteCharacterResource>();
     private static File diskRoot;
 
@@ -33,9 +44,6 @@ public class RemoteAssetCache {
     }
 
     public static void putTexture(String sourcePlayerId, String resourceType, String resourceId, byte[] pngData) {
-        if (textureCache.size() >= MAX_MEMORY_ENTRIES) {
-            textureCache.clear();
-        }
         String key = sourcePlayerId + "/" + resourceType + "/" + resourceId;
         try {
             Texture tex = new Texture(new com.badlogic.gdx.graphics.Pixmap(pngData, 0, pngData.length));
@@ -84,9 +92,18 @@ public class RemoteAssetCache {
             file.delete();
             return null;
         }
-        try (FileInputStream fis = new FileInputStream(file)) {
-            byte[] data = new byte[(int) file.length()];
-            fis.read(data);
+        try {
+            byte[] data = java.nio.file.Files.readAllBytes(file.toPath());
+            String key = sourcePlayerId + "/" + resourceType + "/" + resourceId;
+            String storedChecksum = getManifestChecksum(key);
+            if (storedChecksum != null && !storedChecksum.isEmpty()) {
+                String actualChecksum = sha256(data);
+                if (!storedChecksum.equals(actualChecksum)) {
+                    BaseMod.logger.info("RemoteAssetCache checksum mismatch: " + key);
+                    file.delete();
+                    return null;
+                }
+            }
             return data;
         } catch (IOException e) {
             return null;
@@ -171,6 +188,21 @@ public class RemoteAssetCache {
             }
             java.nio.file.Files.write(manifest.toPath(), json.toString().getBytes(StandardCharsets.UTF_8));
         } catch (Exception ignored) {}
+    }
+
+    static String sha256ForTest(byte[] data) {
+        return sha256(data);
+    }
+
+    private static String getManifestChecksum(String key) {
+        try {
+            File manifest = new File(diskRoot, "manifest.json");
+            if (!manifest.exists()) return null;
+            String content = new String(java.nio.file.Files.readAllBytes(manifest.toPath()), StandardCharsets.UTF_8);
+            com.google.gson.JsonObject obj = new com.google.gson.JsonParser().parse(content).getAsJsonObject();
+            if (obj.has(key)) return obj.get(key).getAsString();
+        } catch (Exception ignored) {}
+        return null;
     }
 
     private static String sha256(byte[] data) {
