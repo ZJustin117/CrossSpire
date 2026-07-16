@@ -15,6 +15,7 @@ public class EventSyncPatches {
     public static class OnEnterRoom {
         @SpirePostfixPatch
         public static void postfix(AbstractEvent __instance) {
+            BaseMod.logger.info("EventSyncOnEnterRoom triggered: " + __instance.getClass().getSimpleName());
             if (CrossSpireMod.stageHost == null || !CrossSpireMod.stageHost.isStageHost()) return;
             if (!CrossSpireMod.isConnected()) return;
 
