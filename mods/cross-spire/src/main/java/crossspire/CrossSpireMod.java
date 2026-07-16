@@ -170,6 +170,7 @@ public class CrossSpireMod {
             });
             hostId = playerId;
             roomHost = new RoomHost(playerId);
+            roomHost.addPlayer(playerId);
             lobbyScreen.setStatus("Hosting on :" + connectionManager.getPort());
             HeartbeatManager.start();
             onRoomJoined();

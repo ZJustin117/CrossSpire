@@ -349,7 +349,7 @@ public class MessageRouter {
         return slashIdx > 0 ? after.substring(0, slashIdx) : after;
     }
 
-    private void handleRoomPin(String rawMessage) {
+    public void handleRoomPin(String rawMessage) {
         JsonObject msg = Protocol.GSON.fromJson(rawMessage, JsonObject.class);
         String source = msg.has("source") ? msg.get("source").getAsString() : "";
         int roomIndex = msg.has("room") ? msg.get("room").getAsInt() : -1;
@@ -365,9 +365,7 @@ public class MessageRouter {
             int consensus = CrossSpireMod.roomHost.checkConsensus();
             if (consensus >= 0) {
                 BaseMod.logger.info("MessageRouter room_pin consensus: room=" + consensus);
-                String consensusMsg = crossspire.network.RoomPinSender.buildRoomConsensus(
-                    CrossSpireMod.playerId, consensus);
-                CrossSpireMod.send(consensusMsg);
+                SyncExecutor.executeRoomConsensus(consensus);
             } else {
                 String pinsJson = CrossSpireMod.roomHost.getPinsJson();
                 String pinsMsg = crossspire.network.RoomPinSender.buildRoomPins(

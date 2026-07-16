@@ -46,6 +46,9 @@ public class CrossSpireCommand extends ConsoleCommand {
         DevConsole.log("Hosting on port " + port + "...");
         System.setProperty("crossspire.p2p.port", String.valueOf(port));
         CrossSpireMod.connect();
+        if (CrossSpireMod.stageHost != null && CrossSpireMod.isRoomHost()) {
+            CrossSpireMod.stageHost.setStageHost(CrossSpireMod.playerId);
+        }
     }
 
     private void cmdJoin(String[] tokens, int depth) {
@@ -226,7 +229,14 @@ public class CrossSpireCommand extends ConsoleCommand {
             return;
         }
         String msg = RoomPinSender.buildRoomPin(CrossSpireMod.playerId, roomIndex);
-        CrossSpireMod.send(msg);
+        if (CrossSpireMod.isRoomHost()) {
+            if (CrossSpireMod.messageRouter != null) {
+                CrossSpireMod.messageRouter.handleRoomPin(msg);
+            }
+        } else {
+            CrossSpireMod.send(msg);
+        }
+        BaseMod.logger.info("CrossSpire roomPin: " + roomIndex + " host=" + CrossSpireMod.isRoomHost());
         DevConsole.log("Room pin: " + roomIndex);
     }
 
