@@ -139,6 +139,7 @@ public class MessageRouter {
             String eventClass = ei.has("event_class") ? ei.get("event_class").getAsString() : "";
             int opts = ei.has("options") ? ei.getAsJsonArray("options").size() : 0;
             BaseMod.logger.info("MessageRouter event_interface: " + name + " options=" + opts);
+            crossspire.ui.CrossSpireCommand.setLastEventClass(eventClass);
             if (!CrossSpireMod.stageHost.isStageHost()) {
                 boolean localized = false;
                 if (!eventClass.isEmpty()) {
@@ -524,7 +525,7 @@ public class MessageRouter {
             }
         }
 
-        if (!CrossSpireMod.stageHost.isStageHost()) return;
+        if (CrossSpireMod.stageHost == null || !CrossSpireMod.stageHost.isStageHost()) return;
 
         BaseMod.logger.info("MessageRouter event_transcript replay: " + eventId + " actions=" + actionsArr.size());
         if (AbstractDungeon.getCurrRoom() == null || AbstractDungeon.getCurrRoom().event == null) {
