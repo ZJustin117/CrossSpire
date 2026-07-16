@@ -8,6 +8,8 @@ import com.megacrit.cardcrawl.core.CardCrawlGame;
 import com.megacrit.cardcrawl.dungeons.AbstractDungeon;
 import com.megacrit.cardcrawl.helpers.CardLibrary;
 import com.megacrit.cardcrawl.monsters.AbstractMonster;
+import com.megacrit.cardcrawl.screens.select.GridCardSelectScreen;
+import com.megacrit.cardcrawl.ui.buttons.GridSelectConfirmButton;
 import crossspire.CrossSpireMod;
 import crossspire.network.Protocol;
 import crossspire.network.RoomPinSender;
@@ -41,6 +43,7 @@ public class CrossSpireCommand extends ConsoleCommand {
         else if ("room".equals(sub)) { cmdRoomPin(tokens, depth); }
         else if ("snapshot".equals(sub)) { cmdSnapshot(); }
         else if ("vote".equals(sub)) { cmdStageVote(tokens, depth); }
+        else if ("select".equals(sub)) { cmdInteractSelect(tokens, depth); }
         else { errorMsg(); }
     }
 
@@ -267,8 +270,52 @@ public class CrossSpireCommand extends ConsoleCommand {
         DevConsole.log("Voted for: " + candidate);
     }
 
+    private void cmdInteractSelect(String[] tokens, int depth) {
+        if (tokens.length < depth + 2) {
+            DevConsole.log("Usage: crossspire select <card_id>");
+            return;
+        }
+        String cardId = tokens[depth + 1];
+
+        if (AbstractDungeon.player == null) {
+            DevConsole.log("Not in game.");
+            return;
+        }
+
+        GridCardSelectScreen gcs = AbstractDungeon.gridSelectScreen;
+        if (gcs == null || gcs.targetGroup == null || gcs.targetGroup.group == null) {
+            DevConsole.log("No active card selection.");
+            return;
+        }
+
+        AbstractCard chosen = null;
+        for (AbstractCard c : gcs.targetGroup.group) {
+            if (c.cardID.equals(cardId)) {
+                chosen = c;
+                break;
+            }
+        }
+        if (chosen == null) {
+            DevConsole.log("Card not in pool: " + cardId);
+            return;
+        }
+
+        if (gcs.selectedCards.contains(chosen)) {
+            DevConsole.log("Already selected: " + cardId);
+            return;
+        }
+
+        gcs.selectedCards.add(chosen);
+        DevConsole.log("Selected: " + cardId + " (" + gcs.selectedCards.size() + " total)");
+
+        if (gcs.confirmButton != null && gcs.selectedCards.size() >= 1) {
+            gcs.confirmButton.hb.clicked = true;
+            BaseMod.logger.info("CrossSpire select: confirmed " + cardId);
+        }
+    }
+
     @Override
     public void errorMsg() {
-        DevConsole.log("crossspire: host [port] | join <ip> [port] | disconnect | status | info | lobby | combat | ready [char] | start [char] [seed] | play <card> [target] | queue | room <index> | snapshot | vote <player>");
+        DevConsole.log("crossspire: host [port] | join <ip> [port] | disconnect | status | info | lobby | combat | ready [char] | start [char] [seed] | play <card> [target] | queue | room <index> | snapshot | vote <player> | select <card>");
     }
 }
