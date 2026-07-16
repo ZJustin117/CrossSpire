@@ -39,6 +39,7 @@ public class MessageRouter {
     public void route(String rawMessage) {
         JsonObject msg = Protocol.GSON.fromJson(rawMessage, JsonObject.class);
         String type = msg.get("type").getAsString();
+        String source = msg.has("source") ? msg.get("source").getAsString() : "";
 
         if ("connected".equals(type)) {
             return;
@@ -56,6 +57,17 @@ public class MessageRouter {
 
         if ("player_left".equals(type)) {
             handlePlayerLeft(msg);
+            return;
+        }
+        if ("ping".equals(type)) {
+            JsonObject pong = new JsonObject();
+            pong.addProperty("type", "pong");
+            pong.addProperty("seq", CrossSpireMod.nextSeq());
+            CrossSpireMod.send(pong.toString());
+            return;
+        }
+        if ("pong".equals(type)) {
+            crossspire.network.HeartbeatManager.handlePong(source);
             return;
         }
 

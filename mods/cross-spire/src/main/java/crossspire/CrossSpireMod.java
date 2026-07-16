@@ -171,6 +171,12 @@ public class CrossSpireMod {
             hostId = playerId;
             roomHost = new RoomHost(playerId);
             roomHost.addPlayer(playerId);
+            HeartbeatManager.setOnPeerTimeoutListener(new HeartbeatManager.OnPeerTimeoutListener() {
+                @Override
+                public void onPeerTimeout(String peerId) {
+                    if (roomHost != null) roomHost.onPeerTimeout(peerId);
+                }
+            });
             lobbyScreen.setStatus("Hosting on :" + connectionManager.getPort());
             HeartbeatManager.start();
             onRoomJoined();
@@ -211,6 +217,7 @@ public class CrossSpireMod {
         }
         RemotePlayerRegistry.register(remotePlayerId);
         lobbyState.onPlayerJoined(remotePlayerId);
+        HeartbeatManager.handlePong(remotePlayerId);
 
         if (roomHost != null) {
             JsonObject roomState = new JsonObject();

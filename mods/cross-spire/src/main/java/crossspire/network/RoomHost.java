@@ -68,4 +68,20 @@ public class RoomHost {
     public String getPinsJson() {
         return new Gson().toJson(playerPins);
     }
+
+    /**
+     * Called when HeartbeatManager detects a peer timeout.
+     * Removes the player and broadcasts player_left.
+     * If the timed-out player was the room host, triggers host re-election.
+     */
+    public void onPeerTimeout(String peerId) {
+        removePlayer(peerId);
+        basemod.BaseMod.logger.info("RoomHost onPeerTimeout: " + peerId.substring(0, 8)
+            + " remaining=" + playerIds.size());
+
+        com.google.gson.JsonObject left = new com.google.gson.JsonObject();
+        left.addProperty("type", "player_left");
+        left.addProperty("playerId", peerId);
+        crossspire.CrossSpireMod.send(left.toString());
+    }
 }
