@@ -7,6 +7,7 @@ import com.megacrit.cardcrawl.events.AbstractEvent;
 import crossspire.CrossSpireMod;
 import crossspire.network.EventMessageSender;
 import crossspire.network.Protocol;
+import java.lang.reflect.Field;
 
 public class EventSyncPatches {
 
@@ -17,14 +18,47 @@ public class EventSyncPatches {
             if (CrossSpireMod.stageHost == null || !CrossSpireMod.stageHost.isStageHost()) return;
             if (!CrossSpireMod.isConnected()) return;
 
-            String eventName = __instance.getClass().getSimpleName();
-            Protocol.EventResultMessage msg = new Protocol.EventResultMessage();
-            msg.source = CrossSpireMod.playerId;
-            msg.seq = CrossSpireMod.nextSeq();
-            msg.eventId = eventName;
-            msg.effects = new Protocol.EffectDescription[0];
-            CrossSpireMod.send(Protocol.GSON.toJson(msg));
-            BaseMod.logger.info("EventSyncPatches onEnterRoom: " + eventName);
+            String eventId = __instance.getClass().getSimpleName();
+
+            String description = "";
+            try {
+                Field bodyField = AbstractEvent.class.getDeclaredField("body");
+                bodyField.setAccessible(true);
+                Object bodyVal = bodyField.get(__instance);
+                if (bodyVal instanceof String) description = (String) bodyVal;
+            } catch (Exception ignored) {}
+
+            String[] optionTexts = new String[0];
+            boolean[] disabled = new boolean[0];
+            try {
+                Field optionsField = __instance.getClass().getField("OPTIONS");
+                optionTexts = (String[]) optionsField.get(null);
+                disabled = new boolean[optionTexts.length];
+                if (__instance.optionsSelected != null) {
+                    for (int i = 0; i < optionTexts.length && i < __instance.optionsSelected.size(); i++) {
+                        disabled[i] = __instance.optionsSelected.get(i) != null;
+                    }
+                }
+            } catch (Exception e) {
+                optionTexts = new String[0];
+                disabled = new boolean[0];
+            }
+
+            if (optionTexts.length > 0) {
+                String msg = EventMessageSender.buildEventInterface(
+                    eventId, description, optionTexts, disabled);
+                CrossSpireMod.send(msg);
+                BaseMod.logger.info("EventSyncPatches event_interface: " + eventId
+                    + " options=" + optionTexts.length);
+            } else {
+                Protocol.EventResultMessage msg = new Protocol.EventResultMessage();
+                msg.source = CrossSpireMod.playerId;
+                msg.seq = CrossSpireMod.nextSeq();
+                msg.eventId = eventId;
+                msg.effects = new Protocol.EffectDescription[0];
+                CrossSpireMod.send(Protocol.GSON.toJson(msg));
+                BaseMod.logger.info("EventSyncPatches onEnterRoom: " + eventId + " (no options)");
+            }
         }
     }
 
