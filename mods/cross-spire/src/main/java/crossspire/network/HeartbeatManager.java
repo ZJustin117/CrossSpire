@@ -19,7 +19,7 @@ public class HeartbeatManager {
                     if (CrossSpireMod.isConnected()) {
                         JsonObject ping = new JsonObject();
                         ping.addProperty("type", "ping");
-                        ping.addProperty("seq", 0);
+                        ping.addProperty("seq", CrossSpireMod.nextSeq());
                         CrossSpireMod.send(ping.toString());
                     }
                 }

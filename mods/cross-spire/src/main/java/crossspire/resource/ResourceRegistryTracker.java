@@ -22,6 +22,9 @@ public class ResourceRegistryTracker {
 
     private static final Map<String, Set<String>> playerCards = new ConcurrentHashMap<>();
     private static final Map<String, Set<String>> playerRelics = new ConcurrentHashMap<>();
+    private static final Map<String, Set<String>> playerPowers = new ConcurrentHashMap<>();
+    private static final Map<String, Set<String>> playerPotions = new ConcurrentHashMap<>();
+    private static final Map<String, Set<String>> playerCharacters = new ConcurrentHashMap<>();
 
     public static void onRegistryReceived(String rawMessage) {
         JsonObject msg = new com.google.gson.JsonParser().parse(rawMessage).getAsJsonObject();
@@ -39,6 +42,24 @@ public class ResourceRegistryTracker {
             Set<String> set = ConcurrentHashMap.newKeySet();
             for (int i = 0; i < arr.size(); i++) set.add(arr.get(i).getAsString());
             playerRelics.put(source, set);
+        }
+        if (msg.has("powers")) {
+            JsonArray arr = msg.getAsJsonArray("powers");
+            Set<String> set = ConcurrentHashMap.newKeySet();
+            for (int i = 0; i < arr.size(); i++) set.add(arr.get(i).getAsString());
+            playerPowers.put(source, set);
+        }
+        if (msg.has("potions")) {
+            JsonArray arr = msg.getAsJsonArray("potions");
+            Set<String> set = ConcurrentHashMap.newKeySet();
+            for (int i = 0; i < arr.size(); i++) set.add(arr.get(i).getAsString());
+            playerPotions.put(source, set);
+        }
+        if (msg.has("characters")) {
+            JsonArray arr = msg.getAsJsonArray("characters");
+            Set<String> set = ConcurrentHashMap.newKeySet();
+            for (int i = 0; i < arr.size(); i++) set.add(arr.get(i).getAsString());
+            playerCharacters.put(source, set);
         }
 
         BaseMod.logger.info("ResourceRegistryTracker received from " + source.substring(0, 8)
@@ -127,5 +148,23 @@ public class ResourceRegistryTracker {
         JsonArray arr = new JsonArray();
         for (String v : values) arr.add(v);
         return arr;
+    }
+
+    public static boolean hasCard(String playerId, String cardId) {
+        Set<String> set = playerCards.get(playerId);
+        return set != null && set.contains(cardId);
+    }
+
+    public static boolean hasRelic(String playerId, String relicId) {
+        Set<String> set = playerRelics.get(playerId);
+        return set != null && set.contains(relicId);
+    }
+
+    public static Set<String> getCards(String playerId) {
+        return playerCards.getOrDefault(playerId, new HashSet<>());
+    }
+
+    public static Set<String> getRelics(String playerId) {
+        return playerRelics.getOrDefault(playerId, new HashSet<>());
     }
 }

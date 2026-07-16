@@ -34,8 +34,9 @@ public class StageHost {
     }
 
     public static String electHost(String[] playerIds) {
-        Arrays.sort(playerIds);
-        return playerIds[0];
+        String[] sorted = playerIds.clone();
+        Arrays.sort(sorted);
+        return sorted[0];
     }
 
     public boolean canOwnLocally(String resourceType, String resourceId) {

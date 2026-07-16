@@ -7,10 +7,11 @@
 | Phase | 任务数 | 完成 | 待做 | 推迟 |
 |-------|--------|------|------|------|
 | P1 架构修复 | 5 | 5 | 0 | 0 |
-| P2 功能补全 | 10 | 6 | 4 | 0 |
-| P3 清理稳定 | 8 | 3 | 5 | 0 |
-| 归档 | 6 | 1 | 5 | 0 |
-| **合计** | **29** | **15** | **14** | **0** |
+| P2 功能补全 | 10 | 9 | 1 | 0 |
+| P3 清理稳定 | 8 | 6 | 1 | 1 |
+| T2.7a/b/c done, T3.5/3.6 done, A2/A6 done | | | | |
+| 归档 | 6 | 3 | 3 | 0 |
+| **合计** | **29** | **23** | **5** | **1** |
 
 ---
 
@@ -178,19 +179,19 @@ boolean checkConsensus() {
 
 **Commit**: `0975c5a`
 
-### T3.4 Bug 修复清单 ✅ (4/7, 剩余 3 项) — partial
+### T3.4 Bug 修复清单 ✅ (6/7, #5 deferred)
 
 | # | 文件 | 修复 | 状态 |
 |---|------|------|------|
 | 1 | `SuppressBaseModPatches.java` | SuppressOnPlayerDamaged: `Return(0)` → `Return(__amount)` | [x] |
 | 2 | `MessageRouter.java` | 删除 unreachable `combat_result` 第二个分支 | [x] |
-| 3 | `RemotePlayerState.java` | syncToPlayerInstance() 同步 powers/energy/gold | [ ] |
+| 3 | `RemotePlayerState.java` | syncToPlayerInstance() 同步 energy/gold | [x] |
 | 4 | `LocalCapturePatches.java` | 加 `if EventSuppression.isSuppressed() return;` | [x] |
-| 5 | `Reference.java` / `ReferenceFactory.java` | hostId 重选后更新存量 reference | [ ] |
-| 6 | `RoomPanel.java` + `StarConnectionManager` | `substring(0, 8)` 加 length guard | [ ] |
-| 7 | `MonsterTurnPatches.java` | 重写为 HP 增量法 (已在 T2.3 完成) | [x] |
+| 5 | `Reference.java` / `ReferenceFactory.java` | hostId 重选后更新存量 reference | [-] |
+| 6 | `RoomPanel.java` + `StarConnectionManager` | `substring(0, 8)` → `CrossSpireMod.shortId()` | [x] |
+| 7 | `MonsterTurnPatches.java` | 重写为 HP 增量法 | [x] |
 
-### T3.5 ResourceRegistryTracker 补齐 · priority(low)
+### T3.5 ResourceRegistryTracker 补齐 ✅
 
 | # | 步骤 | 文件 |
 |---|------|------|
@@ -199,11 +200,14 @@ boolean checkConsensus() {
 
 **测试**: `ResourceRegistryTrackerTest.testQueryApi`
 
-### T3.6 Heartbeat seq 补全 · priority(low)
+### T3.6 Heartbeat seq 补全 ✅
 
-HeartbeatManager ping/pong 加 monotonic seq。
+HeartbeatManager ping 改为 `CrossSpireMod.nextSeq()`。
 
-### T3.7 文档同步 · priority(medium)
+### T3.7 文档同步 ✅
+
+- [x] 更新 spire-patches.md — 删除 RngSyncPatches; 新增 PlayerStatePatches, RenderSafetyPatches
+
 
 | # | 步骤 | 文件 |
 |---|------|------|
@@ -223,8 +227,8 @@ HeartbeatManager ping/pong 加 monotonic seq。
 | ID | 内容 | 状态 |
 |----|------|------|
 | A1 | EffectCapture.stopCapture 修复 (snapshot→clear) | [x] |
-| A2 | ReferenceFactory 非 card 前缀修复 | [ ] |
+| A2 | ReferenceFactory 非 card 前缀修复 | [x] |
 | A3 | TriggerRegistry 确认 fire 端 | [ ] |
 | A4 | RemoteResource POJO 注解 | [ ] |
 | A5 | RemoteAssetServer 非 GL 线程安全 | [ ] |
-| A6 | StageHost.electHost 副作用修复 | [ ] |
+| A6 | StageHost.electHost 副作用修复 (clone input array) | [x] |
