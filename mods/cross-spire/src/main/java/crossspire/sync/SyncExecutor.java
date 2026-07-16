@@ -176,4 +176,17 @@ public class SyncExecutor {
         if (lower.contains("hexaghost")) return "Hexaghost";
         return name;
     }
+
+    public static void executeRoomConsensus(int roomIndex) {
+        BaseMod.logger.info("SyncExecutor executeRoomConsensus: room=" + roomIndex);
+        if (!CrossSpireMod.stageHost.isStageHost()) {
+            BaseMod.logger.info("SyncExecutor not stage host, ignoring room_consensus");
+            return;
+        }
+        Gdx.app.postRunnable(new Runnable() {
+            @Override public void run() {
+                enterRemoteCombat("Cultist");
+            }
+        });
+    }
 }

@@ -49,6 +49,11 @@ public class CrossSpireMod {
         return ServerPicker.isRoomHost;
     }
 
+    public static String shortId(String id) {
+        if (id == null || id.length() < 8) return id != null ? id : "?";
+        return id.substring(0, 8);
+    }
+
     public static void initialize() {
         BaseMod.logger.info("CrossSpire mod initialized");
         BaseMod.logger.info("CrossSpire EventSuppression ready, current=" + EventSuppression.isSuppressed());

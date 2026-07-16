@@ -126,6 +126,13 @@ public class MessageRouter {
             });
         } else if ("room_pin".equals(type)) {
             handleRoomPin(rawMessage);
+        } else if ("room_consensus".equals(type)) {
+            JsonObject cm = Protocol.GSON.fromJson(rawMessage, JsonObject.class);
+            int room = cm.has("room") ? cm.get("room").getAsInt() : -1;
+            BaseMod.logger.info("MessageRouter room_consensus: room=" + room);
+            if (room >= 0) {
+                SyncExecutor.executeRoomConsensus(room);
+            }
         }
     }
 

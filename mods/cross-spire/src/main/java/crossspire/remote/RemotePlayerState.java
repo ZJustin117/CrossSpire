@@ -55,5 +55,9 @@ public class RemotePlayerState {
         playerInstance.currentHealth = hp;
         playerInstance.maxHealth = maxHp;
         playerInstance.currentBlock = block;
+        if (playerInstance.energy != null) {
+            playerInstance.energy.energy = energy;
+        }
+        playerInstance.gold = gold;
     }
 }
