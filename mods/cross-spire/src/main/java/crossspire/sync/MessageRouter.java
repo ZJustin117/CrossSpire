@@ -199,6 +199,15 @@ public class MessageRouter {
             if (room >= 0) {
                 SyncExecutor.executeRoomConsensus(room);
             }
+        } else if ("interact_request".equals(type)) {
+            JsonObject ir = Protocol.GSON.fromJson(rawMessage, JsonObject.class);
+            String caller = ir.has("source") ? ir.get("source").getAsString() : "";
+            BaseMod.logger.info("MessageRouter interact_request from " + caller.substring(0, 8)
+                + " type=" + (ir.has("select_type") ? ir.get("select_type").getAsString() : "?"));
+        } else if ("interact_response".equals(type)) {
+            JsonObject ir = Protocol.GSON.fromJson(rawMessage, JsonObject.class);
+            String owner = ir.has("source") ? ir.get("source").getAsString() : "";
+            BaseMod.logger.info("MessageRouter interact_response from " + owner.substring(0, 8));
         }
     }
 
