@@ -63,6 +63,7 @@ public class MessageRouter {
         if ("ping".equals(type)) {
             JsonObject pong = new JsonObject();
             pong.addProperty("type", "pong");
+            pong.addProperty("source", CrossSpireMod.playerId);
             pong.addProperty("seq", CrossSpireMod.nextSeq());
             CrossSpireMod.send(pong.toString());
             crossspire.network.HeartbeatManager.handlePong(source);

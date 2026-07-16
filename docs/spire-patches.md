@@ -45,12 +45,13 @@ CrossSpire 全部 MTS 注入点，按功能域分组。最后更新: 2026-07-16
 | `OnCreateIntent` | `AbstractMonster.createIntent` | — | 广播 `monster_intent` (使用 host 本地 RNG) |
 | `PreBattle` | `AbstractMonster.usePreBattleAction` | — | 战前效果广播 |
 
-## 事件 (2 Postfix)
+## 事件 (3 Postfix)
 
 | 内部类 | 目标方法 | 参数 | 功能 |
 |--------|----------|------|------|
 | `OnEnterRoom` | `AbstractEvent.onEnterRoom` | — | 事件进入广播 |
 | `EnterCombat` | `AbstractEvent.enterCombat` | — | 事件→战斗过渡广播 |
+| `OnOpenMap` | `AbstractEvent.openMap` | — | 事件结束 → `event_result` 广播 (新增) |
 
 ## 动画 (1 Postfix)
 
@@ -70,8 +71,8 @@ CrossSpire 全部 MTS 注入点，按功能域分组。最后更新: 2026-07-16
 | 类型 | 数量 | 文件 |
 |------|------|------|
 | `@SpirePrefixPatch` | 15 | `SuppressBaseModPatches`(12), `RenderSafetyPatches`(2), `EndTurnSyncPatches`(1) |
-| `@SpirePostfixPatch` | 17 | `LocalCapturePatches`, `CombatSyncPatches`, `EndTurnSyncPatches`, `MonsterIntentBroadcastPatches`, `MonsterTurnPatches`, `GoldSyncPatches`, `EventSyncPatches`, `AnimationSyncPatches`, `PlayerStatePatches` |
-| **总计** | **32** | 11 文件 |
+| `@SpirePostfixPatch` | 18 | `LocalCapturePatches`, `CombatSyncPatches`, `EndTurnSyncPatches`, `MonsterIntentBroadcastPatches`, `MonsterTurnPatches`, `GoldSyncPatches`, `EventSyncPatches`, `AnimationSyncPatches`, `PlayerStatePatches` |
+| **总计** | **33** | 11 文件 |
 
 ## 变更记录
 
