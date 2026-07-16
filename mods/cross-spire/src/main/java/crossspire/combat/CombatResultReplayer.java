@@ -117,6 +117,10 @@ public class CombatResultReplayer {
         try {
             BaseMod.publishOnCardUse(stubCard);
             BaseMod.logger.info("CombatResultReplayer INDUCED publishOnCardUse: " + cardId);
+
+            for (crossspire.reference.Reference<?> ref : crossspire.reference.TriggerRegistry.getTriggers("onCardUse", cardId)) {
+                try { ref.dereference(); } catch (Exception ignored) {}
+            }
         } catch (Exception e) {
             BaseMod.logger.info("CombatResultReplayer publishOnCardUse failed (" + cardId + "): " + e.getClass().getName() + ": " + e.getMessage());
         }

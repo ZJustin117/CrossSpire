@@ -4,10 +4,7 @@ import basemod.BaseMod;
 import basemod.ReflectionHacks;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.files.FileHandle;
-import com.badlogic.gdx.graphics.Pixmap;
-import com.badlogic.gdx.graphics.PixmapIO;
-import com.badlogic.gdx.graphics.Texture;
-import com.badlogic.gdx.graphics.g2d.TextureAtlas;
+import com.google.gson.JsonObject;
 import com.google.gson.JsonObject;
 import crossspire.CrossSpireMod;
 import java.util.Base64;
@@ -102,13 +99,7 @@ public class RemoteAssetServer {
                     if (path == null) return;
                     FileHandle fh = Gdx.files.internal(path);
                     if (!fh.exists()) return;
-                    Pixmap pixmap = new Pixmap(fh);
-                    java.io.File tmp = java.io.File.createTempFile("spine_", ".png");
-                    com.badlogic.gdx.files.FileHandle tmpFh = new com.badlogic.gdx.files.FileHandle(tmp);
-                    PixmapIO.writePNG(tmpFh, pixmap);
-                    byte[] data = java.nio.file.Files.readAllBytes(tmp.toPath());
-                    tmp.delete();
-                    pixmap.dispose();
+                    byte[] data = fh.readBytes();
                     sendResponse(requester, resourceType, "skeleton.png",
                         Base64.getEncoder().encodeToString(data));
                     break;

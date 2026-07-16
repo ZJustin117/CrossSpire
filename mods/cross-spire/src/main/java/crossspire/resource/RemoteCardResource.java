@@ -2,6 +2,11 @@ package crossspire.resource;
 
 import com.badlogic.gdx.graphics.Texture;
 
+/**
+ * Pure material projection for a remote card texture.
+ * Does not extend AbstractCard — no side effects, no card pool pollution.
+ * Currently unused in render pipeline; reserved for card art asset system.
+ */
 public class RemoteCardResource {
 
     public final String cardId;
