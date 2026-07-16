@@ -500,6 +500,10 @@ public class MessageRouter {
         JsonObject sel = Protocol.GSON.fromJson(rawMessage, JsonObject.class);
         int idx = sel.has("option_index") ? sel.get("option_index").getAsInt() : -1;
 
+        BaseMod.logger.info("MessageRouter handleEventSelect idx=" + idx + " source=" + source
+            + " isStageHost=" + (CrossSpireMod.stageHost != null && CrossSpireMod.stageHost.isStageHost())
+            + " stageHostId=" + (CrossSpireMod.stageHost != null ? CrossSpireMod.stageHost.getStageHostId() : "null"));
+
         if (CrossSpireMod.stageHost != null && CrossSpireMod.stageHost.isStageHost()) {
             BaseMod.logger.info("MessageRouter event_select: option=" + idx + " from " + source.substring(0, 8));
             eventSelectionRequester = source;

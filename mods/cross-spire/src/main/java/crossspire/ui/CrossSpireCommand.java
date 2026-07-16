@@ -11,6 +11,7 @@ import com.megacrit.cardcrawl.monsters.AbstractMonster;
 import com.megacrit.cardcrawl.screens.select.GridCardSelectScreen;
 import com.megacrit.cardcrawl.ui.buttons.GridSelectConfirmButton;
 import crossspire.CrossSpireMod;
+import crossspire.network.EventMessageSender;
 import crossspire.network.Protocol;
 import crossspire.network.RoomPinSender;
 import crossspire.network.StageVoteSender;
@@ -45,6 +46,7 @@ public class CrossSpireCommand extends ConsoleCommand {
         else if ("vote".equals(sub)) { cmdStageVote(tokens, depth); }
         else if ("select".equals(sub)) { cmdInteractSelect(tokens, depth); }
         else if ("cevent".equals(sub)) { cmdCrossEvent(tokens, depth); }
+        else if ("eventsel".equals(sub)) { cmdEventSelect(tokens, depth); }
         else { errorMsg(); }
     }
 
@@ -343,6 +345,18 @@ public class CrossSpireCommand extends ConsoleCommand {
         com.megacrit.cardcrawl.dungeons.AbstractDungeon.getCurrRoom().onPlayerEntry();
         BaseMod.logger.info("CrossSpire cevent onPlayerEntry done");
         DevConsole.log("Entered event: " + key);
+    }
+
+    private void cmdEventSelect(String[] tokens, int depth) {
+        if (tokens.length < depth + 2) {
+            DevConsole.log("Usage: crossspire eventsel <option_index>");
+            return;
+        }
+        int idx = Integer.parseInt(tokens[depth + 1]);
+        String msg = EventMessageSender.buildEventSelect(CrossSpireMod.playerId, idx);
+        CrossSpireMod.send((String) msg);
+        BaseMod.logger.info("CrossSpire eventsel: idx=" + idx + " pid=" + CrossSpireMod.playerId.substring(0, 8));
+        DevConsole.log("Event select: option " + idx);
     }
 
     @Override
