@@ -64,6 +64,7 @@ public class MessageRouter {
             pong.addProperty("type", "pong");
             pong.addProperty("seq", CrossSpireMod.nextSeq());
             CrossSpireMod.send(pong.toString());
+            crossspire.network.HeartbeatManager.handlePong(source);
             return;
         }
         if ("pong".equals(type)) {
@@ -319,6 +320,7 @@ public class MessageRouter {
     private void handleRoomState(JsonObject msg) {
         if (msg.has("host") && !msg.get("host").isJsonNull()) {
             CrossSpireMod.hostId = msg.get("host").getAsString();
+            HeartbeatManager.handlePong(CrossSpireMod.hostId);
             BaseMod.logger.info("MessageRouter room_state host: " + CrossSpireMod.hostId.substring(0, 8));
         }
         if (msg.has("players")) {
