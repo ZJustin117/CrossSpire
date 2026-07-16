@@ -2,6 +2,7 @@ package crossspire.network;
 
 import com.google.gson.Gson;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,6 +20,25 @@ public class RoomHost {
 
     public String getHostPlayerId() {
         return hostPlayerId;
+    }
+
+    public List<String> getPlayerIds() {
+        return new ArrayList<>(playerIds);
+    }
+
+    /**
+     * Determines the new room host from remaining connected players.
+     * Lexicographically sorts all remaining player IDs and returns the first one.
+     * Used when the current host disconnects — all remaining clients compute
+     * this locally and arrive at the same deterministic result.
+     *
+     * @return lexicographically lowest player ID, or null if no players remain
+     */
+    public String electNewHost() {
+        if (playerIds.isEmpty()) return null;
+        String[] sorted = playerIds.toArray(new String[0]);
+        Arrays.sort(sorted);
+        return sorted[0];
     }
 
     public int getPlayerCount() {
@@ -83,5 +103,16 @@ public class RoomHost {
         left.addProperty("type", "player_left");
         left.addProperty("playerId", peerId);
         crossspire.CrossSpireMod.send(left.toString());
+
+        if (peerId.equals(hostPlayerId)) {
+            String newHost = electNewHost();
+            if (newHost != null && !playerIds.isEmpty()) {
+                basemod.BaseMod.logger.info("RoomHost host died — new host=" + newHost.substring(0, 8));
+                com.google.gson.JsonObject migration = new com.google.gson.JsonObject();
+                migration.addProperty("type", "host_migration");
+                migration.addProperty("new_host", newHost);
+                crossspire.CrossSpireMod.send(migration.toString());
+            }
+        }
     }
 }

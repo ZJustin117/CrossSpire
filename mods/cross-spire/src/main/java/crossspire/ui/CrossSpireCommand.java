@@ -12,6 +12,7 @@ import crossspire.CrossSpireMod;
 import crossspire.network.Protocol;
 import crossspire.network.RoomPinSender;
 import crossspire.remote.RemotePlayerRegistry;
+import crossspire.sync.FullSnapshotSender;
 import crossspire.remote.RemotePlayerState;
 import crossspire.sync.QueueSubmitBuilder;
 import java.io.PrintWriter;
@@ -37,6 +38,7 @@ public class CrossSpireCommand extends ConsoleCommand {
         else if ("queue".equals(sub)) { QueueDisplay.show(); }
         else if ("play".equals(sub)) { cmdPlay(tokens, depth); }
         else if ("room".equals(sub)) { cmdRoomPin(tokens, depth); }
+        else if ("snapshot".equals(sub)) { cmdSnapshot(); }
         else { errorMsg(); }
     }
 
@@ -240,8 +242,14 @@ public class CrossSpireCommand extends ConsoleCommand {
         DevConsole.log("Room pin: " + roomIndex);
     }
 
+    private void cmdSnapshot() {
+        String snap = FullSnapshotSender.build();
+        CrossSpireMod.send(snap);
+        DevConsole.log("Full snapshot sent");
+    }
+
     @Override
     public void errorMsg() {
-        DevConsole.log("crossspire: host [port] | join <ip> [port] | disconnect | status | info | lobby | combat | ready [char] | start [char] [seed] | play <card> [target] | queue | room <index>");
+        DevConsole.log("crossspire: host [port] | join <ip> [port] | disconnect | status | info | lobby | combat | ready [char] | start [char] [seed] | play <card> [target] | queue | room <index> | snapshot");
     }
 }

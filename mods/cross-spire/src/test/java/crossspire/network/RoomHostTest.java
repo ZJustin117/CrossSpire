@@ -78,4 +78,40 @@ public class RoomHostTest {
         host.pinRoom("host", 1);
         assertEquals(-1, host.checkConsensus());
     }
+
+    @Test
+    public void shouldElectFirstAlphabetically() {
+        RoomHost host = new RoomHost("zebra");
+        host.addPlayer("zebra");
+        host.addPlayer("alpha");
+        host.addPlayer("gamma");
+        assertEquals("alpha", host.electNewHost());
+    }
+
+    @Test
+    public void shouldElectSelfWhenOnlyRemainingPlayer() {
+        RoomHost host = new RoomHost("alpha");
+        host.addPlayer("alpha");
+        assertEquals("alpha", host.electNewHost());
+    }
+
+    @Test
+    public void shouldReturnNullWhenNoPlayers() {
+        RoomHost host = new RoomHost("host");
+        assertNull(host.electNewHost());
+    }
+
+    @Test
+    public void playerLeftShouldRemovePins() {
+        RoomHost host = new RoomHost("host");
+        host.addPlayer("host");
+        host.addPlayer("alice");
+        host.addPlayer("bob");
+        host.pinRoom("host", 1);
+        host.pinRoom("alice", 1);
+        host.pinRoom("bob", 1);
+        assertEquals(1, host.checkConsensus());
+        host.removePlayer("bob");
+        assertEquals(1, host.checkConsensus());
+    }
 }

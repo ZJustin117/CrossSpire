@@ -183,8 +183,28 @@ public class CrossSpireMod {
         } else {
             lobbyScreen.setStatus("Connecting to " + ServerPicker.hostIp + ":" + ServerPicker.hostPort);
             connectionManager.connectTo("host", ServerPicker.hostIp, ServerPicker.hostPort);
+            HeartbeatManager.setOnPeerTimeoutListener(new HeartbeatManager.OnPeerTimeoutListener() {
+                @Override
+                public void onPeerTimeout(String peerId) {
+                    if ("host".equals(peerId)) {
+                        BaseMod.logger.info("CrossSpire host timeout — disconnected");
+                        onHostTimeout();
+                    }
+                }
+            });
             HeartbeatManager.start();
         }
+    }
+
+    private static void onHostTimeout() {
+        HeartbeatManager.stop();
+        if (connectionManager != null) {
+            connectionManager.stop();
+        }
+        roomHost = null;
+        hostId = "";
+        lobbyScreen.setStatus("Host timed out — rejoin with: crossspire join <ip> <port>");
+        BaseMod.logger.info("CrossSpire host disconnect complete — waiting for reconnect");
     }
 
     public static void disconnect() {

@@ -189,4 +189,12 @@ public class SyncExecutor {
             }
         });
     }
+
+    public void handleFullSnapshot(String rawMessage) {
+        JsonObject snap = Protocol.GSON.fromJson(rawMessage, JsonObject.class);
+        String source = snap.has("source") ? snap.get("source").getAsString() : "";
+        if (source.equals(CrossSpireMod.playerId)) return;
+        BaseMod.logger.info("SyncExecutor full_snapshot from " + source.substring(0, 8));
+        handleRemotePlayerSync(rawMessage);
+    }
 }

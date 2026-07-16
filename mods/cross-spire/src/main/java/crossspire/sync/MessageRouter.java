@@ -70,6 +70,11 @@ public class MessageRouter {
             crossspire.network.HeartbeatManager.handlePong(source);
             return;
         }
+        if ("host_migration".equals(type)) {
+            String newHost = msg.has("new_host") ? msg.get("new_host").getAsString() : "";
+            BaseMod.logger.info("MessageRouter host_migration → new host=" + newHost.substring(0, 8));
+            return;
+        }
 
         String subtype = msg.has("subtype") ? msg.get("subtype").getAsString() : "";
 
@@ -113,8 +118,9 @@ public class MessageRouter {
         } else if ("reference_register".equals(type)) {
             Protocol.ReferenceRegisterMessage reg = Protocol.GSON.fromJson(rawMessage, Protocol.ReferenceRegisterMessage.class);
             BaseMod.logger.info("MessageRouter reference_register: " + reg.resourceType + ":" + reg.resourceId);
-        } else if ("stage_host_election".equals(type) || "stage_host_result".equals(type)
-                || "full_snapshot".equals(type)) {
+        } else if ("full_snapshot".equals(type)) {
+            syncExecutor.handleFullSnapshot(rawMessage);
+        } else if ("stage_host_election".equals(type) || "stage_host_result".equals(type)) {
             BaseMod.logger.info("MessageRouter " + type + " (reserved, not yet implemented)");
         } else if ("animation_sync".equals(type)) {
             handleAnimationSync(rawMessage);
