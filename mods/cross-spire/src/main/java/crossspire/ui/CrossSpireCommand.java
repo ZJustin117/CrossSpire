@@ -334,16 +334,14 @@ public class CrossSpireCommand extends ConsoleCommand {
             DevConsole.log("Unknown event: " + key);
             return;
         }
-        com.megacrit.cardcrawl.map.MapRoomNode node = new com.megacrit.cardcrawl.map.MapRoomNode(
-            com.megacrit.cardcrawl.dungeons.AbstractDungeon.currMapNode.x,
-            com.megacrit.cardcrawl.dungeons.AbstractDungeon.currMapNode.y);
-        node.room = new com.megacrit.cardcrawl.rooms.EventRoom();
-        node.room.event = ev;
-        BaseMod.logger.info("CrossSpire cevent setting room event=" + ev.getClass().getSimpleName());
-        com.megacrit.cardcrawl.dungeons.AbstractDungeon.currMapNode.room = node.room;
+        com.megacrit.cardcrawl.rooms.EventRoom room = new com.megacrit.cardcrawl.rooms.EventRoom();
+        room.event = ev;
+        com.megacrit.cardcrawl.dungeons.AbstractDungeon.currMapNode.room = room;
+        com.megacrit.cardcrawl.dungeons.AbstractDungeon.screen = com.megacrit.cardcrawl.dungeons.AbstractDungeon.CurrentScreen.NONE;
+        if (com.megacrit.cardcrawl.dungeons.AbstractDungeon.effectList != null) com.megacrit.cardcrawl.dungeons.AbstractDungeon.effectList.clear();
+        if (com.megacrit.cardcrawl.dungeons.AbstractDungeon.topLevelEffects != null) com.megacrit.cardcrawl.dungeons.AbstractDungeon.topLevelEffects.clear();
         ev.onEnterRoom();
-        com.megacrit.cardcrawl.dungeons.AbstractDungeon.getCurrRoom().onPlayerEntry();
-        BaseMod.logger.info("CrossSpire cevent onPlayerEntry done");
+        BaseMod.logger.info("CrossSpire cevent entered: " + ev.getClass().getSimpleName());
         DevConsole.log("Entered event: " + key);
     }
 

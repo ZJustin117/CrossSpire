@@ -512,7 +512,7 @@ public class MessageRouter {
                 && idx >= 0) {
                 try {
                     java.lang.reflect.Method m = AbstractDungeon.getCurrRoom().event.getClass()
-                        .getMethod("buttonEffect", int.class);
+                        .getDeclaredMethod("buttonEffect", int.class);
                     m.setAccessible(true);
                     m.invoke(AbstractDungeon.getCurrRoom().event, idx);
                 } catch (Exception ex) {
