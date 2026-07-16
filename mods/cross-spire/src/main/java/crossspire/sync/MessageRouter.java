@@ -502,7 +502,8 @@ public class MessageRouter {
 
         BaseMod.logger.info("MessageRouter handleEventSelect idx=" + idx + " source=" + source
             + " isStageHost=" + (CrossSpireMod.stageHost != null && CrossSpireMod.stageHost.isStageHost())
-            + " stageHostId=" + (CrossSpireMod.stageHost != null ? CrossSpireMod.stageHost.getStageHostId() : "null"));
+            + " stageHostId=" + (CrossSpireMod.stageHost != null ? CrossSpireMod.stageHost.getStageHostId() : "null")
+            + " localId=" + CrossSpireMod.playerId.substring(0, 8));
 
         if (CrossSpireMod.stageHost != null && CrossSpireMod.stageHost.isStageHost()) {
             BaseMod.logger.info("MessageRouter event_select: option=" + idx + " from " + source.substring(0, 8));
@@ -515,9 +516,16 @@ public class MessageRouter {
                         .getDeclaredMethod("buttonEffect", int.class);
                     m.setAccessible(true);
                     m.invoke(AbstractDungeon.getCurrRoom().event, idx);
+                    BaseMod.logger.info("MessageRouter event_select buttonEffect executed");
                 } catch (Exception ex) {
                     BaseMod.logger.error("MessageRouter event_select invoke failed: " + ex.getMessage());
                 }
+            }
+        } else if (CrossSpireMod.isRoomHost()) {
+            String stageHostId = CrossSpireMod.stageHost != null ? CrossSpireMod.stageHost.getStageHostId() : null;
+            if (stageHostId != null && !stageHostId.equals(CrossSpireMod.playerId)) {
+                CrossSpireMod.connectionManager.send(stageHostId, rawMessage);
+                BaseMod.logger.info("MessageRouter forwarded event_select to stage host");
             }
         } else {
             CrossSpireMod.send((String) rawMessage);
@@ -573,7 +581,8 @@ public class MessageRouter {
         BaseMod.logger.info("MessageRouter interact_response received");
 
         if (CrossSpireMod.isRoomHost()) {
-            if (CrossSpireMod.stageHost != null && CrossSpireMod.stageHost.isStageHost()) {
+        if ((CrossSpireMod.stageHost != null && CrossSpireMod.stageHost.isStageHost())
+                || CrossSpireMod.isRoomHost()) {
                 applyInteractResponse(ir);
             } else if (CrossSpireMod.stageHost != null) {
                 String stageHostId = CrossSpireMod.stageHost.getStageHostId();

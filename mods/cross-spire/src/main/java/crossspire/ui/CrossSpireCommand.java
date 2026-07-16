@@ -56,7 +56,7 @@ public class CrossSpireCommand extends ConsoleCommand {
         DevConsole.log("Hosting on port " + port + "...");
         System.setProperty("crossspire.p2p.port", String.valueOf(port));
         CrossSpireMod.connect();
-        if (CrossSpireMod.stageHost != null && CrossSpireMod.isRoomHost()) {
+        if (CrossSpireMod.stageHost != null) {
             CrossSpireMod.stageHost.setStageHost(CrossSpireMod.playerId);
         }
     }
@@ -342,7 +342,36 @@ public class CrossSpireCommand extends ConsoleCommand {
         if (com.megacrit.cardcrawl.dungeons.AbstractDungeon.topLevelEffects != null) com.megacrit.cardcrawl.dungeons.AbstractDungeon.topLevelEffects.clear();
         ev.onEnterRoom();
         BaseMod.logger.info("CrossSpire cevent entered: " + ev.getClass().getSimpleName());
+        broadcastEventInterface(ev);
         DevConsole.log("Entered event: " + key);
+    }
+
+    private static void broadcastEventInterface(com.megacrit.cardcrawl.events.AbstractEvent ev) {
+        if (!CrossSpireMod.isConnected()) return;
+        if (!CrossSpireMod.isRoomHost() && (CrossSpireMod.stageHost == null || !CrossSpireMod.stageHost.isStageHost())) return;
+
+        String eventId = ev.getClass().getSimpleName();
+        String description = "";
+        try {
+            java.lang.reflect.Field bodyField = com.megacrit.cardcrawl.events.AbstractEvent.class.getDeclaredField("body");
+            bodyField.setAccessible(true);
+            Object bodyVal = bodyField.get(ev);
+            if (bodyVal instanceof String) description = (String) bodyVal;
+        } catch (Exception ignored) {}
+
+        String[] optionTexts = new String[0];
+        boolean[] disabled = new boolean[0];
+        try {
+            java.lang.reflect.Field optionsField = ev.getClass().getField("OPTIONS");
+            optionTexts = (String[]) optionsField.get(null);
+            disabled = new boolean[optionTexts.length];
+        } catch (Exception ignored) {}
+
+        if (optionTexts.length > 0) {
+            String msg = EventMessageSender.buildEventInterface(eventId, description, optionTexts, disabled);
+            CrossSpireMod.send((String) msg);
+            BaseMod.logger.info("CrossSpire cevent event_interface: " + eventId + " options=" + optionTexts.length);
+        }
     }
 
     private void cmdEventSelect(String[] tokens, int depth) {
