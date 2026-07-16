@@ -10,6 +10,7 @@ import com.megacrit.cardcrawl.helpers.CardLibrary;
 import com.megacrit.cardcrawl.monsters.AbstractMonster;
 import crossspire.CrossSpireMod;
 import crossspire.network.Protocol;
+import crossspire.network.RoomPinSender;
 import crossspire.remote.RemotePlayerRegistry;
 import crossspire.remote.RemotePlayerState;
 import crossspire.sync.QueueSubmitBuilder;
@@ -35,6 +36,7 @@ public class CrossSpireCommand extends ConsoleCommand {
         else if ("start".equals(sub)) { cmdStart(tokens, depth); }
         else if ("queue".equals(sub)) { QueueDisplay.show(); }
         else if ("play".equals(sub)) { cmdPlay(tokens, depth); }
+        else if ("room".equals(sub)) { cmdRoomPin(tokens, depth); }
         else { errorMsg(); }
     }
 
@@ -211,8 +213,25 @@ public class CrossSpireCommand extends ConsoleCommand {
         }
     }
 
+    private void cmdRoomPin(String[] tokens, int depth) {
+        if (tokens.length < depth + 2) {
+            DevConsole.log("Usage: crossspire room <index>");
+            return;
+        }
+        int roomIndex;
+        try {
+            roomIndex = Integer.parseInt(tokens[depth + 1]);
+        } catch (NumberFormatException e) {
+            DevConsole.log("Invalid room index: " + tokens[depth + 1]);
+            return;
+        }
+        String msg = RoomPinSender.buildRoomPin(CrossSpireMod.playerId, roomIndex);
+        CrossSpireMod.send(msg);
+        DevConsole.log("Room pin: " + roomIndex);
+    }
+
     @Override
     public void errorMsg() {
-        DevConsole.log("crossspire: host [port] | join <ip> [port] | disconnect | status | info | lobby | combat | ready [char] | start [char] [seed] | play <card> [target] | queue");
+        DevConsole.log("crossspire: host [port] | join <ip> [port] | disconnect | status | info | lobby | combat | ready [char] | start [char] [seed] | play <card> [target] | queue | room <index>");
     }
 }

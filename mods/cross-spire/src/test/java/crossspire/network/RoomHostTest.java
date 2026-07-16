@@ -47,4 +47,35 @@ public class RoomHostTest {
         assertTrue(others.contains("player-3"));
         assertFalse(others.contains("host-123"));
     }
+
+    @Test
+    public void shouldReachConsensusWhenAllPinsMatch() {
+        RoomHost host = new RoomHost("host");
+        host.addPlayer("host");
+        host.addPlayer("alice");
+        host.addPlayer("bob");
+        host.pinRoom("host", 1);
+        host.pinRoom("alice", 1);
+        host.pinRoom("bob", 1);
+        assertEquals(1, host.checkConsensus());
+    }
+
+    @Test
+    public void shouldReturnNegativeWhenNoConsensus() {
+        RoomHost host = new RoomHost("host");
+        host.addPlayer("host");
+        host.addPlayer("alice");
+        host.pinRoom("host", 1);
+        host.pinRoom("alice", 2);
+        assertEquals(-1, host.checkConsensus());
+    }
+
+    @Test
+    public void shouldReturnNegativeWhenNotAllPinned() {
+        RoomHost host = new RoomHost("host");
+        host.addPlayer("host");
+        host.addPlayer("alice");
+        host.pinRoom("host", 1);
+        assertEquals(-1, host.checkConsensus());
+    }
 }

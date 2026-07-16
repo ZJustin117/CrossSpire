@@ -124,6 +124,8 @@ public class MessageRouter {
                     }
                 }
             });
+        } else if ("room_pin".equals(type)) {
+            handleRoomPin(rawMessage);
         }
     }
 
@@ -338,5 +340,33 @@ public class MessageRouter {
         String after = refId.substring(atIdx + 1);
         int slashIdx = after.indexOf('/');
         return slashIdx > 0 ? after.substring(0, slashIdx) : after;
+    }
+
+    private void handleRoomPin(String rawMessage) {
+        JsonObject msg = Protocol.GSON.fromJson(rawMessage, JsonObject.class);
+        String source = msg.has("source") ? msg.get("source").getAsString() : "";
+        int roomIndex = msg.has("room") ? msg.get("room").getAsInt() : -1;
+        if (source.isEmpty() || roomIndex < 0) return;
+
+        if (!CrossSpireMod.isRoomHost()) {
+            BaseMod.logger.info("MessageRouter room_pin from " + source.substring(0, 8) + " room=" + roomIndex);
+            return;
+        }
+
+        if (CrossSpireMod.roomHost != null) {
+            CrossSpireMod.roomHost.pinRoom(source, roomIndex);
+            int consensus = CrossSpireMod.roomHost.checkConsensus();
+            if (consensus >= 0) {
+                BaseMod.logger.info("MessageRouter room_pin consensus: room=" + consensus);
+                String consensusMsg = crossspire.network.RoomPinSender.buildRoomConsensus(
+                    CrossSpireMod.playerId, consensus);
+                CrossSpireMod.send(consensusMsg);
+            } else {
+                String pinsJson = CrossSpireMod.roomHost.getPinsJson();
+                String pinsMsg = crossspire.network.RoomPinSender.buildRoomPins(
+                    CrossSpireMod.playerId, pinsJson);
+                CrossSpireMod.send(pinsMsg);
+            }
+        }
     }
 }
