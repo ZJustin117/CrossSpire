@@ -13,6 +13,7 @@ public class RoomHost {
     private final String hostPlayerId;
     private final List<String> playerIds = new CopyOnWriteArrayList<String>();
     private final Map<String, Integer> playerPins = new HashMap<String, Integer>();
+    private final Map<String, String> stageVotes = new HashMap<String, String>();
 
     public RoomHost(String hostPlayerId) {
         this.hostPlayerId = hostPlayerId;
@@ -54,6 +55,7 @@ public class RoomHost {
     public void removePlayer(String playerId) {
         playerIds.remove(playerId);
         playerPins.remove(playerId);
+        stageVotes.remove(playerId);
     }
 
     public boolean hasPlayer(String playerId) {
@@ -87,6 +89,25 @@ public class RoomHost {
 
     public String getPinsJson() {
         return new Gson().toJson(playerPins);
+    }
+
+    public void castVote(String playerId, String candidate) {
+        stageVotes.put(playerId, candidate);
+    }
+
+    public String checkStageVoteConsensus() {
+        if (stageVotes.isEmpty() || stageVotes.size() != playerIds.size()) {
+            return null;
+        }
+        String first = stageVotes.values().iterator().next();
+        for (String v : stageVotes.values()) {
+            if (!v.equals(first)) return null;
+        }
+        return first;
+    }
+
+    public String getVotesJson() {
+        return new Gson().toJson(stageVotes);
     }
 
     /**

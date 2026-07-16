@@ -11,6 +11,7 @@ import com.megacrit.cardcrawl.monsters.AbstractMonster;
 import crossspire.CrossSpireMod;
 import crossspire.network.Protocol;
 import crossspire.network.RoomPinSender;
+import crossspire.network.StageVoteSender;
 import crossspire.remote.RemotePlayerRegistry;
 import crossspire.sync.FullSnapshotSender;
 import crossspire.remote.RemotePlayerState;
@@ -39,6 +40,7 @@ public class CrossSpireCommand extends ConsoleCommand {
         else if ("play".equals(sub)) { cmdPlay(tokens, depth); }
         else if ("room".equals(sub)) { cmdRoomPin(tokens, depth); }
         else if ("snapshot".equals(sub)) { cmdSnapshot(); }
+        else if ("vote".equals(sub)) { cmdStageVote(tokens, depth); }
         else { errorMsg(); }
     }
 
@@ -248,8 +250,25 @@ public class CrossSpireCommand extends ConsoleCommand {
         DevConsole.log("Full snapshot sent");
     }
 
+    private void cmdStageVote(String[] tokens, int depth) {
+        if (tokens.length < depth + 2) {
+            DevConsole.log("Usage: crossspire vote <player_id>");
+            return;
+        }
+        String candidate = tokens[depth + 1];
+        String msg = StageVoteSender.buildStageVote(CrossSpireMod.playerId, candidate);
+        if (CrossSpireMod.isRoomHost()) {
+            if (CrossSpireMod.messageRouter != null) {
+                CrossSpireMod.messageRouter.handleStageVote(msg);
+            }
+        } else {
+            CrossSpireMod.send(msg);
+        }
+        DevConsole.log("Voted for: " + candidate);
+    }
+
     @Override
     public void errorMsg() {
-        DevConsole.log("crossspire: host [port] | join <ip> [port] | disconnect | status | info | lobby | combat | ready [char] | start [char] [seed] | play <card> [target] | queue | room <index> | snapshot");
+        DevConsole.log("crossspire: host [port] | join <ip> [port] | disconnect | status | info | lobby | combat | ready [char] | start [char] [seed] | play <card> [target] | queue | room <index> | snapshot | vote <player>");
     }
 }

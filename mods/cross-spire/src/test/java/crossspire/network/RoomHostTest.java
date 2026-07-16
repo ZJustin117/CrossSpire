@@ -114,4 +114,47 @@ public class RoomHostTest {
         host.removePlayer("bob");
         assertEquals(1, host.checkConsensus());
     }
+
+    @Test
+    public void shouldReachStageVoteConsensusWhenAllVoteSame() {
+        RoomHost host = new RoomHost("host");
+        host.addPlayer("host");
+        host.addPlayer("alice");
+        host.addPlayer("bob");
+        host.castVote("host", "bob");
+        host.castVote("alice", "bob");
+        host.castVote("bob", "bob");
+        assertEquals("bob", host.checkStageVoteConsensus());
+    }
+
+    @Test
+    public void shouldReturnNullWhenStageVoteNotAllVoted() {
+        RoomHost host = new RoomHost("host");
+        host.addPlayer("host");
+        host.addPlayer("alice");
+        host.castVote("host", "bob");
+        assertNull(host.checkStageVoteConsensus());
+    }
+
+    @Test
+    public void shouldReturnNullWhenStageVotesDiverge() {
+        RoomHost host = new RoomHost("host");
+        host.addPlayer("host");
+        host.addPlayer("alice");
+        host.castVote("host", "bob");
+        host.castVote("alice", "alice");
+        assertNull(host.checkStageVoteConsensus());
+    }
+
+    @Test
+    public void stageVoteShouldBeUpdatedOnRecast() {
+        RoomHost host = new RoomHost("host");
+        host.addPlayer("host");
+        host.addPlayer("alice");
+        host.castVote("host", "bob");
+        host.castVote("alice", "bob");
+        assertEquals("bob", host.checkStageVoteConsensus());
+        host.castVote("alice", "alice");
+        assertNull(host.checkStageVoteConsensus());
+    }
 }

@@ -8,6 +8,7 @@ import crossspire.combat.CombatResultReplayer;
 import crossspire.combat.CentralQueueManager;
 import crossspire.network.HeartbeatManager;
 import crossspire.network.Protocol;
+import crossspire.network.StageVoteSender;
 import crossspire.reference.RemoteReference;
 import crossspire.ui.QueueDisplay;
 import crossspire.resource.RemoteResourceManager;
@@ -146,7 +147,11 @@ public class MessageRouter {
             BaseMod.logger.info("MessageRouter reference_register: " + reg.resourceType + ":" + reg.resourceId);
         } else if ("full_snapshot".equals(type)) {
             syncExecutor.handleFullSnapshot(rawMessage);
-        } else if ("stage_host_election".equals(type) || "stage_host_result".equals(type)) {
+        } else if ("stage_host_result".equals(type)) {
+            handleStageHostResult(msg);
+        } else if ("stage_vote".equals(type)) {
+            handleStageVoteJson(msg);
+        } else if ("stage_host_election".equals(type)) {
             BaseMod.logger.info("MessageRouter " + type + " (reserved, not yet implemented)");
         } else if ("animation_sync".equals(type)) {
             handleAnimationSync(rawMessage);
@@ -392,6 +397,46 @@ public class MessageRouter {
         String after = refId.substring(atIdx + 1);
         int slashIdx = after.indexOf('/');
         return slashIdx > 0 ? after.substring(0, slashIdx) : after;
+    }
+
+    public void handleStageVote(String rawMessage) {
+        JsonObject msg = Protocol.GSON.fromJson(rawMessage, JsonObject.class);
+        handleStageVoteJson(msg);
+    }
+
+    private void handleStageVoteJson(JsonObject msg) {
+        String source = msg.has("source") ? msg.get("source").getAsString() : "";
+        String candidate = msg.has("candidate") ? msg.get("candidate").getAsString() : "";
+        if (source.isEmpty() || candidate.isEmpty()) return;
+
+        if (!CrossSpireMod.isRoomHost()) {
+            BaseMod.logger.info("MessageRouter stage_vote from " + source.substring(0, 8) + " → " + candidate.substring(0, 8));
+            return;
+        }
+
+        if (CrossSpireMod.roomHost != null) {
+            CrossSpireMod.roomHost.castVote(source, candidate);
+            String result = CrossSpireMod.roomHost.checkStageVoteConsensus();
+            if (result != null) {
+                BaseMod.logger.info("MessageRouter stage_vote consensus: " + result.substring(0, 8));
+                String hostMsg = StageVoteSender.buildStageHostResult(CrossSpireMod.playerId, result);
+                CrossSpireMod.send(hostMsg);
+                CrossSpireMod.stageHost.setStageHost(result);
+            } else {
+                String votesJson = CrossSpireMod.roomHost.getVotesJson();
+                String votesMsg = StageVoteSender.buildStageVotes(CrossSpireMod.playerId, votesJson);
+                CrossSpireMod.send(votesMsg);
+            }
+        }
+    }
+
+    private void handleStageHostResult(JsonObject msg) {
+        String hostId = msg.has("host_id") ? msg.get("host_id").getAsString() : "";
+        if (hostId.isEmpty()) return;
+        BaseMod.logger.info("MessageRouter stage_host_result: " + hostId.substring(0, 8));
+        if (CrossSpireMod.stageHost != null) {
+            CrossSpireMod.stageHost.setStageHost(hostId);
+        }
     }
 
     public void handleRoomPin(String rawMessage) {
