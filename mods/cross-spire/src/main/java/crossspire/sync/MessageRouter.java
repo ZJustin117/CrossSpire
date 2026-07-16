@@ -2,6 +2,7 @@ package crossspire.sync;
 
 import basemod.BaseMod;
 import com.badlogic.gdx.Gdx;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import crossspire.CrossSpireMod;
 import crossspire.combat.CombatResultReplayer;
@@ -11,6 +12,7 @@ import crossspire.network.Protocol;
 import crossspire.network.StageVoteSender;
 import crossspire.reference.RemoteReference;
 import crossspire.ui.QueueDisplay;
+import crossspire.ui.RemoteEventDisplay;
 import crossspire.resource.RemoteResourceManager;
 import crossspire.resource.ResourceRegistryTracker;
 import crossspire.resource.RemoteAssetCache;
@@ -117,6 +119,7 @@ public class MessageRouter {
             syncExecutor.handleSync("monster_intent", null, 1, rawMessage);
         } else if ("event_result".equals(type)) {
             syncExecutor.handleEventResult(rawMessage);
+            RemoteEventDisplay.hide();
         } else if ("event_select".equals(type)) {
             if (CrossSpireMod.stageHost != null && CrossSpireMod.stageHost.isStageHost()) {
                 JsonObject sel = Protocol.GSON.fromJson(rawMessage, JsonObject.class);
@@ -140,6 +143,11 @@ public class MessageRouter {
             String name = ei.has("event_id") ? ei.get("event_id").getAsString() : "?";
             int opts = ei.has("options") ? ei.getAsJsonArray("options").size() : 0;
             BaseMod.logger.info("MessageRouter event_interface: " + name + " options=" + opts);
+            if (!CrossSpireMod.stageHost.isStageHost()) {
+                String desc = ei.has("description") ? ei.get("description").getAsString() : "";
+                JsonArray options = ei.has("options") ? ei.getAsJsonArray("options") : new JsonArray();
+                RemoteEventDisplay.show(name, desc, options);
+            }
         } else if ("reference_migrate".equals(type)) {
             handleReferenceMigrate(rawMessage);
         } else if ("reference_register".equals(type)) {

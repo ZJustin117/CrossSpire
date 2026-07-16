@@ -66,6 +66,7 @@ public class CrossSpireHUD implements PostRenderSubscriber, PostUpdateSubscriber
         }
 
         if (showLobby) RoomPanel.updateStatic();
+        RemoteEventDisplay.update();
     }
 
     @Override
@@ -81,6 +82,7 @@ public class CrossSpireHUD implements PostRenderSubscriber, PostUpdateSubscriber
             if (showCombatHUD && inCombat) RemoteStatsOverlay.renderStatic(sb, whitePixel);
             if (showQueue) QueueDisplay.render(sb);
             if (showChat) RoomChat.render(sb);
+            RemoteEventDisplay.render(sb, whitePixel);
         } catch (Exception e) {
             // silently ignore during render
         }
