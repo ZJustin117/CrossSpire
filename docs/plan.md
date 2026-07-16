@@ -366,28 +366,72 @@ class StandardPacket {
 
 **验证**: 新增 `EventSyncPatchesTest.testInterfaceCapture`, `testEventSelectFlow`。
 
+**2026-07-16 修订**: 此方案已被「事件就近原则」设计取代（见下）。
+
 ---
 
-### 2.6 所有者交互选择 (FR-4.6, US-7)
+### 2.5 revised — 事件就近原则 + 沙盒转录 (FR-4.3~4.5, US-4)
 
-**现状**: 完全未实现。SDD 要求 invoke 执行中触发选牌/选目标时回传给调用方。
+**思路**: 事件回到本地执行。D2 通过 `Class.forName` 创建与图主同名的事件实例，在 suppressEvents + snapshot/restore 包裹中运行完整的事件逻辑（包括 Gremlin Wheel、Match Game、选牌等特殊 UI）。执行过程被自动捕获为 `event_transcript { actions[] }`，发送给图主重播以产出实际效果。向后兼容：若 D2 无该事件类，降级到 `RemoteEventDisplay + event_select`。
 
-**方案**:
+**架构** (五层):
 
-1. **Patch GridCardSelectScreen / HandCardSelectScreen**:
-   - `@SpirePatch` 拦截 `open()` → 若当前在 invoke 执行线程中 → 捕获选择参数
-   - 所有者构造 `interact_request` StandardPacket → 房主 → 调用方
+1. **接口广播** — OnEnterRoom 广播 `event_class`（全限定名） + `OPTIONS` + `mode`
+2. **沙盒执行** — `@SpirePatch` on `AbstractEvent.buttonEffect` Prefix 挡截：snapshot → suppress → buttonEffect → 收集 transcript steps → restore
+3. **event_transcript** — 替代 `event_select` + `interact_request/response` 三条消息，统一为一步
+4. **图主重播** — stage host 逐 transcript step 重播 → 产出真实 effects → 广播
+5. **Fallback** — `Class.forName` 失败 → 降级到 `RemoteEventDisplay + event_select`
 
-2. **调用方渲染选择 UI** — `MessageRouter` 收到 `interact_request` → 本地渲染 GridCardSelectScreen
+**沙盒 Key API**:
 
-3. **选择回传** — 选择完毕 → `interact_response` → 房主 → 所有者继续执行
+```java
+// EventCapture.java (新)
+class EventStateSnapshot {
+    int playerHp, playerMaxHp, playerBlock, playerGold;
+    Map<String,Integer> powerAmounts;
+    int floorNum;
+    // ... 备份 → restore()
+}
 
-4. **超时处理** — 30s 无响应 → 默认策略(选第一个/随机/取消)
+static EventStateSnapshot takeSnapshot();
+static void restoreSnapshot(EventStateSnapshot snap);
+static List<String> drainSelectedCards();  // 从 gridSelectScreen 收集选卡
+static void appendTranscript(String actionType, int index, List<String> cards, EffectDescription[] effects);
+static JsonObject buildTranscript(String eventId);
+```
+
+**Transcript 消息**:
+
+```json
+{
+  "type": "event_transcript",
+  "source": "D2",
+  "event_id": "LivingWall",
+  "actions": [
+    {"type": "buttonEffect", "index": 0},
+    {"type": "cardSelect",    "cards": ["Strike_R"]},
+    {"type": "confirm"}
+  ]
+}
+```
+
+**Voting 模式**: `event_interface.mode="voting"` → 图主收到 transcript 后聚合 → 全员一致才执行 → 复用 `RoomHost.castVote/checkConsensus`。
 
 **文件清单**:
-- 新建: `combat/InteractionCapturePatches.java`
-- 新增 payload: `Protocol.InteractRequestPayload`, `Protocol.InteractResponsePayload`
-- 修改: `sync/MessageRouter.java`
+- 新建: `combat/EventCapture.java`
+- 修改: `combat/EventSyncPatches.java` (+ `Sandbox` 内部类), `sync/MessageRouter.java` (删 `event_select`, 加 `event_transcript` handler), `ui/CrossSpireCommand.java` (`eventsel` → transcript)
+- 删除: `network/InteractMessageSender.java`, `combat/InteractionCapturePatches.java` (已被沙盒统一捕获替代)
+- 保留: `ui/RemoteEventDisplay.java` (作为 fallback), `network/EventMessageSender.java` (精简为 `event_interface` + `event_transcript`)
+
+**验证**:
+- 单元测试: `EventCaptureTest.testSnapshotRestore`, `testTranscriptBuild`
+- E2E: (1) BigFish 沙盒验证; (2) LivingWall card-select transcript; (3) CursedTome/KnowingSkull 复杂事件
+
+---
+
+### 2.6 所有者交互选择 (FR-4.6, US-7) — 已被 §2.5 覆盖
+
+事件类型的交互选择（GridCardSelectScreen、HandCardSelectScreen 等）由 §2.5 的沙盒执行 + event_transcript 统一处理。卡牌/遗物效果触发的交互选择（非事件上下文）保留 `invoke_result.extraData` 扩展作为未来需求。
 
 **验证**: 真机验证(较复杂，需要触发选牌效果的卡牌)。
 
@@ -645,12 +689,28 @@ P3.4 bug修复清单
 
 **剩余 SDD 需求**:
 - FR-1.5 — 房主迁移 (T2.4)
-- FR-4.3~4.5 — 事件系统补全 (T2.5)
-- FR-4.6 — 所有者交互选择 (T2.6)
+- FR-4.3~4.5 — 事件就近原则 + 沙盒转录 (T2.5 revised) [新设计]
+- FR-4.6 — 被 §2.5 覆盖 (事件交互统一走 transcript)
 - FR-4.7/4.8 — 房间标注与共识 (T2.7a/b/c) [新]
 - FR-5.2 — Cache LRU + SHA-256 校验 (T3.1)
 - FR-5.1 — ResourceRegistry 查询 API (T3.5)
 - 文档同步 (T3.7)
+
+### 2026-07-16 — 事件就近原则设计（ARCHITECTURE.md §9 重写）
+
+事件处理从「图主独占 + event_select 指令」改为「就近实例化 + 沙盒转录」模型：
+
+- **ARCHITECTURE.md §9**: 重写整个事件处理章节 — 5 层架构（接口广播 / 沙盒执行 / event_transcript / 图主重播 / fallback）
+- **spec.md US-4**: 更新事件验收标准 — 所有玩家本地实例化事件，沙盒执行，transcript 回传图主重播
+- **plan.md §2.5/2.6**: 取代旧 event_interface/event_select + interact_request/response 方案
+- **协议 §17**: 删除 event_select / interact_request / interact_response，新增 event_transcript / event_votes
+
+框架要点：
+- D2 通过 Class.forName(event_class) 创建本地事件实例 → 兼容原版转轮/对对碰/头部 UI 及 Mod 事件
+- @SpirePatch 沙盒：snapshot → suppressEvents → buttonEffect → 收集 transcript + selectedCards → restore
+- event_transcript 替代三条独立消息，图主逐 step 重播产出 effects
+- voting 模式复用 RoomHost.castVote 基础设施
+- fallback: ClassNotFound → RemoteEventDisplay + event_select 旧版兼容
 
 ### 2026-07-15 — P2/T2.7d/e/f 完成
 

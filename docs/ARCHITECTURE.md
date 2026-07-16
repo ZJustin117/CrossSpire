@@ -635,52 +635,160 @@ AfterMonsterTurns: @SpirePostfixPatch AbstractPlayer.applyStartOfTurnPowers()
 
 ## 事件处理
 
-事件由图主强所有。图主机器上是事件的唯一真实实例，其他客户端只持有该事件的远程引用（不允许本地引用）。
+事件遵循**就近原则**。每个玩家在本地运行事件实例，通过沙盒模式隔离 game-state 修改，将事件执行结果以 `event_transcript` 传回图主重播。这与战斗的 REAL/INDUCED 模式遥相呼应：图主重播 = REAL，D2 沙盒 = 本地预览。
 
-### 事件接口捕获与广播
-
-图主通过 BaseMod 钩子捕获事件的完整 UI 界面，并广播给所有成员：
+### 核心思想：就近实例化 + 沙盒 + 转录回放
 
 ```
-进入事件房间:
-  1. 图主根据地图状态决定事件类型 → 实例化 AbstractEvent
-  2. 图主捕获事件接口:
-     - 事件 ID、名称
-     - 事件描述文本 (DESCRIPTIONS)
-     - 选项文本 (OPTIONS)：AbstractImageEvent 的 dialogOption 列表
-     - 事件图片路径或素材引用
-     - 当前阶段 (PhasedEvent 的 phaseKey)
-  3. 图主 → 房主: event_interface {
-       event_id, name, description, options: [{index, text, enabled?}],
-       image_ref?, phase_key?, event_type?
+Stage Host (图主)                         Player B (非图主)
+┌──────────────────────────┐            ┌──────────────────────────┐
+│ BigFish 实例 (REAL)       │            │ BigFish 实例 (Sandbox)    │
+│ ⚡ buttonEffect → 产出    │◄───────────│ 🛡 suppress + snapshot   │
+│ ⚡ 广播 event_result      │ transcript │ 🔄 局部 restore          │
+│ ⚡ 同步全员 effects       │            │ 📡 选牌／按钮／转轮         │
+└──────────────────────────┘            └──────────────────────────┘
+```
+
+**关键原则**:
+- **就近实例化** — D2 本地通过 `Class.forName(event_class)` 创建同名事件实例，可兼容原版特殊事件（Gremlin Wheel 转轮、Match Game 对对碰、Skull 头部）及 Mod 事件
+- **沙盒执行** — D2 的事件运行在 snapshot/suppressEvents 包裹中，所有 game-state 副作用被抑制，仅捕获 UI 交互过程
+- **转录回播** — D2 产生 `event_transcript`（包含每个 `buttonEffect` 步骤、选牌结果、特殊 UI 决策），发送到图主，图主逐步骤重播以产出最终效果
+- **Fallback** — 若 D2 无该事件类（如 Mod 事件未安装），降级到 `RemoteEventDisplay` + `event_select` 模式
+
+### 分层架构
+
+#### Layer 1: 事件接口广播
+
+```
+Stage host 进入事件 → EventSyncPatches.OnEnterRoom:
+  → 广播 event_interface {
+       event_class: "com.megacrit.cardcrawl.events.exordium.BigFish",
+       options: ["[Leave]", "Fight", "Banana", "Donut"],
+       description: "...",
+       body: "...",
+       mode: "independent" | "voting"
      }
-  4. 房主转发 → 全员渲染事件 UI
 ```
 
-每个成员的屏幕上显示相同的事件界面（与图主本地看到的完全一致）。使用素材传递系统获取事件图片（若本地未缓存则按需请求）。
+D2 收到 → `Class.forName(event_class)` → 实例化 → `event.onEnterRoom()` → 原生 UI 渲染。
 
-### 选项选择流程
+#### Layer 2: 沙盒执行 (D2 非图主)
+
+```java
+@SpirePatch(clz = AbstractEvent.class, method = "buttonEffect", paramtypez = {int.class})
+public static class Sandbox {
+    @SpirePrefixPatch
+    public static SpireReturn<Void> Prefix(AbstractEvent __instance, int buttonPressed) {
+        if (isStageHost()) return SpireReturn.Continue();  // REAL 模式
+
+        EventStateSnapshot snap = takeSnapshot();
+        EventSuppression.suppressEvents(() -> {
+            EffectCapture.startCapture();
+            __instance.buttonEffect(buttonPressed);         // ← 原生执行
+            Protocol.EffectDescription[] effects = EffectCapture.stopCapture();
+            List<String> selectedCards = drainSelectedCards();
+            appendTranscript("buttonEffect", buttonPressed, selectedCards, effects);
+        });
+        restoreSnapshot(snap);                              // 撤销游戏状态
+        return SpireReturn.Return(null);
+    }
+}
+```
+
+沙盒支持所有原生事件 UI 类型：
+
+| UI 类型 | 沙盒行为 |
+|---------|---------|
+| 标准选项按钮 | `buttonEffect(index)` → 选项步骤记入 transcript |
+| GridCardSelectScreen（选牌） | `open()` → D2 选牌 → `confirm` → 卡片 ID 记入 transcript |
+| Gremlin Wheel（转轮） | 转轮切屏 + 随机 → `wheelResult` 记入 transcript |
+| Gremlin Match Game（对对碰） | 完整 mini-game → 最终 `cardReward` 记入 transcript |
+| Knowing Skull 多步骤 | 每步 `buttonEffect` 分别记录 |
+| 触发战斗选项 | `enterCombat()` → transcript 含 `event.enterCombat` 步骤 |
+| Mod 自定义事件 UI | D2 有同一 Mod → 即时兼容 |
+
+#### Layer 3: event_transcript 协议
+
+取代 `event_select` + `interact_request/response` 三个独立消息，统一为一步：
+
+```json
+// D2 → host → stage host
+{
+  "type": "event_transcript",
+  "source": "D2",
+  "seq": 15,
+  "event_id": "LivingWall",
+  "actions": [
+    {"type": "buttonEffect", "index": 0},
+    {"type": "cardSelect",      "cards": ["Strike_R"]},
+    {"type": "confirm"}
+  ]
+}
+```
+
+单个 `buttonEffect` step 可触发子步骤（`cardSelect`、`wheelResult` 等），全部由 MTS Postfix 自动捕获拼接。
+
+#### Layer 4: 图主重播
 
 ```
-玩家选择选项:
-  1. 玩家在事件 UI 中选择一个选项 → 发 event_select { option_index } 到房主
-  2. 房主转发 → 图主
-  3. 图主在其实例上调用 event.buttonEffect(option_index)
-     → 事件逻辑在图主本地执行（REAL 模式，触发钩子）
-  4. 事件结果：
-     a. 若 transitionKey (PhasedEvent 换阶段) → 图主重新捕获新阶段界面 → 广播 event_interface
-     b. 若 openMap (事件结束) → 图主广播 event_result（含所有产出）
-     c. 若进入战斗 → 图主走战斗流程
-  5. 房主转发结果 → 全员同步
+stage host 收到 event_transcript:
+  for each action:
+    switch action.type:
+      case "buttonEffect":
+        event.buttonEffect(action.index)
+        → 若触发 GridCardSelectScreen.open():
+            inject action.affiliated card IDs into selectedCards
+            event.confirmButton.hb.clicked = true
+        → 若触发 wheel/match:
+            inject action.result into event state
+            continue flow
+      case "enterCombat":
+        CombatSyncPatches 自动广播 room_enter
+
+  重播完成后:
+    → EventSyncPatches.OnOpenMap → 广播 event_result
+    → 或 effects 走 player_state / combat_result 现有管道同步
 ```
 
-**注意**：任何玩家都可以选择事件选项——事件交互不是"调用方选择"，而是"图主接收指令后执行"。多个玩家同时选择时，图主按接收顺序处理（先到的选择生效，后续到达时若事件已结束则忽略）。
+#### Layer 5: Fallback（旧版兼容）
 
-### 选项可用性
+```
+if (Class.forName(event_class) throws ClassNotFoundException):
+    // 降级到 RemoteEventDisplay（自定义 UI）
+    RemoteEventDisplay.show(name, desc, options)
+    D2 点击 → event_select → host → stage host → buttonEffect
+    effects → broadcast → D2 apply
+```
 
-图主在 `event_interface` 标准包 payload 中标记每个选项的 `enabled` 状态（如需要金币时金币不足则禁选）。客户端根据此状态灰显不可用选项，防止无效选择。
+### 集体选择事件 (Voting Mode)
 
-事件相关标准包的 payload 结构见 §17 协议消息定义。
+部分事件需要队伍决策（如"是否进入战斗"）。`event_interface.mode = "voting"` 时：
+
+```
+D2 沙盒执行 → transcript 记录选项
+host 收到 transcript → 聚合（类似 room_pin）：
+  → 全员一致 → dispatch 图主重播
+  → 未一致 → 广播 event_votes 快照，等待改票
+```
+
+这复用了 `RoomHost.castVote / checkStageVoteConsensus()` 基础设施。
+
+### 与战斗 REAL/INDUCED 的对比
+
+| | 战斗卡片 | 事件 |
+|---|---------|------|
+| 所有者 | 卡牌所有者 = 执行者 | 图主 = 最终执行者 |
+| 非所有者做什么 | INDUCED 重放（stub 触发钩子 + suppressEvents 写数值） | 沙盒执行（snapshot/restore + 捕获 transcript） |
+| 传输内容 | `combat_result { effects, operation_sequence }` | `event_transcript { actions[] }` |
+| 结果同步 | effects 直接生效 | 图主重播 → effects 走现有管道 |
+
+### 协议消息（非标准包）
+
+```
+event_interface   stageHost→全员  {"type":"event_interface","event_class":"...","options":[...],"mode":"independent"}
+event_transcript  C→host→stageHost  {"type":"event_transcript","source":"...","event_id":"...","actions":[...]}
+event_votes        host→全员       {"type":"event_votes","source":"...","votes":{"alice":0,"bob":1}}  (仅 voting 模式)
+
 
 ## 所有者交互选择
 
@@ -1210,9 +1318,7 @@ type PacketOperation =
   // 战斗/状态
   | "combat_result" | "monster_intent" | "player_state" | "full_snapshot"
   // 事件
-  | "event_interface" | "event_select" | "event_result"
-  // 交互选择
-  | "interact_request" | "interact_response"
+  | "event_interface" | "event_transcript" | "event_result"
   // 素材
   | "resource_registry" | "resource_request" | "resource_response" | "animation_sync";
 ```
@@ -1319,20 +1425,30 @@ operation: "full_snapshot"
 ```
 operation: "event_interface"
   payload: {
-    event_id: string;
+    event_class: string;        // 全限定类名 "com.megacrit.cardcrawl.events.exordium.BigFish"
+    event_id: string;           // 简短 ID "BigFish"
     name: string;
     description: string;
     options: { index: number, text: string, enabled: boolean }[];
-    image_ref?: string;     // 素材引用，走 resource_request 获取
-    phase_key?: string;     // PhasedEvent 当前阶段
+    mode: "independent" | "voting";
+    image_ref?: string;         // 素材引用，走 resource_request 获取
+    phase_key?: string;         // PhasedEvent 当前阶段
   }
-  说明: 图主广播事件 UI 界面
+  说明: 图主广播事件接口。D2 通过 Class.forName 本地实例化。
 
-operation: "event_select"
+operation: "event_transcript"
   payload: {
-    option_index: number;
+    event_id: string;
+    actions: EventTranscriptAction[];
   }
-  说明: 玩家选择事件选项（C→房主→图主）
+  EventTranscriptAction:
+    { type: "buttonEffect", index: number }
+    { type: "cardSelect",  cards: string[] }
+    { type: "confirm" }
+    { type: "wheelResult", result: string }
+    { type: "enterCombat" }
+  说明: D2 沙盒执行完成后，将所有交互步骤发送到图主重播。
+        替代 event_select + interact_request/response 三条消息。
 
 operation: "event_result"
   payload: {
@@ -1343,26 +1459,15 @@ operation: "event_result"
   说明: 事件执行结果广播（图主→房主→全员）
 ```
 
-#### 交互选择操作
+#### 事件投票操作 (仅 voting 模式)
 
 ```
-operation: "interact_request"
+operation: "event_votes"
   payload: {
-    invoke_ref_id: string;      // 关联的 invoke 引用的 ref_id
-    select_type: "card_select" | "hand_select" | "grid_select" | "relic_select" | "target_select";
-    prompt_text: string;
-    options: { id: string, name: string, description?: string, texture_ref?: string }[];
-    min_select: number;
-    max_select: number;
+    event_id: string;
+    votes: { [playerId]: transcript_action[] };
   }
-  说明: 所有者执行中需调用方选择（owner→房主→invoker）
-
-operation: "interact_response"
-  payload: {
-    invoke_ref_id: string;
-    selected: string[];      // 选中对象的 ID 列表
-  }
-  说明: 调用方完成选择回传（invoker→房主→owner）
+  说明: 房主广播全体投票状态。所有玩家投票给同一 transcript → 房主发送 event_transcript 给图主。
 ```
 
 #### 素材操作
