@@ -243,36 +243,36 @@ D2 的 `127.0.0.1:54321` 由外部测试基础设施自动转发到 D1 的 `127.
 export SLAY_THE_AMETHYST_ROOT=/path/to/SlayTheAmethystModded
 
 # D1 (host)
-python "$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py" sts-harness \
+python3 "$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py" sts-harness \
   -Command console -DeviceSerial localhost:15555 \
   -ConsoleCommand "crossspire host 127.0.0.1 54321"
 
 # D2 (join)
-python "$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py" sts-harness \
+python3 "$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py" sts-harness \
   -Command console -DeviceSerial localhost:25555 \
   -ConsoleCommand "crossspire join 127.0.0.1 54321"
 
 # 战斗
-python "$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py" sts-harness \
+python3 "$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py" sts-harness \
   -Command console -DeviceSerial localhost:15555 \
   -ConsoleCommand "crossspire start IRONCLAD"
-python "$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py" sts-harness \
+python3 "$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py" sts-harness \
   -Command console -DeviceSerial localhost:15555 \
   -ConsoleCommand "fight Cultist"
-python "$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py" sts-harness \
+python3 "$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py" sts-harness \
   -Command console -DeviceSerial localhost:15555 \
   -ConsoleCommand "crossspire play Strike_R"
 
 # 事件
-python "$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py" sts-harness \
+python3 "$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py" sts-harness \
   -Command console -DeviceSerial localhost:15555 \
   -ConsoleCommand "crossspire cevent Living Wall"
-python "$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py" sts-harness \
+python3 "$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py" sts-harness \
   -Command console -DeviceSerial localhost:25555 \
   -ConsoleCommand "crossspire eselect 0 Strike_R"
 
 # 诊断
-python "$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py" sts-harness \
+python3 "$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py" sts-harness \
   -Command console -DeviceSerial localhost:15555 \
   -ConsoleCommand "crossspire gamestate"
 ```

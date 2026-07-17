@@ -384,3 +384,13 @@ CrossSpire development timeline and milestones.
 - ⚠️ 日志系统在重启后未刷新，E2E 完整验证待跟进
 
 > 后续状态：以上是当时的真实验证记录。P4 删除 batch watcher，改用 SlayTheAmethyst Harness 调用标准 BaseMod console；设备 serial 保持不变，D2 `localhost:54321` 到 D1 `localhost:54321` 的转发由外部测试基础设施提供。
+
+## 2026-07-17 — Android Harness 调试链路清理
+
+- 正式标注 SlayTheAmethyst Android 为当前验证平台，Desktop 验证暂缓。
+- 删除 `crossspire_startup.txt`、`crossspire_batch.txt` 和 `BatchWatcher`。
+- 删除 Android `crossspire.properties` 与 P2P JVM property，`host/join` 仅接受显式参数。
+- Gradle 通过 `-PstsJar`、`-PbaseModJar`、`-PmodTheSpireJar` 接受本地依赖路径。
+- JUnit 104 项通过，发布 JAR 静态审计不含 Android 存储路径、ADB serial、旧文件入口或 Harness/game-probe 类。
+- D1 `localhost:15555` 执行 `crossspire host 127.0.0.1 54321`，D2 `localhost:25555` 执行 `crossspire join 127.0.0.1 54321`；Harness → BaseMod console 均执行成功。
+- D1 日志确认监听 `54321`、接受 D2 并注册玩家；D2 日志确认连接 host，双机 P2P E2E 通过。

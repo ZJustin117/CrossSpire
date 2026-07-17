@@ -2,15 +2,15 @@
 
 > 历史阶段 30/30 完成。当前测试数和 JAR 大小以构建结果为准。
 
-## P4 Android 调试基础设施清理（进行中）
+## P4 Android 调试基础设施清理 ✅
 
 - [x] T4.1 SDD：正式标注 SlayTheAmethyst Android 支持和 Harness 边界
 - [x] T4.2 删除 `crossspire_startup.txt` / `crossspire_batch.txt` 命令执行与轮询线程
 - [x] T4.3 删除 Android `crossspire.properties` 路径和隐式 P2P 配置
 - [x] T4.4 `host/join` 改为仅接受显式网络参数，并修复 manager 生命周期
 - [x] T4.5 Gradle 本地依赖路径改为显式、可移植配置
-- [ ] T4.6 使用 Harness → BaseMod console 完成 D1/D2 Android E2E
-- [ ] T4.7 静态审计发布源码/JAR 不含 Android 测试台硬编码和 Harness 依赖
+- [x] T4.6 使用 Harness → BaseMod console 完成 D1/D2 Android E2E
+- [x] T4.7 静态审计发布源码/JAR 不含 Android 测试台硬编码和 Harness 依赖
 
 本阶段测试环境：D1 `localhost:15555`、D2 `localhost:25555`；D2 的 `localhost:54321` 由外部测试基础设施自动转发到 D1 的 `localhost:54321`。Desktop 验证暂缓。
 
