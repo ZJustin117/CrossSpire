@@ -372,7 +372,8 @@ public class CrossSpireCommand extends ConsoleCommand {
             String msg = EventMessageSender.buildEventInterface(
                 eventId, ev.getClass().getName(), description, optionTexts, disabled);
             CrossSpireMod.send((String) msg);
-            BaseMod.logger.info("CrossSpire cevent event_interface: " + eventId + " options=" + optionTexts.length);
+            BaseMod.logger.info("CrossSpire cevent event_interface: " + eventId + " options=" + optionTexts.length
+                + " peers=" + CrossSpireMod.connectionManager.connectionCount());
         }
     }
 
