@@ -51,6 +51,7 @@ public class CrossSpireCommand extends ConsoleCommand {
         else if ("eventsel".equals(sub)) { cmdEventSelect(tokens, depth); }
         else if ("eselect".equals(sub)) { cmdEventCardSelect(tokens, depth); }
         else if ("evote".equals(sub)) { cmdEventVote(tokens, depth); }
+        else if ("gamestate".equals(sub)) { cmdGameState(); }
         else { errorMsg(); }
     }
 
@@ -444,6 +445,86 @@ public class CrossSpireCommand extends ConsoleCommand {
         vote.addProperty("option_index", idx);
         CrossSpireMod.send((String) new com.google.gson.Gson().toJson(vote));
         DevConsole.log("Event vote: option " + idx);
+    }
+
+    private void cmdGameState() {
+        if (AbstractDungeon.player == null) {
+            DevConsole.log("Not in game. Use crossspire start first.");
+            return;
+        }
+
+        com.megacrit.cardcrawl.characters.AbstractPlayer p = AbstractDungeon.player;
+        StringBuilder sb = new StringBuilder();
+        sb.append("=== Game State ===\n");
+        sb.append("HP: ").append(p.currentHealth).append('/').append(p.maxHealth)
+            .append("  Block: ").append(p.currentBlock).append('\n');
+        sb.append("Gold: ").append(p.gold)
+            .append("  Energy: ").append(p.energy != null ? p.energy.energy : 0).append('\n');
+
+        if (AbstractDungeon.getCurrRoom() != null) {
+            sb.append("Room: ").append(AbstractDungeon.getCurrRoom().getClass().getSimpleName())
+                .append("  Floor: ").append(AbstractDungeon.floorNum)
+                .append("  Act: ").append(AbstractDungeon.actNum).append('\n');
+            if (AbstractDungeon.getCurrRoom().event != null) {
+                sb.append("Event: ").append(AbstractDungeon.getCurrRoom().event.getClass().getSimpleName()).append('\n');
+            }
+        }
+
+        sb.append("Relics (").append(p.relics.size()).append("): ");
+        for (int i = 0; i < p.relics.size(); i++) {
+            if (i > 0) sb.append(", ");
+            sb.append(p.relics.get(i).relicId);
+        }
+        sb.append('\n');
+
+        sb.append("Potions (").append(p.potions.size()).append("): ");
+        for (int i = 0; i < p.potions.size(); i++) {
+            if (i > 0) sb.append(", ");
+            sb.append(p.potions.get(i).ID);
+        }
+        sb.append('\n');
+
+        sb.append("MasterDeck (").append(p.masterDeck.size()).append("):\n");
+        java.util.LinkedHashMap<String, Integer> deckCounts = new java.util.LinkedHashMap<>();
+        for (com.megacrit.cardcrawl.cards.AbstractCard c : p.masterDeck.group) {
+            String key = c.cardID + (c.upgraded ? "+" : "");
+            deckCounts.put(key, deckCounts.getOrDefault(key, 0) + 1);
+        }
+        int col = 0;
+        for (java.util.Map.Entry<String, Integer> e : deckCounts.entrySet()) {
+            if (col > 0) sb.append(", ");
+            sb.append(e.getKey());
+            if (e.getValue() > 1) sb.append('x').append(e.getValue());
+            col++;
+            if (col % 4 == 0) sb.append('\n');
+        }
+        sb.append('\n');
+
+        if (p.hand != null && !p.hand.isEmpty()) {
+            sb.append("Hand (").append(p.hand.size()).append("): ");
+            for (int i = 0; i < p.hand.size(); i++) {
+                if (i > 0) sb.append(", ");
+                sb.append(p.hand.group.get(i).cardID);
+            }
+            sb.append('\n');
+        }
+
+        sb.append("Draw: ").append(p.drawPile.size())
+            .append("  Discard: ").append(p.discardPile.size())
+            .append("  Exhaust: ").append(p.exhaustPile.size()).append('\n');
+
+        if (p.powers != null && !p.powers.isEmpty()) {
+            sb.append("Powers: ");
+            for (int i = 0; i < p.powers.size(); i++) {
+                if (i > 0) sb.append(", ");
+                sb.append(p.powers.get(i).ID).append('x').append(p.powers.get(i).amount);
+            }
+            sb.append('\n');
+        }
+
+        String output = sb.toString();
+        DevConsole.log(output);
+        BaseMod.logger.info("CrossSpire gamestate:\n" + output);
     }
 
     @Override
