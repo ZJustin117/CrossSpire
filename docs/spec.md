@@ -441,6 +441,30 @@ THEN  塔2 客户端实现相同的 StandardPacket 协议 + Reference<T> 抽象
 | NFR-9 | 协议 | 协议版本向后兼容（主版本内不破坏现有消息格式） |
 | NFR-10 | 安全 | 不传输/存储任何用户个人身份信息（PII） |
 | NFR-11 | 安全 | 不在日志或网络传输中泄露本地文件系统路径 |
+| NFR-12 | 平台 | 同一 CrossSpire JAR 在 SlayTheAmethyst 的 Android MTS/BaseMod 兼容运行时中加载，不引用 Android SDK API |
+| NFR-13 | 调试 | CrossSpire 只注册标准 BaseMod console 命令；Harness/game-probe 是外部开发工具，不是运行时依赖 |
+| NFR-14 | 可移植性 | 生产源码和资源不得包含 Android 应用存储绝对路径、ADB serial 或维护者测试台端口转发配置 |
+| NFR-15 | 可靠性 | CrossSpire 不通过启动文件或后台轮询文件执行控制台命令 |
+
+### 平台与调试验收
+
+```gherkin
+GIVEN SlayTheAmethyst 以 ModTheSpire + BaseMod 加载 CrossSpire
+WHEN Harness 通过 BaseMod console 执行 "crossspire status"
+THEN 命令由 CrossSpireCommand 处理
+AND CrossSpire 不直接依赖 Harness、game-probe 或 ADB
+
+GIVEN CrossSpire 已完成初始化
+WHEN 旧的 crossspire_startup.txt 或 crossspire_batch.txt 存在
+THEN CrossSpire 不读取、不执行也不删除这些文件
+AND 不创建文件轮询线程
+
+GIVEN D1 和 D2 使用维护者 Android 测试台
+WHEN D1 执行 "crossspire host 54321"
+AND D2 执行 "crossspire join 127.0.0.1 54321"
+THEN D2 通过测试台预置的 D2 localhost:54321 到 D1 localhost:54321 转发连接 D1
+AND 该转发由 CrossSpire 外部基础设施负责
+```
 
 ## 约束与边界
 
@@ -451,6 +475,7 @@ THEN  塔2 客户端实现相同的 StandardPacket 协议 + Reference<T> 抽象
 - 房主路由星型拓扑
 - 图主掉线 → 等待重连，可重新投票选新图主
 - 事件不投票（一人选择即生效）
+- SlayTheAmethyst 提供的 Android ModTheSpire + BaseMod 兼容运行时
 
 ### 当前版本不做
 
@@ -459,12 +484,16 @@ THEN  塔2 客户端实现相同的 StandardPacket 协议 + Reference<T> 抽象
 - 跨回合存档分享（仅本地保存）
 - 塔2 实际联机实现（仅预留架构）
 - 超过 4 人的房间
-- 移动端/主机端支持
+- iOS 与主机端支持
+- 独立 Android APK 或 SlayTheAmethyst 之外的 Android STS 运行时适配
+- Desktop 端到端验证（保留标准 ModTheSpire/BaseMod 兼容目标，本阶段暂缓验证）
 
 ### 技术约束
 
 - 依赖：ModTheSpire 3.30+, BaseMod 5.54+, Java 8, Gradle
-- 运行时仅支持 Desktop (LibGDX)，不涉及 Android/iOS
+- 当前验证平台为 SlayTheAmethyst Android；CrossSpire 不调用 Android SDK API
+- CrossSpire 面向标准 BaseMod API，Desktop ModTheSpire/BaseMod 为兼容目标但当前未验证
+- Android 自动化通过外部 SlayTheAmethyst Harness 调用 BaseMod console；最终用户运行 CrossSpire 不需要 Harness 或 game-probe
 - 所有网络 IO 在独立线程，不阻塞游戏主循环
 - 禁止将 `AbstractCreature.sr` 或 `TextureAtlas` 序列化传输（素材通过文件路径 + 原始字节传输）
 

@@ -1,6 +1,14 @@
 # CrossSpire (mod)
 
-Slay the Spire 1 多人联机 Mod。依赖 ModTheSpire + BaseMod。Java 8, Gradle, jar ≈ 624KB。
+Slay the Spire 1 多人联机 Mod。依赖 ModTheSpire + BaseMod，使用 Java 8 和 Gradle。
+
+## 平台支持
+
+- Android：当前开发和验证平台为 SlayTheAmethyst 的 ModTheSpire + BaseMod 兼容运行时。
+- Desktop：保持标准 ModTheSpire + BaseMod API 兼容目标，当前阶段暂未执行端到端验证。
+- iOS、主机和 SlayTheAmethyst 之外的 Android STS 运行时：不支持。
+
+Android 调试使用外部 SlayTheAmethyst Harness 调用标准 BaseMod console。CrossSpire 发布 JAR 不依赖 Harness、game-probe、ADB 或 Android SDK。
 
 ## 构建
 
@@ -25,4 +33,6 @@ cd mods/cross-spire
 ## 文档
 
 - `../../docs/ARCHITECTURE.md` — 架构设计
+- `../../docs/console-commands.md` — BaseMod console 命令
+- `../../docs/development/android-harness.md` — Android 双设备 Harness 运行手册
 - `../../docs/reference/` — BaseMod + ModTheSpire API 参考

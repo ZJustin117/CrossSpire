@@ -36,6 +36,28 @@ CrossSpire 是一个开源的杀戮尖塔1联机Mod，目标：
 3. **跨游戏连接预留** — 架构预留与塔2互联的能力（塔1 Java/LibGDX ↔ 塔2 C#/Godot）
 4. **开源** — 全栈开源的替代方案，对标闭源的 Together in Spire
 
+### 平台与调试边界
+
+当前实现和端到端验证以 SlayTheAmethyst 提供的 Android ModTheSpire + BaseMod 兼容运行时为基准。CrossSpire 本身只依赖 STS1、ModTheSpire、BaseMod 和 Java 8 API，不调用 Android SDK，也不依赖 SlayTheAmethyst 的 Java 类。
+
+```
+Android 开发/自动化:
+  SlayTheAmethyst Harness
+    → game-probe CONSOLE 协议
+    → BaseMod DevConsole
+    → CrossSpireCommand
+
+CrossSpire 运行时:
+  ConsoleCommand.addCommand("crossspire", CrossSpireCommand.class)
+    → 显式 host/join/status 等命令
+```
+
+Harness、game-probe 和 ADB 属于外部开发基础设施，不进入 CrossSpire 的依赖图、协议 Schema 或发布 JAR。CrossSpire 不负责设备选择、ADB 连接、调试端口转发或测试台网络代理。
+
+Desktop 继续以标准 ModTheSpire + BaseMod API 为兼容目标，可以使用相同的 BaseMod console 命令；本阶段不执行 Desktop 端到端验证，因此不将其列为已验证平台。
+
+维护者测试台的 D1/D2 serial、loopback 转发和复现步骤见 [`development/android-harness.md`](./development/android-harness.md)。这些值不得成为生产代码默认值。
+
 ## 关键术语定义
 
 | 术语 | 英文 | 定义 |

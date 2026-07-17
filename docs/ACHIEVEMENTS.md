@@ -304,7 +304,7 @@ CrossSpire development timeline and milestones.
 | 服务器 | Node.js + Express + ws + TypeScript |
 | Mod 客户端 | Java 8 + ModTheSpire + BaseMod + Java-WebSocket + Gson |
 | 测试 | vitest (TS), JUnit 4 (Java), MTS 加载 + 日志验证 |
-| 调试 | ADB 双设备, `crossspire_batch.txt` 指令注入 |
+| 调试（历史） | ADB 双设备, `crossspire_batch.txt` 指令注入（P4 由 Harness → BaseMod console 替代） |
 
 ---
 
@@ -382,3 +382,5 @@ CrossSpire development timeline and milestones.
 - 两台设备均成功启动并进入主菜单 (`main_menu_ready`)
 - P2P 命令 (`crossspire host` / `crossspire join`) 通过 batch watcher 机制发送
 - ⚠️ 日志系统在重启后未刷新，E2E 完整验证待跟进
+
+> 后续状态：以上是当时的真实验证记录。P4 删除 batch watcher，改用 SlayTheAmethyst Harness 调用标准 BaseMod console；设备 serial 保持不变，D2 `localhost:54321` 到 D1 `localhost:54321` 的转发由外部测试基础设施提供。

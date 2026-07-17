@@ -1,6 +1,6 @@
 # CrossSpire 控制台命令
 
-CrossSpire 通过 BaseMod 的 `ConsoleCommand` API 注册了 `crossspire` 命名空间，共 19 个子命令。在游戏内按 **\`** (反引号) 打开控制台后输入。
+CrossSpire 通过 BaseMod 的 `ConsoleCommand` API 注册了 `crossspire` 命名空间，共 21 个主子命令，另有 `connect` 作为 `join` 的别名。命令可以直接在 BaseMod console 输入，也可以由 SlayTheAmethyst Harness 调用 BaseMod console。
 
 实现类：`crossspire.ui.CrossSpireCommand`
 
@@ -12,8 +12,8 @@ CrossSpire 通过 BaseMod 的 `ConsoleCommand` API 注册了 `crossspire` 命名
 
 | 命令 | 说明 |
 |------|------|
-| `crossspire host [port]` | 以房主身份启动 P2P 监听（星型拓扑） |
-| `crossspire join <ip> [port]` | 作为客户端连接到指定房主 |
+| `crossspire host <port>` | 以房主身份启动 P2P 监听（星型拓扑） |
+| `crossspire join <ip> <port>` | 作为客户端连接到指定房主 |
 | `crossspire disconnect` | 断开连接并清空远程玩家注册表 |
 
 ### 状态查看
@@ -58,7 +58,7 @@ CrossSpire 通过 BaseMod 的 `ConsoleCommand` API 注册了 `crossspire` 命名
 
 ## 详细说明
 
-### `crossspire host [port]`
+### `crossspire host <port>`
 
 ```
 crossspire host 54321
@@ -66,7 +66,7 @@ crossspire host 54321
 
 房主创建 P2P 监听端口。所有客户端连接到房主后形成**星型拓扑**（O(n) 连接，客户端间不直连）。
 
-### `crossspire join <ip> [port]`
+### `crossspire join <ip> <port>`
 
 ```
 crossspire join 127.0.0.1 54321
@@ -233,49 +233,57 @@ crossspire confirm
 
 ---
 
-## 双设备联机测试流程
+## Android 双设备联机测试
 
-### Android 环境（ADB batch）
+当前维护者测试台使用 D1 `localhost:15555` 和 D2 `localhost:25555`。命令由 SlayTheAmethyst Harness 调用标准 BaseMod console，不再通过 ADB 写入 batch 文件。
+
+D2 的 `127.0.0.1:54321` 由外部测试基础设施自动转发到 D1 的 `127.0.0.1:54321`；这不是普通双设备网络的默认行为，也不由 CrossSpire 维护。完整环境、前置条件和故障定位见 [`development/android-harness.md`](./development/android-harness.md)。
 
 ```bash
+export SLAY_THE_AMETHYST_ROOT=/path/to/SlayTheAmethystModded
+
 # D1 (host)
-echo "crossspire host 54321" | adb -s localhost:15555 shell \
-  "cat > /storage/emulated/0/Android/data/io.stamethyst/files/sts/crossspire_batch.txt"
-sleep 12
+python "$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py" sts-harness \
+  -Command console -DeviceSerial localhost:15555 \
+  -ConsoleCommand "crossspire host 54321"
 
 # D2 (join)
-echo "crossspire join 127.0.0.1 54321" | adb -s localhost:25555 shell \
-  "cat > /storage/emulated/0/Android/data/io.stamethyst/files/sts/crossspire_batch.txt"
-sleep 14
+python "$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py" sts-harness \
+  -Command console -DeviceSerial localhost:25555 \
+  -ConsoleCommand "crossspire join 127.0.0.1 54321"
 
 # 战斗
-echo "crossspire start IRONCLAD" | adb -s localhost:15555 shell \
-  "cat > /storage/emulated/0/Android/data/io.stamethyst/files/sts/crossspire_batch.txt"
-sleep 12
-echo "fight Cultist" | adb -s localhost:15555 shell \
-  "cat > /storage/emulated/0/Android/data/io.stamethyst/files/sts/crossspire_batch.txt"
-sleep 14
-echo "crossspire play Strike_R" | adb -s localhost:15555 shell \
-  "cat > /storage/emulated/0/Android/data/io.stamethyst/files/sts/crossspire_batch.txt"
+python "$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py" sts-harness \
+  -Command console -DeviceSerial localhost:15555 \
+  -ConsoleCommand "crossspire start IRONCLAD"
+python "$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py" sts-harness \
+  -Command console -DeviceSerial localhost:15555 \
+  -ConsoleCommand "fight Cultist"
+python "$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py" sts-harness \
+  -Command console -DeviceSerial localhost:15555 \
+  -ConsoleCommand "crossspire play Strike_R"
 
 # 事件
-echo "crossspire cevent Living Wall" | adb -s localhost:15555 shell \
-  "cat > /storage/emulated/0/Android/data/io.stamethyst/files/sts/crossspire_batch.txt"
-echo "crossspire eselect 0 Strike_R" | adb -s localhost:25555 shell \
-  "cat > /storage/emulated/0/Android/data/io.stamethyst/files/sts/crossspire_batch.txt"
+python "$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py" sts-harness \
+  -Command console -DeviceSerial localhost:15555 \
+  -ConsoleCommand "crossspire cevent Living Wall"
+python "$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py" sts-harness \
+  -Command console -DeviceSerial localhost:25555 \
+  -ConsoleCommand "crossspire eselect 0 Strike_R"
 
 # 诊断
-echo "crossspire gamestate" | adb -s localhost:15555 shell \
-  "cat > /storage/emulated/0/Android/data/io.stamethyst/files/sts/crossspire_batch.txt"
+python "$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py" sts-harness \
+  -Command console -DeviceSerial localhost:15555 \
+  -ConsoleCommand "crossspire gamestate"
 ```
 
 ---
 
-## 命令速查表 (全部 19 个子命令)
+## 命令速查表（21 个主子命令）
 
 ```
-crossspire host [port]
-crossspire join <ip> [port]
+crossspire host <port>
+crossspire join <ip> <port>
 crossspire disconnect
 crossspire status
 crossspire info

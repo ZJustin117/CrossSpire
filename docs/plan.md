@@ -748,3 +748,5 @@ cmdPlay("Strike_R")
 JAR 已推送到两台设备 (localhost:15555, 25555)，JUnit 51/51 通过。
 自动 E2E 受阻于 Amethyst launcher 需要手动点击"Play"启动 STS 引擎。
 手动验证流程: launcher 点 Play → 等 main_menu → batch 命令自动执行。
+
+> 历史说明：以上记录描述当时的 batch 文件注入方案。P4 将删除该方案，改由 SlayTheAmethyst Harness 调用标准 BaseMod console。当前维护者测试台仍使用 D1 `localhost:15555` 和 D2 `localhost:25555`，游戏连接依赖外部预置的 D2 `localhost:54321` → D1 `localhost:54321` 转发；CrossSpire 不维护该转发。Desktop 验证在 P4 暂缓。
