@@ -12,7 +12,7 @@ CrossSpire 通过 BaseMod 的 `ConsoleCommand` API 注册了 `crossspire` 命名
 
 | 命令 | 说明 |
 |------|------|
-| `crossspire host <port>` | 以房主身份启动 P2P 监听（星型拓扑） |
+| `crossspire host <advertised-ip> <port>` | 以房主身份启动 P2P 监听并公布显式地址（星型拓扑） |
 | `crossspire join <ip> <port>` | 作为客户端连接到指定房主 |
 | `crossspire disconnect` | 断开连接并清空远程玩家注册表 |
 
@@ -58,13 +58,13 @@ CrossSpire 通过 BaseMod 的 `ConsoleCommand` API 注册了 `crossspire` 命名
 
 ## 详细说明
 
-### `crossspire host <port>`
+### `crossspire host <advertised-ip> <port>`
 
 ```
-crossspire host 54321
+crossspire host 127.0.0.1 54321
 ```
 
-房主创建 P2P 监听端口。所有客户端连接到房主后形成**星型拓扑**（O(n) 连接，客户端间不直连）。
+房主创建 P2P 监听端口，并在 `hello` 中公布显式传入的地址。所有客户端连接到房主后形成**星型拓扑**（O(n) 连接，客户端间不直连）。CrossSpire 不提供隐式 IP 或端口默认值。
 
 ### `crossspire join <ip> <port>`
 
@@ -245,7 +245,7 @@ export SLAY_THE_AMETHYST_ROOT=/path/to/SlayTheAmethystModded
 # D1 (host)
 python "$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py" sts-harness \
   -Command console -DeviceSerial localhost:15555 \
-  -ConsoleCommand "crossspire host 54321"
+  -ConsoleCommand "crossspire host 127.0.0.1 54321"
 
 # D2 (join)
 python "$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py" sts-harness \
@@ -282,7 +282,7 @@ python "$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py" sts-harness \
 ## 命令速查表（21 个主子命令）
 
 ```
-crossspire host <port>
+crossspire host <advertised-ip> <port>
 crossspire join <ip> <port>
 crossspire disconnect
 crossspire status

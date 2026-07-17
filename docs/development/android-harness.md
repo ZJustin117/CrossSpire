@@ -62,7 +62,7 @@ CrossSpire 不再读取 `crossspire_startup.txt` 或 `crossspire_batch.txt`。�
 python "$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py" sts-harness \
   -Command console \
   -DeviceSerial "$CROSSSPIRE_D1_SERIAL" \
-  -ConsoleCommand "crossspire host $CROSSSPIRE_GAME_PORT"
+  -ConsoleCommand "crossspire host 127.0.0.1 $CROSSSPIRE_GAME_PORT"
 ```
 
 ### D2 加入房间

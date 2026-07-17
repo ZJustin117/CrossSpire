@@ -9,7 +9,6 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class StarConnectionManager {
 
-    private static final int DEFAULT_PORT = 54321;
     private final int listenPort;
     private final String advertisedIp;
     private ServerSocket serverSocket;
@@ -30,27 +29,28 @@ public class StarConnectionManager {
         return id.length() <= 8 ? id : id.substring(0, 8);
     }
 
-    public StarConnectionManager() {
-        java.util.Properties cfg = loadConfig();
-        String portProp = System.getProperty("crossspire.p2p.port");
-        if (portProp == null) portProp = cfg.getProperty("crossspire.p2p.port");
-        listenPort = portProp != null ? Integer.parseInt(portProp) : DEFAULT_PORT;
-        String ip = System.getProperty("crossspire.p2p.ip");
-        if (ip == null) ip = cfg.getProperty("crossspire.p2p.ip");
-        advertisedIp = ip != null ? ip : "127.0.0.1";
+    public StarConnectionManager(int listenPort, String advertisedIp) {
+        if (listenPort < 1 || listenPort > 65535) {
+            throw new IllegalArgumentException("Port must be between 1 and 65535");
+        }
+        if (advertisedIp == null || advertisedIp.trim().isEmpty()) {
+            throw new IllegalArgumentException("Advertised IP must not be blank");
+        }
+        this.listenPort = listenPort;
+        this.advertisedIp = advertisedIp.trim();
     }
 
-    private static java.util.Properties loadConfig() {
-        java.util.Properties p = new java.util.Properties();
+    public static int parsePort(String value) {
+        final int port;
         try {
-            java.io.File f = new java.io.File("/storage/emulated/0/Android/data/io.stamethyst/files/sts/crossspire.properties");
-            if (f.exists()) {
-                java.io.FileInputStream fis = new java.io.FileInputStream(f);
-                p.load(fis);
-                fis.close();
-            }
-        } catch (Exception ignored) {}
-        return p;
+            port = Integer.parseInt(value);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Port must be a number");
+        }
+        if (port < 1 || port > 65535) {
+            throw new IllegalArgumentException("Port must be between 1 and 65535");
+        }
+        return port;
     }
 
     public void start() {
@@ -198,5 +198,6 @@ public class StarConnectionManager {
     }
 
     public int getPort() { return listenPort; }
+    public String getAdvertisedIp() { return advertisedIp; }
     public int connectionCount() { return connections.size(); }
 }

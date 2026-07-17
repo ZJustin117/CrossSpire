@@ -18,6 +18,7 @@ import crossspire.CrossSpireMod;
 import crossspire.network.EventMessageSender;
 import crossspire.network.Protocol;
 import crossspire.network.RoomPinSender;
+import crossspire.network.StarConnectionManager;
 import crossspire.network.StageVoteSender;
 import crossspire.remote.RemotePlayerRegistry;
 import crossspire.sync.FullSnapshotSender;
@@ -59,29 +60,40 @@ public class CrossSpireCommand extends ConsoleCommand {
     }
 
     private void cmdHost(String[] tokens, int depth) {
-        int port = tokens.length > depth + 1 ? Integer.parseInt(tokens[depth + 1]) : 54321;
-        ServerPicker.isRoomHost = true;
-        DevConsole.log("Hosting on port " + port + "...");
-        System.setProperty("crossspire.p2p.port", String.valueOf(port));
-        CrossSpireMod.connect();
+        if (tokens.length < depth + 3) {
+            DevConsole.log("Usage: crossspire host <advertised-ip> <port>");
+            return;
+        }
+        int port = parsePort(tokens[depth + 2]);
+        if (port < 0) return;
+        String advertisedIp = tokens[depth + 1];
+        DevConsole.log("Hosting on " + advertisedIp + ":" + port + "...");
+        CrossSpireMod.host(advertisedIp, port);
         if (CrossSpireMod.stageHost != null) {
             CrossSpireMod.stageHost.setStageHost(CrossSpireMod.playerId);
         }
     }
 
     private void cmdJoin(String[] tokens, int depth) {
-        if (tokens.length < depth + 2) {
-            DevConsole.log("Usage: crossspire join <ip> [port]");
+        if (tokens.length < depth + 3) {
+            DevConsole.log("Usage: crossspire join <ip> <port>");
             return;
         }
-        ServerPicker.hostIp = tokens[depth + 1];
-        ServerPicker.hostPort = tokens.length > depth + 2 ? Integer.parseInt(tokens[depth + 2]) : 54321;
-        ServerPicker.isRoomHost = false;
-        DevConsole.log("Joining " + ServerPicker.hostIp + ":" + ServerPicker.hostPort + "...");
-        CrossSpireMod.connect();
+        int port = parsePort(tokens[depth + 2]);
+        if (port < 0) return;
+        String host = tokens[depth + 1];
+        DevConsole.log("Joining " + host + ":" + port + "...");
+        CrossSpireMod.join(host, port);
     }
 
-    private void cmdConnect(String[] tokens, int depth) { cmdJoin(tokens, depth); }
+    private int parsePort(String value) {
+        try {
+            return StarConnectionManager.parsePort(value);
+        } catch (IllegalArgumentException e) {
+            DevConsole.log("Invalid port: " + e.getMessage());
+            return -1;
+        }
+    }
 
     private void cmdDisconnect() {
         DevConsole.log("Disconnecting...");
@@ -96,8 +108,10 @@ public class CrossSpireCommand extends ConsoleCommand {
         DevConsole.log("Connected: " + (c ? "YES" : "NO"));
         DevConsole.log("PlayerId: " + (pid.isEmpty() ? "(none)" : pid));
         DevConsole.log("Room: " + ServerPicker.roomCode);
-        DevConsole.log("Peers: " + CrossSpireMod.connectionManager.connectionCount());
-        DevConsole.log("Queue size: " + CrossSpireMod.centralQueueManager.size());
+        DevConsole.log("Peers: " + (CrossSpireMod.connectionManager != null
+            ? CrossSpireMod.connectionManager.connectionCount() : 0));
+        DevConsole.log("Queue size: " + (CrossSpireMod.centralQueueManager != null
+            ? CrossSpireMod.centralQueueManager.size() : 0));
     }
 
     private void cmdInfo() {
@@ -559,6 +573,6 @@ public class CrossSpireCommand extends ConsoleCommand {
 
     @Override
     public void errorMsg() {
-        DevConsole.log("crossspire: host [port] | join <ip> [port] | disconnect | status | info | lobby | combat | gamestate | ready [char] | start [char] [seed] | play <card> [target] | queue | room <index> | snapshot | vote <player> | select <card> | cevent <name> | eventsel <index> | eselect <index> <card> | evote <index> | confirm");
+        DevConsole.log("crossspire: host <advertised-ip> <port> | join <ip> <port> | disconnect | status | info | lobby | combat | gamestate | ready [char] | start [char] [seed] | play <card> [target] | queue | room <index> | snapshot | vote <player> | select <card> | cevent <name> | eventsel <index> | eselect <index> <card> | evote <index> | confirm");
     }
 }

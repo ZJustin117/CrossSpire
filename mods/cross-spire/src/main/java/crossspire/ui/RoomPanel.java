@@ -128,7 +128,7 @@ public class RoomPanel {
                 if (CrossSpireMod.isConnected()) {
                     CrossSpireMod.disconnect();
                 } else {
-                    CrossSpireMod.connect();
+                    CrossSpireMod.lobbyScreen.setStatus("Use crossspire host/join in BaseMod console");
                 }
                 return;
             }

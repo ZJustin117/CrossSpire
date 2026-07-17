@@ -60,7 +60,7 @@ public class CrossSpireMod {
         BaseMod.logger.info("CrossSpire EventSuppression ready, current=" + EventSuppression.isSuppressed());
 
         centralQueueManager = new CentralQueueManager();
-        connectionManager = new StarConnectionManager();
+        connectionManager = null;
         lobbyState = new LobbyState();
         stageHost = new StageHost("");
         messageRouter = new MessageRouter(new SyncExecutor(), centralQueueManager, new CombatResultReplayer());
@@ -70,9 +70,6 @@ public class CrossSpireMod {
         ConsoleCommand.addCommand("crossspire", CrossSpireCommand.class);
         hud = new CrossSpireHUD();
 
-        if (ServerPicker.autoConnect) {
-            connect();
-        }
     }
 
     public static void send(String message) {
@@ -101,47 +98,66 @@ public class CrossSpireMod {
         return null;
     }
 
-    public static void connect() {
+    public static void host(String advertisedIp, int port) {
+        resetConnectionManager(new StarConnectionManager(port, advertisedIp));
+        ServerPicker.isRoomHost = true;
+        ensurePlayerId();
+        BaseMod.logger.info("CrossSpire host() playerId=" + playerId.substring(0, 8));
+        connectionManager.start();
+        connectionManager.setOnPeerConnectedListener(new StarConnectionManager.OnPeerConnectedListener() {
+            @Override
+            public void onPeerConnected(String peerId) {
+                onPlayerConnected(peerId);
+            }
+        });
+        hostId = playerId;
+        roomHost = new RoomHost(playerId);
+        roomHost.addPlayer(playerId);
+        HeartbeatManager.setOnPeerTimeoutListener(new HeartbeatManager.OnPeerTimeoutListener() {
+            @Override
+            public void onPeerTimeout(String peerId) {
+                if (roomHost != null) roomHost.onPeerTimeout(peerId);
+            }
+        });
+        lobbyScreen.setStatus("Hosting on " + advertisedIp + ":" + port);
+        HeartbeatManager.start();
+        onRoomJoined();
+    }
+
+    public static void join(String host, int port) {
+        resetConnectionManager(new StarConnectionManager(port, host));
+        ServerPicker.isRoomHost = false;
+        ensurePlayerId();
+        BaseMod.logger.info("CrossSpire join() playerId=" + playerId.substring(0, 8));
+        lobbyScreen.setStatus("Connecting to " + host + ":" + port);
+        connectionManager.connectTo("host", host, port);
+        HeartbeatManager.setOnPeerTimeoutListener(new HeartbeatManager.OnPeerTimeoutListener() {
+            @Override
+            public void onPeerTimeout(String peerId) {
+                if ("host".equals(peerId)) {
+                    BaseMod.logger.info("CrossSpire host timeout — disconnected");
+                    onHostTimeout();
+                }
+            }
+        });
+        HeartbeatManager.start();
+    }
+
+    private static void ensurePlayerId() {
         if (playerId.isEmpty()) {
             playerId = UUID.randomUUID().toString();
             stageHost.setLocalPlayerId(playerId);
         }
-        BaseMod.logger.info("CrossSpire connect() playerId=" + playerId.substring(0, 8)
-            + " isRoomHost=" + ServerPicker.isRoomHost);
-        if (ServerPicker.isRoomHost) {
-            connectionManager.start();
-            connectionManager.setOnPeerConnectedListener(new StarConnectionManager.OnPeerConnectedListener() {
-                @Override
-                public void onPeerConnected(String peerId) {
-                    onPlayerConnected(peerId);
-                }
-            });
-            hostId = playerId;
-            roomHost = new RoomHost(playerId);
-            roomHost.addPlayer(playerId);
-            HeartbeatManager.setOnPeerTimeoutListener(new HeartbeatManager.OnPeerTimeoutListener() {
-                @Override
-                public void onPeerTimeout(String peerId) {
-                    if (roomHost != null) roomHost.onPeerTimeout(peerId);
-                }
-            });
-            lobbyScreen.setStatus("Hosting on :" + connectionManager.getPort());
-            HeartbeatManager.start();
-            onRoomJoined();
-        } else {
-            lobbyScreen.setStatus("Connecting to " + ServerPicker.hostIp + ":" + ServerPicker.hostPort);
-            connectionManager.connectTo("host", ServerPicker.hostIp, ServerPicker.hostPort);
-            HeartbeatManager.setOnPeerTimeoutListener(new HeartbeatManager.OnPeerTimeoutListener() {
-                @Override
-                public void onPeerTimeout(String peerId) {
-                    if ("host".equals(peerId)) {
-                        BaseMod.logger.info("CrossSpire host timeout — disconnected");
-                        onHostTimeout();
-                    }
-                }
-            });
-            HeartbeatManager.start();
+    }
+
+    private static void resetConnectionManager(StarConnectionManager next) {
+        HeartbeatManager.stop();
+        if (connectionManager != null) {
+            connectionManager.stop();
         }
+        connectionManager = next;
+        roomHost = null;
+        hostId = "";
     }
 
     private static void onHostTimeout() {
@@ -149,6 +165,7 @@ public class CrossSpireMod {
         if (connectionManager != null) {
             connectionManager.stop();
         }
+        connectionManager = null;
         roomHost = null;
         hostId = "";
         lobbyScreen.setStatus("Host timed out — rejoin with: crossspire join <ip> <port>");
@@ -160,7 +177,9 @@ public class CrossSpireMod {
         if (connectionManager != null) {
             connectionManager.stop();
         }
+        connectionManager = null;
         roomHost = null;
+        hostId = "";
         lobbyScreen.setStatus("Disconnected");
     }
 
@@ -169,7 +188,7 @@ public class CrossSpireMod {
     }
 
     public static void onRoomJoined() {
-        lobbyScreen.setStatus("Hosting on :" + connectionManager.getPort());
+        lobbyScreen.setStatus("Hosting on " + connectionManager.getAdvertisedIp() + ":" + connectionManager.getPort());
         ResourceRegistryTracker.sendMyRegistry();
         connectionManager.sendHello();
     }

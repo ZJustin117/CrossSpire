@@ -5,9 +5,6 @@ import basemod.BaseMod;
 public class ServerPicker {
 
     public static String roomCode = "CROSS";
-    public static String hostIp = "127.0.0.1";
-    public static int hostPort = 54321;
-    public static boolean autoConnect = false;
     public static boolean isRoomHost = true;
     public static boolean isStageHost = true;
 

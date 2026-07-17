@@ -460,7 +460,7 @@ THEN CrossSpire 不读取、不执行也不删除这些文件
 AND 不创建文件轮询线程
 
 GIVEN D1 和 D2 使用维护者 Android 测试台
-WHEN D1 执行 "crossspire host 54321"
+WHEN D1 执行 "crossspire host 127.0.0.1 54321"
 AND D2 执行 "crossspire join 127.0.0.1 54321"
 THEN D2 通过测试台预置的 D2 localhost:54321 到 D1 localhost:54321 转发连接 D1
 AND 该转发由 CrossSpire 外部基础设施负责
