@@ -4,6 +4,7 @@ import crossspire.ui.ServerPicker;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import java.lang.reflect.Method;
 import static org.junit.Assert.*;
 
 public class CrossSpireModTest {
@@ -45,5 +46,13 @@ public class CrossSpireModTest {
     public void isConnectedReturnsFalseWhenNoP2P() {
         CrossSpireMod.connectionManager = null;
         assertFalse(CrossSpireMod.isConnected());
+    }
+
+    @Test
+    public void shouldNotExposeFileCommandExecution() {
+        for (Method method : CrossSpireMod.class.getDeclaredMethods()) {
+            assertNotEquals("runStartupScript", method.getName());
+            assertNotEquals("startBatchWatcher", method.getName());
+        }
     }
 }

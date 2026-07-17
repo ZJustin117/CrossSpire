@@ -5,7 +5,7 @@
 ## P4 Android 调试基础设施清理（进行中）
 
 - [x] T4.1 SDD：正式标注 SlayTheAmethyst Android 支持和 Harness 边界
-- [ ] T4.2 删除 `crossspire_startup.txt` / `crossspire_batch.txt` 命令执行与轮询线程
+- [x] T4.2 删除 `crossspire_startup.txt` / `crossspire_batch.txt` 命令执行与轮询线程
 - [ ] T4.3 删除 Android `crossspire.properties` 路径和隐式 P2P 配置
 - [ ] T4.4 `host/join` 改为仅接受显式网络参数，并修复 manager 生命周期
 - [ ] T4.5 Gradle 本地依赖路径改为显式、可移植配置
