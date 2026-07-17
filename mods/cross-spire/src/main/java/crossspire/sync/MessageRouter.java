@@ -7,6 +7,7 @@ import com.google.gson.JsonObject;
 import crossspire.CrossSpireMod;
 import crossspire.combat.CombatResultReplayer;
 import crossspire.combat.CentralQueueManager;
+import crossspire.combat.EventCapture;
 import crossspire.network.HeartbeatManager;
 import crossspire.network.PacketOperation;
 import crossspire.network.Protocol;
@@ -133,6 +134,8 @@ public class MessageRouter {
             RemoteEventDisplay.hide();
         } else if ("event_transcript".equals(type)) {
             handleEventTranscript(rawMessage);
+        } else if ("event_vote".equals(type)) {
+            handleEventVote(rawMessage);
         } else if ("event_interface".equals(type)) {
             JsonObject ei = Protocol.GSON.fromJson(rawMessage, JsonObject.class);
             String name = ei.has("event_id") ? ei.get("event_id").getAsString() : "?";
@@ -582,6 +585,38 @@ public class MessageRouter {
                     });
                     break;
                 }
+            }
+        }
+    }
+
+    private void handleEventVote(String rawMessage) {
+        JsonObject v = Protocol.GSON.fromJson(rawMessage, JsonObject.class);
+        String source = v.has("source") ? v.get("source").getAsString() : "";
+        int idx = v.has("option_index") ? v.get("option_index").getAsInt() : -1;
+        if (source.isEmpty() || idx < 0) return;
+
+        if (!CrossSpireMod.isRoomHost()) {
+            CrossSpireMod.send((String) rawMessage);
+            return;
+        }
+
+        if (CrossSpireMod.roomHost != null) {
+            CrossSpireMod.roomHost.castEventVote(source, idx);
+            Integer consensus = CrossSpireMod.roomHost.checkEventVoteConsensus();
+            if (consensus != null) {
+                BaseMod.logger.info("MessageRouter event_vote consensus: option=" + consensus);
+                EventCapture.startTranscript("event-vote-consensus");
+                EventCapture.appendButtonEffect(consensus);
+                String transcript = EventCapture.buildTranscript();
+                handleEventTranscript(transcript);
+            } else {
+                String votesJson = CrossSpireMod.roomHost.getEventVotesJson();
+                com.google.gson.JsonObject votesMsg = new com.google.gson.JsonObject();
+                votesMsg.addProperty("type", "event_votes");
+                votesMsg.addProperty("source", CrossSpireMod.playerId);
+                votesMsg.add("votes", Protocol.GSON.fromJson(votesJson, com.google.gson.JsonObject.class));
+                CrossSpireMod.send(Protocol.GSON.toJson(votesMsg));
+                BaseMod.logger.info("MessageRouter event_votes broadcast: " + votesJson);
             }
         }
     }

@@ -50,6 +50,7 @@ public class CrossSpireCommand extends ConsoleCommand {
         else if ("cevent".equals(sub)) { cmdCrossEvent(tokens, depth); }
         else if ("eventsel".equals(sub)) { cmdEventSelect(tokens, depth); }
         else if ("eselect".equals(sub)) { cmdEventCardSelect(tokens, depth); }
+        else if ("evote".equals(sub)) { cmdEventVote(tokens, depth); }
         else { errorMsg(); }
     }
 
@@ -431,8 +432,22 @@ public class CrossSpireCommand extends ConsoleCommand {
         DevConsole.log("Card select transcript: " + cardCount + " cards → sent");
     }
 
+    private void cmdEventVote(String[] tokens, int depth) {
+        if (tokens.length < depth + 2) {
+            DevConsole.log("Usage: crossspire evote <option_index>");
+            return;
+        }
+        int idx = Integer.parseInt(tokens[depth + 1]);
+        com.google.gson.JsonObject vote = new com.google.gson.JsonObject();
+        vote.addProperty("type", "event_vote");
+        vote.addProperty("source", CrossSpireMod.playerId);
+        vote.addProperty("option_index", idx);
+        CrossSpireMod.send((String) new com.google.gson.Gson().toJson(vote));
+        DevConsole.log("Event vote: option " + idx);
+    }
+
     @Override
     public void errorMsg() {
-        DevConsole.log("crossspire: host [port] | join <ip> [port] | disconnect | status | info | lobby | combat | ready [char] | start [char] [seed] | play <card> [target] | queue | room <index> | snapshot | vote <player> | select <card>");
+        DevConsole.log("crossspire: host [port] | join <ip> [port] | disconnect | status | info | lobby | combat | ready [char] | start [char] [seed] | play <card> [target] | queue | room <index> | snapshot | vote <player> | select <card> | cevent <name> | eventsel <index> | eselect <card> | evote <index>");
     }
 }
