@@ -546,7 +546,12 @@ public class CrossSpireCommand extends ConsoleCommand {
         Gdx.app.postRunnable(new Runnable() {
             @Override public void run() {
                 EventSyncPatches.clickConfirm();
-                BaseMod.logger.info("crossspire confirm clicked");
+                AbstractDungeon.gridSelectScreen.update();
+                AbstractDungeon.isScreenUp = false;
+                if (AbstractDungeon.getCurrRoom() != null && AbstractDungeon.getCurrRoom().event != null) {
+                    AbstractDungeon.getCurrRoom().event.update();
+                }
+                BaseMod.logger.info("crossspire confirm + update done");
             }
         });
         DevConsole.log("Confirm sent (next frame)");

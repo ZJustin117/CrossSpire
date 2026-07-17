@@ -19,7 +19,6 @@ public class EventSyncPatches {
         public static void postfix(AbstractEvent __instance) {
             if (CrossSpireMod.stageHost == null) return;
             if (!CrossSpireMod.stageHost.isStageHost() && !CrossSpireMod.isRoomHost()) return;
-            if (!CrossSpireMod.isConnected()) return;
 
             String eventId = __instance.getClass().getSimpleName();
             String eventClass = __instance.getClass().getName();
