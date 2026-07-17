@@ -569,12 +569,13 @@ public class MessageRouter {
                 if (!cardIds.isEmpty()) {
                     final String targetCard = cardIds.get(0);
                     final boolean doConfirm = hasConfirm;
+                    BaseMod.logger.info("MessageRouter queueing cardInject: " + targetCard + " confirm=" + doConfirm);
                     Gdx.app.postRunnable(new Runnable() {
                         @Override public void run() {
-                            if (doConfirm) {
+                            try {
                                 EventSyncPatches.hoverSelectAndConfirm(targetCard);
-                            } else {
-                                EventSyncPatches.hoverSelectCard(targetCard);
+                            } catch (Throwable t) {
+                                BaseMod.logger.error("cardInject error: " + t.getClass().getName() + ": " + t.getMessage());
                             }
                         }
                     });
