@@ -11,14 +11,22 @@ repositories {
     mavenCentral()
 }
 
-val desktopJar = files("${System.getProperty("user.home")}/steamapps/common/SlayTheSpire/desktop-1.0.jar")
-val stsModsDir = file("${System.getProperty("user.home")}/SlayTheAmethystModded/app/src/main/assets/components/mods")
+fun requiredJar(propertyName: String): File {
+    val path = providers.gradleProperty(propertyName).orNull
+        ?: throw GradleException("Missing -P$propertyName=/absolute/path/to/file.jar")
+    val jar = file(path)
+    if (!jar.isFile) {
+        throw GradleException("-P$propertyName does not point to a file: ${jar.absolutePath}")
+    }
+    return jar
+}
+
+val stsJar = requiredJar("stsJar")
+val baseModJar = requiredJar("baseModJar")
+val modTheSpireJar = requiredJar("modTheSpireJar")
 
 dependencies {
-    compileOnly(desktopJar)
-    compileOnly(files("$stsModsDir/BaseMod.jar"))
-    compileOnly(files("$stsModsDir/ModTheSpire.jar"))
-    compileOnly(files("$stsModsDir/StSLib.jar"))
+    compileOnly(files(stsJar, baseModJar, modTheSpireJar))
     implementation("com.google.code.gson:gson:2.10.1")
     testImplementation("junit:junit:4.13.2")
 }
