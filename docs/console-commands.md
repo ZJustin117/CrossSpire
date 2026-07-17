@@ -1,6 +1,6 @@
 # CrossSpire 控制台命令
 
-CrossSpire 通过 BaseMod 的 `ConsoleCommand` API 注册了 `crossspire` 命名空间，共 10 个子命令。在游戏内按 **\`** (反引号) 打开控制台后输入。
+CrossSpire 通过 BaseMod 的 `ConsoleCommand` API 注册了 `crossspire` 命名空间，共 19 个子命令。在游戏内按 **\`** (反引号) 打开控制台后输入。
 
 实现类：`crossspire.ui.CrossSpireCommand`
 
@@ -8,183 +8,291 @@ CrossSpire 通过 BaseMod 的 `ConsoleCommand` API 注册了 `crossspire` 命名
 
 ## 命令列表
 
+### 网络连接
+
 | 命令 | 说明 |
 |------|------|
-| `crossspire connect <url> <room>` | 连接到中继服务器并加入指定房间 |
+| `crossspire host [port]` | 以房主身份启动 P2P 监听（星型拓扑） |
+| `crossspire join <ip> [port]` | 作为客户端连接到指定房主 |
 | `crossspire disconnect` | 断开连接并清空远程玩家注册表 |
-| `crossspire status` | 显示连接状态概览 |
+
+### 状态查看
+
+| 命令 | 说明 |
+|------|------|
+| `crossspire status` | 显示连接状态（PlayerId/Peers/Queue size） |
 | `crossspire info` | 显示全部信息（status + lobby + combat + queue） |
-| `crossspire lobby` | 显示大厅信息（远程玩家列表、种子、图主状态） |
-| `crossspire combat` | 显示当前战斗信息（必须在战斗中） |
+| `crossspire lobby` | 显示大厅信息（远程玩家列表/HP/Block/Powers/StageHost） |
+| `crossspire combat` | 显示当前战斗信息（HP/Block/Energy/手牌/怪物） |
+| `crossspire gamestate` | 显示完整游戏状态快照（HP/Gold/Relics/Potions/MasterDeck/Powers） |
+
+### 大厅流程
+
+| 命令 | 说明 |
+|------|------|
 | `crossspire ready [char]` | 标记本地玩家就绪，可选角色名 |
 | `crossspire start [char] [seed]` | 开始游戏，可选角色名和种子 |
-| `crossspire play <card_id> [target]` | 打出一张卡牌，可选目标 monster id |
-| `crossspire queue` | 显示待打出队列 |
+| `crossspire vote <player_id>` | 选举图主（stage host），全员一致即确认 |
+| `crossspire room <index>` | 标注下一个要进入的房间（用于地图导航共识） |
+| `crossspire snapshot` | 发送当前游戏状态快照 (`full_snapshot`) |
+
+### 战斗
+
+| 命令 | 说明 |
+|------|------|
+| `crossspire play <card_id> [target]` | 打出一张卡牌，通过 CentralQueueManager 调度执行 |
+| `crossspire queue` | 显示当前待打出队列 |
+
+### 事件系统（就近原则 + 沙盒转录）
+
+| 命令 | 说明 |
+|------|------|
+| `crossspire cevent <event_name...>` | 通过 EventHelper.getEvent 获取事件实例，进入事件房间，广播 event_interface |
+| `crossspire eventsel <option_index>` | 沙盒模式：生成 buttonEffect transcript 发往 stage host 重播 |
+| `crossspire eselect <option_index> <card_id> [card_id2...]` | 完整 transcript：buttonEffect + cardSelect + confirm 一次性发送 |
+| `crossspire evote <option_index>` | 事件投票模式：标注投票选项，房主聚合后共识执行 |
+| `crossspire select <card_id>` | 从 GridCardSelectScreen 的 targetGroup 中选一张卡插入 selectedCards |
+| `crossspire confirm` | 模拟点击 GridCardSelectScreen 的确认按钮（+ isScreenUp=false + event.update） |
 
 ---
 
 ## 详细说明
 
-### `crossspire connect <url> <room_code>`
-
-连接到指定的 WebSocket 中继服务器并加入房间。
+### `crossspire host [port]`
 
 ```
-crossspire connect ws://10.0.2.2:9876 CROSS
+crossspire host 54321
 ```
 
-- `<url>`: WebSocket 服务器地址（如 `ws://host:port`）
-- `<room_code>`: 房间码，双方需使用相同房间码
-- 连接成功后会自动完成握手和 `room_join`
+房主创建 P2P 监听端口。所有客户端连接到房主后形成**星型拓扑**（O(n) 连接，客户端间不直连）。
+
+### `crossspire join <ip> [port]`
+
+```
+crossspire join 127.0.0.1 54321
+```
+
+客户端连接到指定房主 IP:port。连接成功后自动进行 `resource_registry` 素材清单交换。
 
 ### `crossspire disconnect`
-
-断开与中继服务器的连接，清空 `RemotePlayerRegistry`。
 
 ```
 crossspire disconnect
 ```
 
+停止 HeartbeatManager 和 StarConnectionManager，清空 RemotePlayerRegistry。
+
 ### `crossspire status`
-
-显示当前连接状态的摘要信息：
-
-- 是否已连接
-- 本地 PlayerId
-- 当前房间码
-- 同步种子
-- P2P 直连数量
-- 队列大小
 
 ```
 crossspire status
 ```
 
-### `crossspire info`
-
-依次显示 `status`、`lobby`、`combat`、`queue` 四部分信息。
-
+输出示例：
 ```
-crossspire info
-```
-
-### `crossspire lobby`
-
-显示大厅中的远程玩家信息：
-
-- 远程玩家数量
-- 每位玩家的 PlayerId（截断为前 8 位）、角色职业、HP/Block
-- 玩家身上的能力（Power）列表
-- 当前是否为本地图主机（StageHost）
-- 同步种子
-
-```
-crossspire lobby
+=== CrossSpire Status ===
+Connected: YES
+PlayerId: b9c0db98
+Room: CROSS
+Peers: 1
+Queue size: 0
 ```
 
-### `crossspire combat`
-
-显示当前战斗状态（需已进入战斗）：
-
-- 游戏模式
-- 当前楼层
-- 玩家 HP/Block/Energy
-- 手牌/抽牌堆/弃牌堆数量
-- 怪物列表（HP/意图/能力数量）
+### `crossspire gamestate`
 
 ```
-crossspire combat
+crossspire gamestate
 ```
 
-### `crossspire ready [char]`
-
-标记本地玩家已就绪，通知房间内其他玩家。
-
+输出示例：
 ```
-crossspire ready IRONCLAD
-crossspire ready DEFECT
-```
-
-- `[char]`: 角色职业名（`IRONCLAD`、`DEFECT`、`SILENT`、`WATCHER`），默认 `IRONCLAD`
-
-### `crossspire start [char] [seed]`
-
-开始新游戏。双方分别执行，种子由 Lobby 流程同步。
-
-```
-crossspire start IRONCLAD 220644
-crossspire start DEFECT
+=== Game State ===
+HP: 80/80  Block: 0
+Gold: 99  Energy: 0
+Room: EventRoom  Floor: 0  Act: 1
+Event: LivingWall
+Relics (1): Burning Blood
+Potions (3): Potion Slot, Potion Slot, Potion Slot
+MasterDeck (9):
+Strike_Rx4, Defend_Rx4, Bash
+Draw: 0  Discard: 0  Exhaust: 0
 ```
 
-- `[char]`: 角色职业名，默认 `IRONCLAD`
-- `[seed]`: 固定种子，默认自动生成
+### `crossspire vote <player_id>`
+
+```
+crossspire vote b9c0db98
+```
+
+发送 `stage_vote` 消息到房主。房主聚合后：全员一致 → 广播 `stage_host_result` → 全员 `setStageHost`；未一致 → 广播 `stage_votes` 快照。
+
+### `crossspire room <index>`
+
+```
+crossspire room 0
+```
+
+标注下一个地图房间 index。房主聚合所有玩家标注后：
+
+- 全员一致 → 构造 `room_consensus` → stage host 导航到该房间
+- 未一致 → 广播 `room_pins` 快照
 
 ### `crossspire play <card_id> [target]`
 
-在战斗中打出一张卡牌。`LocalCapturePatches` 自动捕获 `useCard` 事件，生成 `queue_submit` 发往房主的 `CentralQueueManager` 调度执行。
-
 ```
 crossspire play Strike_R
-crossspire play Bash                # target 默认为 self
-crossspire play Strike_R JawWorm    # 指定目标怪物
+crossspire play Bash
+crossspire play Strike_R JawWorm
 ```
 
-- `<card_id>`: 卡牌内部 ID（如 `Strike_R`、`Defend_R`、`Bash`）
-- `[target]`: 目标怪物 ID（如 `JawWorm`）或 `self`（默认）
+房主模式下：构造 `QueueSubmitMessage` → `CentralQueueManager.onQueueSubmit` → 队列调度执行。客户端模式下：发送 `queue_submit` 到房主。
 
-### `crossspire queue`
+目标：攻击卡默认第一个存活的怪物；其他卡默认 self。
 
-显示当前分布式打出队列内容，用于调试队列状态。
+### `crossspire cevent <event_name...>`
 
 ```
-crossspire queue
+crossspire cevent Big Fish
+crossspire cevent Living Wall
 ```
+
+内部调用 `EventHelper.getEvent(key)` 查找事件实例。支持含空格的事件名称：
+
+- `crossspire cevent Big Fish` — 进入 BigFish 事件
+- `crossspire cevent Living Wall` — 进入 LivingWall 事件
+
+事件进入后自动广播 `event_interface`（含 `event_class` 全限定名和 `OPTIONS`）。
+
+### `crossspire eventsel <option_index>`
+
+```
+crossspire eventsel 0
+```
+
+生成 `event_transcript {buttonEffect: 0}` 发往 stage host。stage host 收到后反射调用 `event.buttonEffect(0)` 重播。
+
+### `crossspire eselect <option_index> <card_id> [card_id2...]`
+
+```
+crossspire eselect 0 Strike_R
+crossspire eselect 1 Defend_R Bash
+```
+
+生成完整 transcript：
+```json
+{
+  "type": "event_transcript",
+  "actions": [
+    {"type": "buttonEffect", "index": 0},
+    {"type": "cardSelect", "cards": ["Strike_R"]},
+    {"type": "confirm"}
+  ]
+}
+```
+
+stage host 收到后依次执行：buttonEffect → cardSelect 注入 → confirm 确认。LivingWall "Forget" 选项测例：
+
+```
+crossspire start IRONCLAD
+crossspire cevent Living Wall
+crossspire eventsel 0          # 点击 "Forget"
+crossspire select Strike_R     # 选中 Strike_R
+crossspire confirm             # 确认 → deck 10→9 ✅
+crossspire gamestate           # 验证
+```
+
+### `crossspire evote <option_index>`
+
+```
+crossspire evote 0
+```
+
+发送 `event_vote {option_index: 0}` 到房主。房主使用 `RoomHost.castEventVote` + `checkEventVoteConsensus` 聚合：
+
+- 全员一致 → 自动构造 event_transcript buttonEffect → 重播
+- 未一致 → 广播 `event_votes` 快照
+
+### `crossspire select <card_id>`
+
+```
+crossspire select Strike_R
+```
+
+在已打开的 `GridCardSelectScreen` 的 `targetGroup` 中查找 cardID 对应的真牌，注入 `selectedCards`，并点击 `confirmButton`。
+
+### `crossspire confirm`
+
+```
+crossspire confirm
+```
+
+模拟点击 GridCardSelectScreen 确认按钮。额外执行：
+- `gridSelectScreen.update()` — 处理 confirm 回调
+- `AbstractDungeon.isScreenUp = false` — 解除 LivingWall 的阻塞检查
+- `event.update()` — 强制事件状态机立即处理
 
 ---
 
 ## 双设备联机测试流程
 
-### 模拟器/Android 环境
+### Android 环境（ADB batch）
 
-```
-crossspire connect ws://10.0.2.2:9876 CROSS
-crossspire start IRONCLAD 220644   # 设备 1
-crossspire start DEFECT 220644     # 设备 2
-crossspire play Strike_R
-crossspire info                    # 查看完整状态
-```
+```bash
+# D1 (host)
+echo "crossspire host 54321" | adb -s localhost:15555 shell \
+  "cat > /storage/emulated/0/Android/data/io.stamethyst/files/sts/crossspire_batch.txt"
+sleep 12
 
-### 桌面环境
+# D2 (join)
+echo "crossspire join 127.0.0.1 54321" | adb -s localhost:25555 shell \
+  "cat > /storage/emulated/0/Android/data/io.stamethyst/files/sts/crossspire_batch.txt"
+sleep 14
 
-```
-crossspire connect ws://localhost:9876 TEST
-crossspire ready IRONCLAD
-crossspire start
-crossspire play Strike_R
-crossspire queue
+# 战斗
+echo "crossspire start IRONCLAD" | adb -s localhost:15555 shell \
+  "cat > /storage/emulated/0/Android/data/io.stamethyst/files/sts/crossspire_batch.txt"
+sleep 12
+echo "fight Cultist" | adb -s localhost:15555 shell \
+  "cat > /storage/emulated/0/Android/data/io.stamethyst/files/sts/crossspire_batch.txt"
+sleep 14
+echo "crossspire play Strike_R" | adb -s localhost:15555 shell \
+  "cat > /storage/emulated/0/Android/data/io.stamethyst/files/sts/crossspire_batch.txt"
+
+# 事件
+echo "crossspire cevent Living Wall" | adb -s localhost:15555 shell \
+  "cat > /storage/emulated/0/Android/data/io.stamethyst/files/sts/crossspire_batch.txt"
+echo "crossspire eselect 0 Strike_R" | adb -s localhost:25555 shell \
+  "cat > /storage/emulated/0/Android/data/io.stamethyst/files/sts/crossspire_batch.txt"
+
+# 诊断
+echo "crossspire gamestate" | adb -s localhost:15555 shell \
+  "cat > /storage/emulated/0/Android/data/io.stamethyst/files/sts/crossspire_batch.txt"
 ```
 
 ---
 
-## 启动脚本
+## 命令速查表 (全部 19 个子命令)
 
-CrossSpire 支持从文件自动加载命令序列，用于自动化测试和双设备联机：
-
-- **`crossspire_startup.txt`**: 启动时自动执行一次（位于 Android `files/sts/` 目录），内容示例：
-  ```
-  crossspire connect ws://127.0.0.1:9876 CROSS
-  ```
-- **`crossspire_batch.txt`**: 运行时每 5 秒检测一次，存在时逐行执行后删除。适合推送即时命令：
-  ```bash
-  printf "crossspire start IRONCLAD 220644\n" > /tmp/cs_batch.txt
-  adb -s localhost:15555 push /tmp/cs_batch.txt \
-    /storage/emulated/0/Android/data/io.stamethyst/files/sts/crossspire_batch.txt
-  sleep 15
-  printf "fight Cultist\n" > /tmp/cs_batch.txt    # BaseMod 原生命令，触发 MonsterRoom.onPlayerEntry
-  adb -s localhost:15555 push /tmp/cs_batch.txt \
-    /storage/emulated/0/Android/data/io.stamethyst/files/sts/crossspire_batch.txt
-  sleep 10
-  printf "crossspire play Strike_R\n" > /tmp/cs_batch.txt
-  adb -s localhost:15555 push /tmp/cs_batch.txt \
-    /storage/emulated/0/Android/data/io.stamethyst/files/sts/crossspire_batch.txt
-  ```
+```
+crossspire host [port]
+crossspire join <ip> [port]
+crossspire disconnect
+crossspire status
+crossspire info
+crossspire lobby
+crossspire combat
+crossspire gamestate
+crossspire ready [char]
+crossspire start [char] [seed]
+crossspire vote <player_id>
+crossspire room <index>
+crossspire snapshot
+crossspire play <card_id> [target]
+crossspire queue
+crossspire cevent <event_name...>
+crossspire eventsel <option_index>
+crossspire eselect <option_index> <card_id> [card...]
+crossspire evote <option_index>
+crossspire select <card_id>
+crossspire confirm
+```
