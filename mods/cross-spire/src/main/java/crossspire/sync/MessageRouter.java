@@ -556,33 +556,37 @@ public class MessageRouter {
                 case "cardSelect": {
                     final JsonArray cards = action.has("cards") ? action.getAsJsonArray("cards") : new JsonArray();
                     final int cardCount = cards.size();
-                    Gdx.app.postRunnable(new Runnable() {
-                        @Override public void run() {
-                            if (AbstractDungeon.gridSelectScreen != null) {
-                                for (int j = 0; j < cardCount; j++) {
-                                    String cid = cards.get(j).getAsString();
-                                    com.megacrit.cardcrawl.cards.AbstractCard stub = new crossspire.combat.CardStub(cid, 1,
-                                        com.megacrit.cardcrawl.cards.AbstractCard.CardType.ATTACK,
-                                        com.megacrit.cardcrawl.cards.AbstractCard.CardRarity.BASIC,
-                                        com.megacrit.cardcrawl.cards.AbstractCard.CardTarget.ENEMY);
-                                    AbstractDungeon.gridSelectScreen.selectedCards.add(stub);
-                                }
-                                BaseMod.logger.info("MessageRouter event_transcript cardSelect injected " + cardCount);
+                    if (AbstractDungeon.player != null) {
+                        final com.megacrit.cardcrawl.cards.CardGroup deck = AbstractDungeon.player.masterDeck;
+                        for (int j = 0; j < cardCount; j++) {
+                            final String cid = cards.get(j).getAsString();
+                            com.megacrit.cardcrawl.cards.AbstractCard real = null;
+                            for (com.megacrit.cardcrawl.cards.AbstractCard c : deck.group) {
+                                if (c.cardID.equals(cid)) { real = c; break; }
+                            }
+                            if (real != null && AbstractDungeon.gridSelectScreen != null) {
+                                AbstractDungeon.gridSelectScreen.selectedCards.add(real);
                             }
                         }
-                    });
+                        BaseMod.logger.info("MessageRouter event_transcript cardSelect injected " + cardCount);
+                    }
                     break;
                 }
                 case "confirm": {
-                    Gdx.app.postRunnable(new Runnable() {
-                        @Override public void run() {
-                            if (AbstractDungeon.gridSelectScreen != null
-                                && AbstractDungeon.gridSelectScreen.confirmButton != null) {
-                                AbstractDungeon.gridSelectScreen.confirmButton.hb.clicked = true;
-                                BaseMod.logger.info("MessageRouter event_transcript confirm");
-                            }
-                        }
-                    });
+                    if (AbstractDungeon.gridSelectScreen != null) {
+                        AbstractDungeon.actionManager.addToBottom(
+                            new com.megacrit.cardcrawl.actions.AbstractGameAction() {
+                                @Override public void update() {
+                                    if (AbstractDungeon.gridSelectScreen != null
+                                        && AbstractDungeon.gridSelectScreen.confirmButton != null) {
+                                        AbstractDungeon.gridSelectScreen.confirmButton.hb.clicked = true;
+                                        AbstractDungeon.gridSelectScreen.confirmButton.hb.clicked = true;
+                                        BaseMod.logger.info("MessageRouter event_transcript confirm");
+                                    }
+                                    isDone = true;
+                                }
+                            });
+                    }
                     break;
                 }
             }
