@@ -124,4 +124,19 @@ public class EventSyncPatches {
         AbstractDungeon.gridSelectScreen.confirmButton.hb.clicked = true;
         BaseMod.logger.info("EventSync clickConfirm");
     }
+
+    /**
+     * Hover-selects a card and clicks confirm — all in one synchronous call.
+     * Forces gridSelectScreen.update() to process the pipeline immediately.
+     */
+    public static void hoverSelectAndConfirm(String cardId) {
+        if (!hoverSelectCard(cardId)) return;
+        AbstractDungeon.gridSelectScreen.update();  // process hover+click → selectedCards
+        clickConfirm();
+        AbstractDungeon.gridSelectScreen.update();  // process confirm → callback
+        if (AbstractDungeon.getCurrRoom() != null && AbstractDungeon.getCurrRoom().event != null) {
+            AbstractDungeon.getCurrRoom().event.update();
+        }
+        BaseMod.logger.info("EventSync hoverSelectAndConfirm done: " + cardId);
+    }
 }

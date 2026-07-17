@@ -571,13 +571,10 @@ public class MessageRouter {
                     final boolean doConfirm = hasConfirm;
                     Gdx.app.postRunnable(new Runnable() {
                         @Override public void run() {
-                            EventSyncPatches.hoverSelectCard(targetCard);
                             if (doConfirm) {
-                                Gdx.app.postRunnable(new Runnable() {
-                                    @Override public void run() {
-                                        EventSyncPatches.clickConfirm();
-                                    }
-                                });
+                                EventSyncPatches.hoverSelectAndConfirm(targetCard);
+                            } else {
+                                EventSyncPatches.hoverSelectCard(targetCard);
                             }
                         }
                     });
@@ -592,13 +589,10 @@ public class MessageRouter {
             final boolean doConfirm = hasConfirm;
             Gdx.app.postRunnable(new Runnable() {
                 @Override public void run() {
-                    EventSyncPatches.hoverSelectCard(targetCard);
                     if (doConfirm) {
-                        Gdx.app.postRunnable(new Runnable() {
-                            @Override public void run() {
-                                EventSyncPatches.clickConfirm();
-                            }
-                        });
+                        EventSyncPatches.hoverSelectAndConfirm(targetCard);
+                    } else {
+                        EventSyncPatches.hoverSelectCard(targetCard);
                     }
                 }
             });
