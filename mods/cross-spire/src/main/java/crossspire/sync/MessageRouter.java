@@ -515,7 +515,7 @@ public class MessageRouter {
         }
     }
 
-    private void handleEventTranscript(String rawMessage) {
+    public void handleEventTranscript(String rawMessage) {
         JsonObject ts = Protocol.GSON.fromJson(rawMessage, JsonObject.class);
         String eventId = ts.has("event_id") ? ts.get("event_id").getAsString() : "";
         JsonArray actionsArr = ts.has("actions") ? ts.getAsJsonArray("actions") : new JsonArray();
@@ -529,7 +529,8 @@ public class MessageRouter {
             }
         }
 
-        if (CrossSpireMod.stageHost == null || !CrossSpireMod.stageHost.isStageHost()) return;
+        if (CrossSpireMod.stageHost == null) return;
+        if (!CrossSpireMod.stageHost.isStageHost() && !CrossSpireMod.isRoomHost()) return;
 
         BaseMod.logger.info("MessageRouter event_transcript replay: " + eventId + " actions=" + actionsArr.size());
         if (AbstractDungeon.getCurrRoom() == null || AbstractDungeon.getCurrRoom().event == null) {
@@ -565,7 +566,18 @@ public class MessageRouter {
                 m.setAccessible(true);
                 m.invoke(event, buttonEffectIdx);
                 if (!cardIds.isEmpty()) {
-                    EventSyncPatches.injectTranscriptCards(cardIds, hasConfirm);
+                    EventSyncPatches.clickPoolCards(cardIds);
+                }
+                if (hasConfirm) {
+                    Gdx.app.postRunnable(new Runnable() {
+                        @Override public void run() {
+                            Gdx.app.postRunnable(new Runnable() {
+                                @Override public void run() {
+                                    EventSyncPatches.clickConfirm();
+                                }
+                            });
+                        }
+                    });
                 }
                 BaseMod.logger.info("MessageRouter event_transcript buttonEffect: " + buttonEffectIdx
                     + " +cards=" + cardIds.size() + " +confirm=" + hasConfirm);
@@ -573,7 +585,14 @@ public class MessageRouter {
                 BaseMod.logger.error("MessageRouter event_transcript buttonEffect failed: " + e.getMessage());
             }
         } else if (!cardIds.isEmpty()) {
-            EventSyncPatches.injectTranscriptCards(cardIds, hasConfirm);
+            EventSyncPatches.clickPoolCards(cardIds);
+            if (hasConfirm) {
+                Gdx.app.postRunnable(new Runnable() {
+                    @Override public void run() {
+                        EventSyncPatches.clickConfirm();
+                    }
+                });
+            }
             BaseMod.logger.info("MessageRouter event_transcript standalone cards: "
                 + cardIds.size() + " confirm=" + hasConfirm);
         }

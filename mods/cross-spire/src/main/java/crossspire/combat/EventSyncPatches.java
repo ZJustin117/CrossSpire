@@ -86,30 +86,36 @@ public class EventSyncPatches {
     }
 
     /**
-     * Injects card selections and confirm click into the GridCardSelectScreen
-     * that was opened by buttonEffect. Called synchronously right after
-     * buttonEffect invocation in handleEventTranscript.
+     * Simulates a real player click on each target card in the GridCardSelectScreen.
+     * Finds cards in the screen's targetGroup (pool) by cardID, then sets hb.clicked.
+     * Game engine processes the click in its next update() call — same as real player input.
      */
-    public static void injectTranscriptCards(List<String> cardIds, boolean confirm) {
-        if (cardIds == null || cardIds.isEmpty() || AbstractDungeon.player == null) return;
+    public static void clickPoolCards(List<String> cardIds) {
+        if (cardIds == null || cardIds.isEmpty()) return;
         if (AbstractDungeon.gridSelectScreen == null) return;
+        if (AbstractDungeon.gridSelectScreen.targetGroup == null) return;
 
-        BaseMod.logger.info("EventSync injectCards: " + cardIds.size()
-            + " confirm=" + confirm);
-
+        int clicked = 0;
         for (String cid : cardIds) {
-            com.megacrit.cardcrawl.cards.AbstractCard real = null;
-            for (com.megacrit.cardcrawl.cards.AbstractCard c : AbstractDungeon.player.masterDeck.group) {
-                if (c.cardID.equals(cid)) { real = c; break; }
-            }
-            if (real != null) {
-                AbstractDungeon.gridSelectScreen.selectedCards.add(real);
+            for (com.megacrit.cardcrawl.cards.AbstractCard c : AbstractDungeon.gridSelectScreen.targetGroup.group) {
+                if (c.cardID.equals(cid)) {
+                    c.hb.clicked = true;
+                    clicked++;
+                    break;
+                }
             }
         }
+        BaseMod.logger.info("EventSync clickPoolCards: " + clicked + "/" + cardIds.size());
+    }
 
-        if (confirm && AbstractDungeon.gridSelectScreen.confirmButton != null) {
-            AbstractDungeon.gridSelectScreen.confirmButton.hb.clicked = true;
-            AbstractDungeon.gridSelectScreen.update();
-        }
+    /**
+     * Clicks the confirm button on the active GridCardSelectScreen.
+     * Should be called after the engine has processed card clicks (next frame).
+     */
+    public static void clickConfirm() {
+        if (AbstractDungeon.gridSelectScreen == null) return;
+        if (AbstractDungeon.gridSelectScreen.confirmButton == null) return;
+        AbstractDungeon.gridSelectScreen.confirmButton.hb.clicked = true;
+        BaseMod.logger.info("EventSync clickConfirm");
     }
 }

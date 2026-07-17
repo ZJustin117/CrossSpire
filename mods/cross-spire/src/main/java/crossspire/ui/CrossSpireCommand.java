@@ -3,6 +3,7 @@ package crossspire.ui;
 import basemod.BaseMod;
 import basemod.DevConsole;
 import basemod.devcommands.ConsoleCommand;
+import com.badlogic.gdx.Gdx;
 import com.megacrit.cardcrawl.cards.AbstractCard;
 import com.megacrit.cardcrawl.core.CardCrawlGame;
 import com.megacrit.cardcrawl.dungeons.AbstractDungeon;
@@ -12,6 +13,7 @@ import com.megacrit.cardcrawl.events.AbstractEvent;
 import com.megacrit.cardcrawl.screens.select.GridCardSelectScreen;
 import com.megacrit.cardcrawl.ui.buttons.GridSelectConfirmButton;
 import crossspire.combat.EventCapture;
+import crossspire.combat.EventSyncPatches;
 import crossspire.CrossSpireMod;
 import crossspire.network.EventMessageSender;
 import crossspire.network.Protocol;
@@ -52,6 +54,7 @@ public class CrossSpireCommand extends ConsoleCommand {
         else if ("eselect".equals(sub)) { cmdEventCardSelect(tokens, depth); }
         else if ("evote".equals(sub)) { cmdEventVote(tokens, depth); }
         else if ("gamestate".equals(sub)) { cmdGameState(); }
+        else if ("confirm".equals(sub)) { cmdConfirm(); }
         else { errorMsg(); }
     }
 
@@ -347,6 +350,7 @@ public class CrossSpireCommand extends ConsoleCommand {
         if (com.megacrit.cardcrawl.dungeons.AbstractDungeon.topLevelEffects != null) com.megacrit.cardcrawl.dungeons.AbstractDungeon.topLevelEffects.clear();
         ev.onEnterRoom();
         BaseMod.logger.info("CrossSpire cevent entered: " + ev.getClass().getSimpleName());
+        lastEventClass = ev.getClass().getName();
         broadcastEventInterface(ev);
         DevConsole.log("Entered event: " + key);
     }
@@ -404,7 +408,11 @@ public class CrossSpireCommand extends ConsoleCommand {
         EventCapture.appendButtonEffect(idx);
 
         String transcript = EventCapture.buildTranscript();
-        CrossSpireMod.send((String) transcript);
+        if (CrossSpireMod.isRoomHost() && CrossSpireMod.messageRouter != null) {
+            CrossSpireMod.messageRouter.handleEventTranscript(transcript);
+        } else {
+            CrossSpireMod.send((String) transcript);
+        }
         BaseMod.logger.info("eventsel sandbox transcript: " + eventShort + " option=" + idx);
         DevConsole.log("Event sandbox: option " + idx + " → transcript sent");
     }
@@ -430,7 +438,12 @@ public class CrossSpireCommand extends ConsoleCommand {
         EventCapture.appendConfirm();
 
         String transcript = EventCapture.buildTranscript();
-        CrossSpireMod.send((String) transcript);
+        if (CrossSpireMod.isRoomHost() && CrossSpireMod.messageRouter != null) {
+            CrossSpireMod.messageRouter.handleEventTranscript(transcript);
+            BaseMod.logger.info("eselect routed locally to messageRouter");
+        } else {
+            CrossSpireMod.send((String) transcript);
+        }
         BaseMod.logger.info("eselect full transcript: " + eventShort + " option=" + optionIdx + " cards=" + cardCount);
         DevConsole.log("Event select+cards: option " + optionIdx + " + " + cardCount + " cards → sent");
     }
@@ -529,8 +542,19 @@ public class CrossSpireCommand extends ConsoleCommand {
         BaseMod.logger.info("CrossSpire gamestate:\n" + output);
     }
 
+    private void cmdConfirm() {
+        Gdx.app.postRunnable(new Runnable() {
+            @Override public void run() {
+                EventSyncPatches.clickConfirm();
+                BaseMod.logger.info("crossspire confirm clicked");
+            }
+        });
+        DevConsole.log("Confirm sent (next frame)");
+    }
+
     @Override
     public void errorMsg() {
+        DevConsole.log("crossspire: host [port] | join <ip> [port] | disconnect | status | info | lobby | combat | confirm | gamestate | ready [char] | start [char] [seed] | play <card> [target] | queue | room <index> | snapshot | vote <player> | select <card> | cevent <name> | eventsel <index> | eselect <index> <card> | evote <index>");
         DevConsole.log("crossspire: host [port] | join <ip> [port] | disconnect | status | info | lobby | combat | ready [char] | start [char] [seed] | play <card> [target] | queue | room <index> | snapshot | vote <player> | select <card> | cevent <name> | eventsel <index> | eselect <card> | evote <index>");
     }
 }
