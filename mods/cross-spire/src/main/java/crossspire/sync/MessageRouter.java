@@ -565,17 +565,20 @@ public class MessageRouter {
                 java.lang.reflect.Method m = event.getClass().getDeclaredMethod("buttonEffect", int.class);
                 m.setAccessible(true);
                 m.invoke(event, buttonEffectIdx);
+
                 if (!cardIds.isEmpty()) {
-                    EventSyncPatches.clickPoolCards(cardIds);
-                }
-                if (hasConfirm) {
+                    final String targetCard = cardIds.get(0);
+                    final boolean doConfirm = hasConfirm;
                     Gdx.app.postRunnable(new Runnable() {
                         @Override public void run() {
-                            Gdx.app.postRunnable(new Runnable() {
-                                @Override public void run() {
-                                    EventSyncPatches.clickConfirm();
-                                }
-                            });
+                            EventSyncPatches.hoverSelectCard(targetCard);
+                            if (doConfirm) {
+                                Gdx.app.postRunnable(new Runnable() {
+                                    @Override public void run() {
+                                        EventSyncPatches.clickConfirm();
+                                    }
+                                });
+                            }
                         }
                     });
                 }
@@ -585,14 +588,20 @@ public class MessageRouter {
                 BaseMod.logger.error("MessageRouter event_transcript buttonEffect failed: " + e.getMessage());
             }
         } else if (!cardIds.isEmpty()) {
-            EventSyncPatches.clickPoolCards(cardIds);
-            if (hasConfirm) {
-                Gdx.app.postRunnable(new Runnable() {
-                    @Override public void run() {
-                        EventSyncPatches.clickConfirm();
+            final String targetCard = cardIds.get(0);
+            final boolean doConfirm = hasConfirm;
+            Gdx.app.postRunnable(new Runnable() {
+                @Override public void run() {
+                    EventSyncPatches.hoverSelectCard(targetCard);
+                    if (doConfirm) {
+                        Gdx.app.postRunnable(new Runnable() {
+                            @Override public void run() {
+                                EventSyncPatches.clickConfirm();
+                            }
+                        });
                     }
-                });
-            }
+                }
+            });
             BaseMod.logger.info("MessageRouter event_transcript standalone cards: "
                 + cardIds.size() + " confirm=" + hasConfirm);
         }

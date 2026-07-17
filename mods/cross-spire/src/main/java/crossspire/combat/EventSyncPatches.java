@@ -86,26 +86,32 @@ public class EventSyncPatches {
     }
 
     /**
-     * Simulates a real player click on each target card in the GridCardSelectScreen.
-     * Finds cards in the screen's targetGroup (pool) by cardID, then sets hb.clicked.
-     * Game engine processes the click in its next update() call — same as real player input.
+     * Selects a card by simulating a real player hover+click sequence.
+     * Sets hoveredCard (via reflection) AND card.hb.clicked = true.
+     * Engine processes this in its next updateCardPositionsAndHoverLogic().
      */
-    public static void clickPoolCards(List<String> cardIds) {
-        if (cardIds == null || cardIds.isEmpty()) return;
-        if (AbstractDungeon.gridSelectScreen == null) return;
-        if (AbstractDungeon.gridSelectScreen.targetGroup == null) return;
+    public static boolean hoverSelectCard(String cardId) {
+        if (AbstractDungeon.gridSelectScreen == null) return false;
+        if (AbstractDungeon.gridSelectScreen.targetGroup == null) return false;
 
-        int clicked = 0;
-        for (String cid : cardIds) {
-            for (com.megacrit.cardcrawl.cards.AbstractCard c : AbstractDungeon.gridSelectScreen.targetGroup.group) {
-                if (c.cardID.equals(cid)) {
+        for (com.megacrit.cardcrawl.cards.AbstractCard c : AbstractDungeon.gridSelectScreen.targetGroup.group) {
+            if (c.cardID.equals(cardId)) {
+                try {
+                    java.lang.reflect.Field hf = com.megacrit.cardcrawl.screens.select.GridCardSelectScreen.class
+                        .getDeclaredField("hoveredCard");
+                    hf.setAccessible(true);
+                    hf.set(AbstractDungeon.gridSelectScreen, c);
                     c.hb.clicked = true;
-                    clicked++;
-                    break;
+                    BaseMod.logger.info("EventSync hoverSelect: " + cardId);
+                    return true;
+                } catch (Exception e) {
+                    BaseMod.logger.error("EventSync hoverSelect failed: " + e.getMessage());
+                    return false;
                 }
             }
         }
-        BaseMod.logger.info("EventSync clickPoolCards: " + clicked + "/" + cardIds.size());
+        BaseMod.logger.info("EventSync hoverSelect: card " + cardId + " not in pool");
+        return false;
     }
 
     /**
