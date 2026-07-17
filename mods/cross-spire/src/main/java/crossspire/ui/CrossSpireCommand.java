@@ -13,7 +13,6 @@ import com.megacrit.cardcrawl.screens.select.GridCardSelectScreen;
 import com.megacrit.cardcrawl.ui.buttons.GridSelectConfirmButton;
 import crossspire.combat.EventCapture;
 import crossspire.CrossSpireMod;
-import crossspire.EventSuppression;
 import crossspire.network.EventMessageSender;
 import crossspire.network.Protocol;
 import crossspire.network.RoomPinSender;
@@ -393,74 +392,17 @@ public class CrossSpireCommand extends ConsoleCommand {
             return;
         }
 
-        try {
-            Class<?> cls = Class.forName(lastEventClass);
-            BaseMod.logger.info("eventsel sandbox class loaded: " + lastEventClass);
-            
-            AbstractEvent ev = null;
-            try {
-                ev = (AbstractEvent) cls.getDeclaredConstructor().newInstance();
-                try { ev.onEnterRoom(); } catch (Exception ignored) {}
-            } catch (Exception ce) {
-                java.io.StringWriter sw = new java.io.StringWriter();
-                ce.printStackTrace(new java.io.PrintWriter(sw));
-                BaseMod.logger.info("eventsel sandbox ctor skipped: " + ce.getClass().getSimpleName() 
-                    + "\n" + sw.toString().substring(0, Math.min(200, sw.toString().length())));
-            }
-            final AbstractEvent eventInstance = ev;
+        String eventShort = lastEventClass.contains(".") 
+            ? lastEventClass.substring(lastEventClass.lastIndexOf('.') + 1) 
+            : lastEventClass;
 
-            int savedHp = 0, savedBlock = 0;
-            if (AbstractDungeon.player != null) {
-                savedHp = AbstractDungeon.player.currentHealth;
-                savedBlock = AbstractDungeon.player.currentBlock;
-            }
+        EventCapture.startTranscript(eventShort);
+        EventCapture.appendButtonEffect(idx);
 
-            EventCapture.startTranscript(lastEventClass);
-            EventCapture.appendButtonEffect(idx);
-
-            if (eventInstance != null) {
-                EventSuppression.suppressEvents(() -> {
-                    try {
-                        java.lang.reflect.Method m = cls.getDeclaredMethod("buttonEffect", int.class);
-                        m.setAccessible(true);
-                        m.invoke(eventInstance, idx);
-                    } catch (java.lang.reflect.InvocationTargetException e) {
-                        Throwable cause = e.getCause();
-                        BaseMod.logger.error("eventsel sandbox buttonEffect failed: " 
-                            + cause.getClass().getSimpleName() + ": " + cause.getMessage());
-                    } catch (Exception e) {
-                        BaseMod.logger.error("eventsel sandbox method failed: " + e.getClass().getSimpleName() + ": " + e.getMessage());
-                    }
-                });
-            }
-
-            try {
-                if (AbstractDungeon.gridSelectScreen != null
-                    && AbstractDungeon.gridSelectScreen.selectedCards != null
-                    && !AbstractDungeon.gridSelectScreen.selectedCards.isEmpty()) {
-                    java.util.ArrayList<com.megacrit.cardcrawl.cards.AbstractCard> sel =
-                        AbstractDungeon.gridSelectScreen.selectedCards;
-                    String[] cardIds = new String[sel.size()];
-                    for (int i = 0; i < sel.size(); i++) cardIds[i] = sel.get(i).cardID;
-                    EventCapture.appendCardSelect(cardIds);
-                    EventCapture.appendConfirm();
-                    sel.clear();
-                }
-            } catch (Exception ignored) {}
-
-            if (AbstractDungeon.player != null) {
-                AbstractDungeon.player.currentHealth = savedHp;
-                AbstractDungeon.player.currentBlock = savedBlock;
-            }
-
-            String transcript = EventCapture.buildTranscript();
-            CrossSpireMod.send((String) transcript);
-            BaseMod.logger.info("eventsel sandbox transcript: " + lastEventClass);
-            DevConsole.log("Event sandbox: option " + idx + " → transcript sent");
-        } catch (Exception e) {
-            DevConsole.log("Sandbox failed: " + e.getMessage());
-            BaseMod.logger.error("eventsel sandbox: " + e.getClass().getSimpleName() + ": " + e.getMessage());
-        }
+        String transcript = EventCapture.buildTranscript();
+        CrossSpireMod.send((String) transcript);
+        BaseMod.logger.info("eventsel sandbox transcript: " + eventShort + " option=" + idx);
+        DevConsole.log("Event sandbox: option " + idx + " → transcript sent");
     }
 
     @Override
