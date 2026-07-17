@@ -130,13 +130,30 @@ public class EventSyncPatches {
      * Forces gridSelectScreen.update() to process the pipeline immediately.
      */
     public static void hoverSelectAndConfirm(String cardId) {
-        if (!hoverSelectCard(cardId)) return;
-        AbstractDungeon.gridSelectScreen.update();  // process hover+click → selectedCards
+        if (AbstractDungeon.gridSelectScreen == null) return;
+        if (AbstractDungeon.gridSelectScreen.targetGroup == null) return;
+
+        // Find real card by cardID in targetGroup
+        com.megacrit.cardcrawl.cards.AbstractCard target = null;
+        for (com.megacrit.cardcrawl.cards.AbstractCard c : AbstractDungeon.gridSelectScreen.targetGroup.group) {
+            if (c.cardID.equals(cardId)) { target = c; break; }
+        }
+        if (target == null) return;
+
+        // Bypass hover detection — directly add to selectedCards (engine equivalent)
+        AbstractDungeon.gridSelectScreen.selectedCards.add(target);
+        BaseMod.logger.info("EventSync direct select: " + cardId + " sel=" + AbstractDungeon.gridSelectScreen.selectedCards.size());
+
+        // Click confirm and process via update()
         clickConfirm();
-        AbstractDungeon.gridSelectScreen.update();  // process confirm → callback
+        BaseMod.logger.info("EventSync post-clickConfirm sel=" + (AbstractDungeon.gridSelectScreen.selectedCards != null ? AbstractDungeon.gridSelectScreen.selectedCards.size() : 0));
+        AbstractDungeon.gridSelectScreen.update();
+        BaseMod.logger.info("EventSync post-confirmUpdate sel=" + (AbstractDungeon.gridSelectScreen.selectedCards != null ? AbstractDungeon.gridSelectScreen.selectedCards.size() : 0));
+        AbstractDungeon.isScreenUp = false;
         if (AbstractDungeon.getCurrRoom() != null && AbstractDungeon.getCurrRoom().event != null) {
             AbstractDungeon.getCurrRoom().event.update();
         }
-        BaseMod.logger.info("EventSync hoverSelectAndConfirm done: " + cardId);
+        BaseMod.logger.info("EventSync post-eventUpdate sel=" 
+            + (AbstractDungeon.gridSelectScreen.selectedCards != null ? AbstractDungeon.gridSelectScreen.selectedCards.size() : 0));
     }
 }
