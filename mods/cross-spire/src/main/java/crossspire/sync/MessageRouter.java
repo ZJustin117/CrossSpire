@@ -8,6 +8,7 @@ import crossspire.CrossSpireMod;
 import crossspire.combat.CombatResultReplayer;
 import crossspire.combat.CentralQueueManager;
 import crossspire.combat.EventCapture;
+import crossspire.combat.EventSyncPatches;
 import crossspire.network.HeartbeatManager;
 import crossspire.network.PacketOperation;
 import crossspire.network.Protocol;
@@ -537,59 +538,44 @@ public class MessageRouter {
         }
 
         AbstractEvent event = AbstractDungeon.getCurrRoom().event;
+
+        int buttonEffectIdx = -1;
+        List<String> cardIds = new ArrayList<>();
+        boolean hasConfirm = false;
+
         for (int i = 0; i < actionsArr.size(); i++) {
             JsonObject action = actionsArr.get(i).getAsJsonObject();
             String actionType = action.has("type") ? action.get("type").getAsString() : "";
             switch (actionType) {
-                case "buttonEffect": {
-                    int idx = action.has("index") ? action.get("index").getAsInt() : 0;
-                    try {
-                        java.lang.reflect.Method m = event.getClass().getDeclaredMethod("buttonEffect", int.class);
-                        m.setAccessible(true);
-                        m.invoke(event, idx);
-                        BaseMod.logger.info("MessageRouter event_transcript buttonEffect: " + idx);
-                    } catch (Exception e) {
-                        BaseMod.logger.error("MessageRouter event_transcript buttonEffect failed: " + e.getMessage());
-                    }
+                case "buttonEffect":
+                    buttonEffectIdx = action.has("index") ? action.get("index").getAsInt() : 0;
                     break;
-                }
                 case "cardSelect": {
-                    final JsonArray cards = action.has("cards") ? action.getAsJsonArray("cards") : new JsonArray();
-                    final int cardCount = cards.size();
-                    if (AbstractDungeon.player != null) {
-                        final com.megacrit.cardcrawl.cards.CardGroup deck = AbstractDungeon.player.masterDeck;
-                        for (int j = 0; j < cardCount; j++) {
-                            final String cid = cards.get(j).getAsString();
-                            com.megacrit.cardcrawl.cards.AbstractCard real = null;
-                            for (com.megacrit.cardcrawl.cards.AbstractCard c : deck.group) {
-                                if (c.cardID.equals(cid)) { real = c; break; }
-                            }
-                            if (real != null && AbstractDungeon.gridSelectScreen != null) {
-                                AbstractDungeon.gridSelectScreen.selectedCards.add(real);
-                            }
-                        }
-                        BaseMod.logger.info("MessageRouter event_transcript cardSelect injected " + cardCount);
-                    }
+                    JsonArray cards = action.has("cards") ? action.getAsJsonArray("cards") : new JsonArray();
+                    for (int j = 0; j < cards.size(); j++) cardIds.add(cards.get(j).getAsString());
                     break;
                 }
-                case "confirm": {
-                    if (AbstractDungeon.gridSelectScreen != null) {
-                        AbstractDungeon.actionManager.addToBottom(
-                            new com.megacrit.cardcrawl.actions.AbstractGameAction() {
-                                @Override public void update() {
-                                    if (AbstractDungeon.gridSelectScreen != null
-                                        && AbstractDungeon.gridSelectScreen.confirmButton != null) {
-                                        AbstractDungeon.gridSelectScreen.confirmButton.hb.clicked = true;
-                                        AbstractDungeon.gridSelectScreen.confirmButton.hb.clicked = true;
-                                        BaseMod.logger.info("MessageRouter event_transcript confirm");
-                                    }
-                                    isDone = true;
-                                }
-                            });
-                    }
-                    break;
-                }
+                case "confirm": hasConfirm = true; break;
             }
+        }
+
+        if (buttonEffectIdx >= 0) {
+            try {
+                java.lang.reflect.Method m = event.getClass().getDeclaredMethod("buttonEffect", int.class);
+                m.setAccessible(true);
+                m.invoke(event, buttonEffectIdx);
+                if (!cardIds.isEmpty()) {
+                    EventSyncPatches.injectTranscriptCards(cardIds, hasConfirm);
+                }
+                BaseMod.logger.info("MessageRouter event_transcript buttonEffect: " + buttonEffectIdx
+                    + " +cards=" + cardIds.size() + " +confirm=" + hasConfirm);
+            } catch (Exception e) {
+                BaseMod.logger.error("MessageRouter event_transcript buttonEffect failed: " + e.getMessage());
+            }
+        } else if (!cardIds.isEmpty()) {
+            EventSyncPatches.injectTranscriptCards(cardIds, hasConfirm);
+            BaseMod.logger.info("MessageRouter event_transcript standalone cards: "
+                + cardIds.size() + " confirm=" + hasConfirm);
         }
     }
 

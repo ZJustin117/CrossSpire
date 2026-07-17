@@ -410,27 +410,29 @@ public class CrossSpireCommand extends ConsoleCommand {
     }
 
     private void cmdEventCardSelect(String[] tokens, int depth) {
-        if (tokens.length < depth + 2) {
-            DevConsole.log("Usage: crossspire eselect <card_id> [card_id2...]");
+        if (tokens.length < depth + 3) {
+            DevConsole.log("Usage: crossspire eselect <option_index> <card_id> [card_id2...]");
             return;
         }
+        int optionIdx = Integer.parseInt(tokens[depth + 1]);
 
         String eventShort = lastEventClass.contains(".") 
             ? lastEventClass.substring(lastEventClass.lastIndexOf('.') + 1) 
             : lastEventClass;
 
-        int cardCount = tokens.length - depth - 1;
+        int cardCount = tokens.length - depth - 2;
         String[] cardIds = new String[cardCount];
-        for (int i = 0; i < cardCount; i++) cardIds[i] = tokens[depth + 1 + i];
+        for (int i = 0; i < cardCount; i++) cardIds[i] = tokens[depth + 2 + i];
 
         EventCapture.startTranscript(eventShort);
+        EventCapture.appendButtonEffect(optionIdx);
         EventCapture.appendCardSelect(cardIds);
         EventCapture.appendConfirm();
 
         String transcript = EventCapture.buildTranscript();
         CrossSpireMod.send((String) transcript);
-        BaseMod.logger.info("eselect card transcript: " + eventShort + " cards=" + cardCount);
-        DevConsole.log("Card select transcript: " + cardCount + " cards → sent");
+        BaseMod.logger.info("eselect full transcript: " + eventShort + " option=" + optionIdx + " cards=" + cardCount);
+        DevConsole.log("Event select+cards: option " + optionIdx + " + " + cardCount + " cards → sent");
     }
 
     private void cmdEventVote(String[] tokens, int depth) {

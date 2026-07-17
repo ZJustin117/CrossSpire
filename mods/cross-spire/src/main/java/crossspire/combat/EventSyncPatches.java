@@ -3,11 +3,13 @@ package crossspire.combat;
 import basemod.BaseMod;
 import com.evacipated.cardcrawl.modthespire.lib.SpirePatch;
 import com.evacipated.cardcrawl.modthespire.lib.SpirePostfixPatch;
+import com.megacrit.cardcrawl.dungeons.AbstractDungeon;
 import com.megacrit.cardcrawl.events.AbstractEvent;
 import crossspire.CrossSpireMod;
 import crossspire.network.EventMessageSender;
 import crossspire.network.Protocol;
 import java.lang.reflect.Field;
+import java.util.List;
 
 public class EventSyncPatches {
 
@@ -80,6 +82,34 @@ public class EventSyncPatches {
             String eventId = __instance.getClass().getSimpleName();
             String result = EventMessageSender.buildEventResult(eventId, 0, 0);
             CrossSpireMod.send((String) result);
+        }
+    }
+
+    /**
+     * Injects card selections and confirm click into the GridCardSelectScreen
+     * that was opened by buttonEffect. Called synchronously right after
+     * buttonEffect invocation in handleEventTranscript.
+     */
+    public static void injectTranscriptCards(List<String> cardIds, boolean confirm) {
+        if (cardIds == null || cardIds.isEmpty() || AbstractDungeon.player == null) return;
+        if (AbstractDungeon.gridSelectScreen == null) return;
+
+        BaseMod.logger.info("EventSync injectCards: " + cardIds.size()
+            + " confirm=" + confirm);
+
+        for (String cid : cardIds) {
+            com.megacrit.cardcrawl.cards.AbstractCard real = null;
+            for (com.megacrit.cardcrawl.cards.AbstractCard c : AbstractDungeon.player.masterDeck.group) {
+                if (c.cardID.equals(cid)) { real = c; break; }
+            }
+            if (real != null) {
+                AbstractDungeon.gridSelectScreen.selectedCards.add(real);
+            }
+        }
+
+        if (confirm && AbstractDungeon.gridSelectScreen.confirmButton != null) {
+            AbstractDungeon.gridSelectScreen.confirmButton.hb.clicked = true;
+            AbstractDungeon.gridSelectScreen.update();
         }
     }
 }
