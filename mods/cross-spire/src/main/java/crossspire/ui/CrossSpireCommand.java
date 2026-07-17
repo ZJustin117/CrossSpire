@@ -49,6 +49,7 @@ public class CrossSpireCommand extends ConsoleCommand {
         else if ("select".equals(sub)) { cmdInteractSelect(tokens, depth); }
         else if ("cevent".equals(sub)) { cmdCrossEvent(tokens, depth); }
         else if ("eventsel".equals(sub)) { cmdEventSelect(tokens, depth); }
+        else if ("eselect".equals(sub)) { cmdEventCardSelect(tokens, depth); }
         else { errorMsg(); }
     }
 
@@ -404,6 +405,30 @@ public class CrossSpireCommand extends ConsoleCommand {
         CrossSpireMod.send((String) transcript);
         BaseMod.logger.info("eventsel sandbox transcript: " + eventShort + " option=" + idx);
         DevConsole.log("Event sandbox: option " + idx + " → transcript sent");
+    }
+
+    private void cmdEventCardSelect(String[] tokens, int depth) {
+        if (tokens.length < depth + 2) {
+            DevConsole.log("Usage: crossspire eselect <card_id> [card_id2...]");
+            return;
+        }
+
+        String eventShort = lastEventClass.contains(".") 
+            ? lastEventClass.substring(lastEventClass.lastIndexOf('.') + 1) 
+            : lastEventClass;
+
+        int cardCount = tokens.length - depth - 1;
+        String[] cardIds = new String[cardCount];
+        for (int i = 0; i < cardCount; i++) cardIds[i] = tokens[depth + 1 + i];
+
+        EventCapture.startTranscript(eventShort);
+        EventCapture.appendCardSelect(cardIds);
+        EventCapture.appendConfirm();
+
+        String transcript = EventCapture.buildTranscript();
+        CrossSpireMod.send((String) transcript);
+        BaseMod.logger.info("eselect card transcript: " + eventShort + " cards=" + cardCount);
+        DevConsole.log("Card select transcript: " + cardCount + " cards → sent");
     }
 
     @Override

@@ -551,25 +551,35 @@ public class MessageRouter {
                     break;
                 }
                 case "cardSelect": {
-                    if (AbstractDungeon.gridSelectScreen != null) {
-                        JsonArray cards = action.has("cards") ? action.getAsJsonArray("cards") : new JsonArray();
-                        for (int j = 0; j < cards.size(); j++) {
-                            String cid = cards.get(j).getAsString();
-                            com.megacrit.cardcrawl.cards.AbstractCard stub = new crossspire.combat.CardStub(cid, 1,
-                                com.megacrit.cardcrawl.cards.AbstractCard.CardType.ATTACK,
-                                com.megacrit.cardcrawl.cards.AbstractCard.CardRarity.BASIC,
-                                com.megacrit.cardcrawl.cards.AbstractCard.CardTarget.ENEMY);
-                            AbstractDungeon.gridSelectScreen.selectedCards.add(stub);
+                    final JsonArray cards = action.has("cards") ? action.getAsJsonArray("cards") : new JsonArray();
+                    final int cardCount = cards.size();
+                    Gdx.app.postRunnable(new Runnable() {
+                        @Override public void run() {
+                            if (AbstractDungeon.gridSelectScreen != null) {
+                                for (int j = 0; j < cardCount; j++) {
+                                    String cid = cards.get(j).getAsString();
+                                    com.megacrit.cardcrawl.cards.AbstractCard stub = new crossspire.combat.CardStub(cid, 1,
+                                        com.megacrit.cardcrawl.cards.AbstractCard.CardType.ATTACK,
+                                        com.megacrit.cardcrawl.cards.AbstractCard.CardRarity.BASIC,
+                                        com.megacrit.cardcrawl.cards.AbstractCard.CardTarget.ENEMY);
+                                    AbstractDungeon.gridSelectScreen.selectedCards.add(stub);
+                                }
+                                BaseMod.logger.info("MessageRouter event_transcript cardSelect injected " + cardCount);
+                            }
                         }
-                    }
+                    });
                     break;
                 }
                 case "confirm": {
-                    if (AbstractDungeon.gridSelectScreen != null
-                        && AbstractDungeon.gridSelectScreen.confirmButton != null) {
-                        AbstractDungeon.gridSelectScreen.confirmButton.hb.clicked = true;
-                        BaseMod.logger.info("MessageRouter event_transcript confirm");
-                    }
+                    Gdx.app.postRunnable(new Runnable() {
+                        @Override public void run() {
+                            if (AbstractDungeon.gridSelectScreen != null
+                                && AbstractDungeon.gridSelectScreen.confirmButton != null) {
+                                AbstractDungeon.gridSelectScreen.confirmButton.hb.clicked = true;
+                                BaseMod.logger.info("MessageRouter event_transcript confirm");
+                            }
+                        }
+                    });
                     break;
                 }
             }
