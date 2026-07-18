@@ -20,7 +20,7 @@ CrossSpire 是一个开源的杀戮尖塔1（Slay the Spire 1）多人联机 Mod
 - **跨游戏预留** — 架构从协议层为塔2（C#/Godot）→塔1（Java/LibGDX）互联预留空间
 - **开源** — 对标闭源的 Together in Spire 的全栈开源替代
 
-核心架构决策（详见 `ARCHITECTURE.md`）：引用模型（Reference<T>）封装执行权和网络路由；星型拓扑（房主路由 O(n) 连接）；房主中央队列编排；诱导重放实现跨 Mod 被动效果触发。
+核心架构决策（详见 `ARCHITECTURE.md`）：引用模型（Reference<T>）封装执行权和网络路由；星型拓扑（房主路由 O(n) 连接）；房主中央队列与**战斗阶段**对齐；诱导重放 = 权威状态写入 + **仅逻辑所有者（施加者优先）** 的被动自发执行，禁止全员全量 hook 重算。
 
 ## 用户故事
 
@@ -76,13 +76,21 @@ GIVEN 队列头部是 A 的 Strike_R（owner_id = A）
 WHEN  房主调度该项
 THEN  房主 → A: invoke 标准包
       A 本地 REAL 模式执行 Strike_R：触发钩子、计算伤害、渲染动画
-      A → 房主: invoke_result（含 effects + operation_sequence）
-      房主 → 全员: combat_result 标准包
-      非发送者诱导重放：事件步骤触发本地钩子，效果步骤 suppressEvents 写数值 + VFX
+      A → 房主: invoke_result（含 effects + operation_sequence；apply_power 含 logic_owner_id）
+      房主 → 全员: combat_result（executor_id = A，不得改写为房主）
+      非执行者：AUTHORITATIVE_APPLY（suppressEvents 写数值/VFX）
+                + LOCAL_OWNER_ONLY（仅 logic_owner_id==self 的被动可执行）
+      禁止无门控全量 useCard/BaseMod hook 重算所有本地补丁
 
 GIVEN 队列全部完成
 WHEN  房主广播 queue_empty
 THEN  所有玩家的"结束回合"按钮变为可用
+      该信号同时作为房主战斗阶段对齐的一部分
+
+GIVEN A 对怪物施加灾厄（logic_owner_id = A）
+WHEN  房主同步阶段后本地进入对应触发阶段
+THEN  仅 A 的灾厄逻辑自发执行；其他节点同名投影无效果
+      A 若判定击杀 → monster_mutation_proposal → 图主 commit → 全员只写权威状态
 ```
 
 ### US-3 Mod 共存 — 不同 Mod 的玩家在同一个房间
@@ -101,21 +109,24 @@ THEN  queue_submit 标准包携带 resource_hash = H1
       A 本地 REAL 模式执行，触发 A 的 BaseMod 钩子
       房主广播 combat_result：effects + operation_sequence 携带 card_id = "Strike_P"
 
-GIVEN B 收到 combat_result（非发送者）
-WHEN  B 进入 INDUCED 模式
-THEN  B 按 card_id 查找本地定义
-      本地无定义 → 不建立本地引用
-      使用 operation_sequence 走事件链（publishOnCardUse 等）
-      Stub 对象 use() 为 no-op，不重复产生效果
-      效果步骤 suppressEvents 写数值 + VFX
+GIVEN B 收到 combat_result（executor_id = A，B 非执行者）
+WHEN  B 处理该消息
+THEN  B 做 AUTHORITATIVE_APPLY：suppressEvents 写 effects 数值/VFX
+      B 不因“本地有兼容定义”而全量重放 useCard 触发所有 hook
+      仅当 B 拥有 logic_owner_id==B 的组件时，LOCAL_OWNER_ONLY 执行 B 自己的被动
 
-GIVEN A 的 Mod 遗物使用自定义 @SpirePatch 监听"打出攻击牌"
-WHEN  B 打出自己的攻击牌（B 是所有者，B 本地 REAL 执行）
-THEN  combat_result 广播到 A
-      A INDUCED 重放 play_card 步骤 → CardStub → useCard(stubCard)
-      → useCard() 上的 @SpirePatch 全量触发 → A 的自定义遗物被触发 ✓
-      → useCard() 内部 publishOnCardUse() 自然触发 → BaseMod 订阅者 ✓
-      遗物产生新效果 → 提交房主队列 → 广播全员
+GIVEN A 拥有 logic_owner 为自己的遗物/buff（含自定义 @SpirePatch 实现）
+WHEN  B 打出自己的攻击牌（B REAL 执行）且房主广播 combat_result
+THEN  A：AUTHORITATIVE_APPLY 写入 B 的权威效果
+      A：LOCAL_OWNER_ONLY 仅执行 A 的遗物/buff → 新 effects 提交房主（带 origin_owner_id）
+      B 及其他节点不执行 A 的遗物逻辑
+      全员对 A 的新 effects 仅做权威写入
+
+GIVEN 怪物上有 A 施加的灾厄（logic_owner_id = A），图主可以是 B
+WHEN  房主同步阶段后本地进入触发时机
+THEN  仅 A 自发执行灾厄；B/其他人同名投影无效果、不可触发
+      A → 图主 proposal → 图主 commit 死亡/HP → 全员状态一致
+      不存在图主扫描 attachment 再 invoke A
 
 GIVEN A 的 Mod v1.0 和 B 的 Mod v1.1 拥有同名卡牌 Strike_P，但 resource_hash 不同
 WHEN  B 尝试使用 A 的 Strike_P
@@ -271,7 +282,7 @@ THEN  B 从 L2 磁盘缓存直接加载，零网络传输
 
 GIVEN A 打出卡牌，卡牌上有特效动画
 WHEN  A 的 invoke_result 广播后
-THEN  B 的 INDUCED 重放自然产生 VFX（由本地引擎渲染）
+THEN  B 的 AUTHORITATIVE_APPLY 写入数值并播放 VFX（不执行 A 的 buff 逻辑）
       B 使用素材传递系统获取该卡牌的图素材用于 UI 显示
       骨骼动画同步通过 animation_sync 标准包传递（动画名、track、loop）
 ```
@@ -377,11 +388,14 @@ THEN  塔2 客户端实现相同的 StandardPacket 协议 + Reference<T> 抽象
 |----|------|---------|
 | FR-2.1 | 中央队列：房主接收 queue_submit → 排序 → 逐个调度 | US-2 |
 | FR-2.2 | 引用解引用：远程 invoke → owner 本地 REAL 执行 → invoke_result 回传 | US-2 |
-| FR-2.3 | combat_result 广播：房主将执行结果转发全员 | US-2 |
-| FR-2.4 | 诱导重放（INDUCED 模式）：非发送者走操作序列，事件步骤触发钩子，效果步骤 suppressEvents | US-2, US-3, US-7 |
+| FR-2.3 | combat_result 广播：房主转发全员；payload 保留 `executor_id`（不得改写为房主） | US-2 |
+| FR-2.4 | 诱导重放：AUTHORITATIVE_APPLY（suppressEvents 写数值）+ LOCAL_OWNER_ONLY（仅 `logic_owner_id==self`）；禁止无门控全量 hook 重算 | US-2, US-3, US-7 |
 | FR-2.5 | 回合结束：队列清空后房主广播 queue_empty，全员可结束回合 | US-2 |
-| FR-2.6 | 怪物系统：图主统一管理 → 意图广播 → 动作执行 → 结果同步 | US-2, US-4 |
+| FR-2.6 | 怪物核心状态：图主统一管理意图/AI/`takeTurn`/HP 死亡权威；附着 buff 逻辑归施加者自发执行 | US-2, US-4 |
 | FR-2.7 | 在线角色渲染：RemotePlayer overrides AbstractPlayer，BaseMod RenderSubscriber 渲染 | US-2 |
+| FR-2.8 | 战斗阶段：由**房主**同步（queue_empty / 聚合 end_turn；计划 combat_phase）；客户端跟本地引擎；不远程点名 buff | US-2 |
+| FR-2.9 | Buff 逻辑所有权：施加者优先；掉线按 content-hash → 宿主权威回退；非所有者投影无效果 | US-2, US-3 |
+| FR-2.10 | 怪物 mutation：非图主 proposal → 图主 revision 校验 → commit 广播；commit 不得再捕获为 proposal | US-2, US-3 |
 
 ### FR-3 Mod 兼容性
 
@@ -389,9 +403,9 @@ THEN  塔2 客户端实现相同的 StandardPacket 协议 + Reference<T> 抽象
 |----|------|---------|
 | FR-3.1 | 内容校验：resource_hash (SHA-256) 比对，决定本地引用 vs 远程引用 | US-3 |
 | FR-3.2 | 分层引用：hash 一致 → 本地引用；不一致/无定义 → 远程引用 + fallback | US-3 |
-| FR-3.3 | 交叉引用：远程遗物被本地事件触发 / 本地遗物被远程事件触发 | US-3 |
-| FR-3.4 | 诱导重放深层触发：no-op Stub → 调用真实游戏方法 → @SpirePatch + BaseMod 全量执行 | US-3, US-7 |
-| FR-3.5 | Fallback 效果类型：13 种（damage/block/power/heal/energy/draw/discard/exhaust/gold/relic/potion/lose_hp） | US-3 |
+| FR-3.3 | 交叉触发：本地所有权组件在收到 combat 事实后自发执行；远程逻辑仍经引用对所有者 REAL 解引用。禁止“人人诱导即触发” | US-3 |
+| FR-3.4 | 诱导重放门控：非 logic_owner 组件 no-op；不得用全量 useCard 链触发所有本地 @SpirePatch | US-3, US-7 |
+| FR-3.5 | Fallback 效果类型：既有 13 种 + 计划 `set_monster_hp` / `monster_death`；`apply_power` 携带 `logic_owner_id` | US-3 |
 
 ### FR-4 地图与事件
 
@@ -487,6 +501,9 @@ AND 该转发由 CrossSpire 外部基础设施负责
 - iOS 与主机端支持
 - 独立 Android APK 或 SlayTheAmethyst 之外的 Android STS 运行时适配
 - Desktop 端到端验证（保留标准 ModTheSpire/BaseMod 兼容目标，本阶段暂缓验证）
+- 图主扫描 attachment 远程 invoke buff 所有者
+- 非 logic_owner 节点有定义即执行被动（全量诱导重放）
+- 策反等 turn_directive（协议预留后续）
 
 ### 技术约束
 
@@ -505,9 +522,12 @@ AND 该转发由 CrossSpire 外部基础设施负责
 |------|---------------------|
 | 引用 / 本地引用 / 远程引用 / 空引用 | §2, §4 |
 | 解引用 / 引用退化 / 引用转移 | §2, §4 |
-| 标准包 (StandardPacket) | §2, §17 |
+| 标准包 (StandardPacket) | §2, §19 |
 | 房主 / 图主 | §2, §6 |
-| 诱导重放 / REAL 模式 / INDUCED 模式 | §2, §4 |
-| 内容校验 / resource_hash | §2, §11 |
-| 分层引用 / 交叉引用 | §11 |
-| Fallback 效果类型 | §11 |
+| 诱导重放 / REAL / INDUCED（AUTHORITATIVE_APPLY + LOCAL_OWNER_ONLY） | §2, §4, §7 |
+| 逻辑所有者 / ComponentAttachment | §2, §8 |
+| 战斗阶段（房主同步） | §2, §9 |
+| 怪物 mutation proposal/commit | §2, §10 |
+| 内容校验 / resource_hash | §2, §13 |
+| 分层引用 / 交叉引用 | §13 |
+| Fallback 效果类型 | §13 |

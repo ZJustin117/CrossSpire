@@ -10,7 +10,8 @@
 | P2 功能补全 | 🟡 6/10 完成 (T2.1-T2.3, T2.7d/e/f) | `89bbb1e` `447a216` `1e4070f` |
 | P3 清理稳定 | 🟡 3/8 完成 (T3.2-T3.4) | `0975c5a` |
 | 归档 | 🟡 1/6 完成 (A1) | — |
-| **总** | **15/29** | 51 tests pass |
+| P5 Buff 所有权契约 | 🟡 文档/schema 进行中；实现未开始 | — |
+| **总** | **15/29 + P5** | 51 tests pass |
 
 ## 目录
 
@@ -19,6 +20,7 @@
 3. [Phase 2: 核心功能补全](#phase-2-核心功能补全)
 4. [Phase 3: 清理与稳定](#phase-3-清理与稳定)
 5. [归档: 不影响运行的顺路修](#归档-不影响运行的顺路修)
+6. [Phase 5: Buff 所有权与诱导重放门控](#phase-5-buff-所有权与诱导重放门控)
 
 ---
 
@@ -750,3 +752,41 @@ JAR 已推送到两台设备 (localhost:15555, 25555)，JUnit 51/51 通过。
 手动验证流程: launcher 点 Play → 等 main_menu → batch 命令自动执行。
 
 > 历史说明：以上记录描述当时的 batch 文件注入方案。P4 将删除该方案，改由 SlayTheAmethyst Harness 调用标准 BaseMod console。当前维护者测试台仍使用 D1 `localhost:15555` 和 D2 `localhost:25555`，游戏连接依赖外部预置的 D2 `localhost:54321` → D1 `localhost:54321` 转发；CrossSpire 不维护该转发。Desktop 验证在 P4 暂缓。
+
+---
+
+## Phase 5: Buff 所有权与诱导重放门控
+
+> **Breaking contract 文档修订（2026-07-18）**。旧 FR-2.4/3.4「全量深层诱导」与「图主 INDUCED 自动跑怪物 power」已否决。以 `spec.md` FR-2.4/2.8–2.10/3.3–3.5 与 `ARCHITECTURE.md` §8–10 为准。
+
+### 契约摘要
+
+| 规则 | 定义 |
+|------|------|
+| Buff 逻辑所有者 | 施加者优先；掉线 content-hash → 宿主权威 |
+| 触发 | 房主同步阶段后，logic_owner **本地自发**执行；非 owner 投影无效果 |
+| 诱导重放 | AUTHORITATIVE_APPLY + LOCAL_OWNER_ONLY；禁止无门控全量 hook |
+| 怪物核心状态 | 图主单写；非图主 → `monster_mutation_proposal` → commit |
+| 阶段协调 | **房主**（非图主点名 invoke） |
+
+### 任务
+
+| Task | 内容 | 状态 |
+|------|------|------|
+| T5.0 | 文档 + `protocol-schema.json`：logic_owner、mutation、combat_phase 草案；ARCHITECTURE/spec/plan/task | 本轮 |
+| T5.1 | `LocalOwnerGate` + `CombatResultReplayer` 门控；删除无门控 publishOnCardUse 全量路径 | 未开始 |
+| T5.2 | `apply_power` 携带 `logic_owner_id`；ComponentAttachment 注册/投影 no-op | 未开始 |
+| T5.3 | 怪物 mutation proposal/commit 路径 + 图主 revision | 未开始 |
+| T5.4 | 房主阶段信号澄清；可选 `combat_phase` | 未开始 |
+| T5.5 | 验收：非 owner 无二次 combat_result；灾厄跨节点仅施加者执行 + 图主 commit | 未开始 |
+
+### 文件触点（实现时）
+
+- Schema: 已 additive 扩展（本轮 T5.0）
+- `CombatResultReplayer.java`, `TriggerRegistry.java`, `PowerStub.java`
+- `MessageRouter.java`, `CentralQueueManager.java`, `Protocol.java`, `PacketOperation.java`
+- 计划新类见 ARCHITECTURE §20
+
+### 与历史 T2.1 的关系
+
+T2.1 实现了 stub-only 与效果回收集，但验收仍写「全量 hook」。P5 **收紧**诱导语义；实现必须改 Replayer，不能只改文档。

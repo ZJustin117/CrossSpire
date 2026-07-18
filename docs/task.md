@@ -50,6 +50,17 @@
 - FullSnapshotSender → game state 序列化
 - RemoteEventDisplay → 非图主事件 UI
 
+## P5 Buff 所有权契约（2026-07-18）
+
+> Breaking：否决全量深层诱导与图主点名触发 buff。见 `plan.md` Phase 5、`ARCHITECTURE.md` §8–10、`spec.md` FR-2.4/2.8–2.10。
+
+- [x] T5.0 文档 + schema：`logic_owner_id`、mutation/phase 草案；ARCHITECTURE/spec/plan/task
+- [ ] T5.1 `LocalOwnerGate` + `CombatResultReplayer` local-owner-only
+- [ ] T5.2 `apply_power` / ComponentAttachment + 非 owner no-op
+- [ ] T5.3 怪物 mutation proposal/commit
+- [ ] T5.4 房主阶段同步 / 可选 `combat_phase`
+- [ ] T5.5 验收测试：无二次被动 combat_result；灾厄跨节点
+
 ## 归档 ✅
 
 - A1-A6 全部完成

@@ -12,18 +12,20 @@
 6. [图主权威模型](#图主权威模型)
     - [房间标注与共识](#房间标注与共识)
 7. [房主中央队列：战斗流程](#房主中央队列战斗流程)
-8. [怪物回合](#怪物回合)
-9. [事件处理](#事件处理)
-10. [所有者交互选择](#所有者交互选择)
-11. [Mod 兼容性设计：内容校验与分层引用](#mod-兼容性设计内容校验与分层引用)
-12. [BaseMod 事件抑制机制](#basemod-事件抑制机制)
-13. [素材传递系统](#素材传递系统)
-14. [在线角色：独立 AbstractPlayer 实例与渲染集成](#在线角色独立-abstractplayer-实例与渲染集成)
-15. [RNG 同步策略](#rng-同步策略)
-16. [网络拓扑](#网络拓扑)
-17. [协议消息定义](#协议消息定义)
-18. [项目结构](#项目结构)
-19. [未来塔2兼容性预留](#未来塔2兼容性预留)
+8. [Buff/Power 所有权与自发触发](#buffpower-所有权与自发触发)
+9. [房主战斗阶段同步](#房主战斗阶段同步)
+10. [怪物回合](#怪物回合)
+11. [事件处理](#事件处理)
+12. [所有者交互选择](#所有者交互选择)
+13. [Mod 兼容性设计：内容校验与分层引用](#mod-兼容性设计内容校验与分层引用)
+14. [BaseMod 事件抑制机制](#basemod-事件抑制机制)
+15. [素材传递系统](#素材传递系统)
+16. [在线角色：独立 AbstractPlayer 实例与渲染集成](#在线角色独立-abstractplayer-实例与渲染集成)
+17. [RNG 同步策略](#rng-同步策略)
+18. [网络拓扑](#网络拓扑)
+19. [协议消息定义](#协议消息定义)
+20. [项目结构](#项目结构)
+21. [未来塔2兼容性预留](#未来塔2兼容性预留)
 
 ---
 
@@ -72,7 +74,11 @@ Desktop 继续以标准 ModTheSpire + BaseMod API 为兼容目标，可以使用
 | 内容校验 | Content Validation | 同名类/方法不等同于相同类/方法。通过内容哈希比对判定两个实体是否真正一致。对同 Mod 不同版本隔离有关键意义 |
 | 房主 | Room Host | **网络路由角色**。维护到所有客户端的连接（星型拓扑，O(n) 连接）。所有客户端间消息经房主转发。房主维护中央待打出队列并负责调度。房主**不执行游戏逻辑**（除非房主本人恰好是该逻辑的所有者） |
 | 图主 | Stage Host | **游戏逻辑角色**。当前阶段（Act + Floor）地图/事件/怪物的**强所有者**。其他人只能对此建立远程引用（不允许本地引用）。由所有成员投票选定。图主可以就是房主，但两类角色可分离；房主负责把消息路由到位，图主负责在自己的机器上执行地图/怪物逻辑 |
-| 诱导重放 | Induced Replay | 非发送者收到 `combat_result` 时的本地处理模式。将 `operation_sequence` 中的步骤转化为 BaseMod 事件（`publishOnCardUse` 等），触发本地引擎自然感知该动作的发生。重放的 stub 动作本身不改变游戏状态（不扣第二次血），但由此触发的本地遗物/能力正常执行真实逻辑，产生新效果 |
+| 诱导重放 | Induced Replay | 非发送者收到 `combat_result` 时的本地处理：**(1) AUTHORITATIVE_APPLY** — `suppressEvents` 写入 effects 数值/VFX；**(2) LOCAL_OWNER_ONLY** — 仅触发 `logic_owner_id == self` 的 buff/遗物/组件。禁止无门控全量 `useCard`/BaseMod hook 重算。非所有者投影无逻辑效果 |
+| 逻辑所有者 | Logic Owner | Buff/Power 的执行权归属。**施加者优先**；施加者掉线后回退到 content-hash 可执行者，再回退宿主权威（怪物→图主，玩家自身→该玩家） |
+| 组件附着 | ComponentAttachment | 挂在 `player:<id>` 或 `monster:<instance_id>` 上的 buff/power 实例元数据：`instance_id`、`resource_id/hash`、`logic_owner_id`、`amount` |
+| 怪物 mutation | Monster Mutation | 非图主对怪物核心状态的修改只能发 `monster_mutation_proposal`；图主校验 revision 后 `monster_mutation_commit` 广播。图主是怪物 HP/死亡/生成的唯一写入者 |
+| 战斗阶段 | Combat Phase | 由**房主**广播的对齐信号（现有 `queue_empty` / 聚合 `player_end_turn`；计划 `combat_phase`）。客户端跟本地引擎进入对应阶段；**不**由房主/图主远程点名触发他人 buff |
 | 标准包 | Standard Packet | 本 Mod 中所有引用（卡牌/遗物/怪物/事件/玩家/素材）的网络传输统一封装。固定头部 `{packet_id, source, seq, timestamp, ref_id, owner_id, resource_hash?, operation}` + `operation` 特定的 `payload`。标准包经房主路由，引用系统据此完成解引用、诱导重放、状态同步等所有操作。控制消息（心跳、加入/离开、投票等）不属于标准包，保持独立格式 |
 
 ### 操作关系
@@ -178,53 +184,51 @@ ref.dereference(args):
 ┌─ REAL 模式（发送者/所有者机器上）
 │   真实调用 use() / AI() → 修改游戏状态 → 触发 BaseMod hooks + @SpirePatch 拦截器
 │   产出 combat_result（含 operation_sequence + effects）
+│   其中 apply_power 必须记录 logic_owner_id = 施加者
 │
-└─ INDUCED 模式（非发送者收到 combat_result 后）
-    取 operation_sequence 中的步骤，构造 no-op Stub 对象，调用真实游戏方法：
-    事件步骤: 不加 suppressEvents，直接调用真实方法（内部 Stub 核心逻辑为 no-op）
-      ├─ play_card → 构造 CardStub(use()=no-op) → AbstractPlayer.useCard(stubCard, target)
-      │     → useCard() 上的 @SpirePatch 全部触发
-      │     → useCard() 内部的 BaseMod.publishOnCardUse() 自然触发
-      │     → stubCard.use() 为 no-op，不重复产生卡牌效果
-      ├─ apply_power → 构造 PowerStub → AbstractPlayer.applyPower(stubPower)
-      │     → BaseMod.publishPostPowerApply() 自然触发
-      │     → 本地 monster/relic power 回调响应
-      └─ ...
-    效果步骤: suppressEvents 包裹，仅写数值 + VFX（不触发钩子）
-      ├─ damage → suppressEvents { creature.damage(info) } — 仅写数值 + VFX
-      └─ gain_block → suppressEvents { creature.addBlock(amount) } — 仅写数值 + VFX
+└─ INDUCED 模式（非发送者收到 combat_result 后）— 两阶段，禁止全量 hook 重算
+    1) AUTHORITATIVE_APPLY（suppressEvents）
+       ├─ damage / gain_block / heal / ... → 仅写数值 + VFX
+       └─ apply_power → 写入层数/图标投影 + ComponentAttachment 元数据
+          （非 logic_owner 节点上 Power 回调 no-op）
+    2) LOCAL_OWNER_ONLY
+       ├─ 仅 fire TriggerRegistry / 本地组件中 logic_owner_id == self 的项
+       ├─ 禁止无门控 publishOnCardUse / 全量 AbstractPlayer.useCard 深层链
+       └─ 本地被动若产生新 effects → 提交房主（带 origin_owner_id + hop_count）
 ```
 
 **核心逻辑**：
-- **事件步骤**不加 suppressEvents，以 no-op Stub 为参数调用**真实游戏方法**。Stub 自身空操作保证卡牌效果不重复，但方法体上的 `@SpirePatch` 拦截器和内部的 BaseMod 事件链全部正常触发，本地引擎完整"感知"动作发生
-- **效果步骤**用 suppressEvents 包裹，仅写入数值和 VFX，不触发钩子——效果数值已由所有者计算
-- `suppressEvents` 使用 `AtomicInteger` 计数器式设计，天然支持嵌套调用（如怪物 power 回调内部调用 `damage()` 在抑制计数 > 0 时自动跳过钩子）
+- **效果步骤**用 suppressEvents 包裹，仅写入数值和 VFX——数值已由 REAL 执行者计算
+- **被动步骤**不是“人人重放即触发”，而是 **local-owner-only**：只有逻辑所有者在本机自发执行自己的 buff/遗物
+- 非所有者节点上的同名 buff 投影：**可显示、不可被触发、无逻辑效果**
+- `suppressEvents` 使用 `AtomicInteger` 计数器，支持嵌套
+- induced 副作用必须带 `origin_owner_id` 与 `hop_count`；超限丢弃，防止反馈环
 
-### 诱导重放中的 Stub 对象
+### 诱导重放中的 Stub / 投影对象
 
-INDUCED 模式下，从 protocol 数据即时生成轻量 no-op stub 对象，以其实例为参数调用真实游戏方法：
+INDUCED 的 AUTHORITATIVE_APPLY 阶段可使用轻量 stub 仅用于**状态投影**，不用于触发全量事件链：
 
 ```java
-// CardStub — 含 metadata，use() 为 no-op
-// 从 protocol 的 card_id + resource_registry 素材清单即时构建
+// CardStub — metadata only；不得作为“全量 hook 触发器”
 class CardStub extends AbstractCard {
-    String cardID;      // 从 combat_result.card_id 来
-    CardType type;      // 从 resource_registry 素材清单查
+    String cardID;
+    CardType type;
     CardRarity rarity;
     int cost;
     @Override
-    void use(AbstractPlayer p, AbstractMonster m) {
-        // no-op — 不重复产生卡牌效果
-    }
+    void use(AbstractPlayer p, AbstractMonster m) { /* no-op */ }
 }
 
+// PowerStub — 非 logic_owner 时回调必须 no-op
 class PowerStub extends AbstractPower {
-    String powerID;     // 从 combat_result.operation_sequence 来
+    String powerID;
+    String logicOwnerId;
     int amount;
+    // atStartOfTurn / onAttacked / ... → 若 localPlayerId != logicOwnerId 则 return
 }
 ```
 
-Stub 对象是瞬态的：收到 `combat_result` 时构建 → 作为参数传入真实方法调用链 → 方法体上的 @SpirePatch 和内部事件链触发 → 销毁。不需要任何预言能力，因为是响应式生成。
+Stub/投影是瞬态或附着镜像：收到 `combat_result` 时更新状态 → **仅 local owner 组件**可产生新 proposal/effects → 销毁或保留为显示层。
 
 ### 房主即所有者时的短路路径
 
@@ -530,54 +534,43 @@ interface QueueEntry {
      → 房主 → 全员: combat_result(effects)
 ```
 
-### 诱导重放
+### 诱导重放（local-owner-only）
 
-房主广播 `combat_result` 后，**非发送者**（sender_id ≠ 自己）在该消息到达时执行诱导重放：
+房主广播 `combat_result` 后，接收方按 `executor_id`（原始 REAL 执行者，**不得**被房主改写成房主 ID）分流：
 
 ```
-房主 → 全员: combat_result { sender_id: A, operation_sequence: [...], effects: [...] }
+房主 → 全员: combat_result {
+  executor_id: A,
+  operation_sequence: [...],
+  effects: [...]   // apply_power 含 logic_owner_id
+}
 
-接收方处理（B, C, 房主自己...）:
+接收方:
 
-  发送者自己（sender_id == 自己）:
-    → 已通过 REAL 模式真实执行过
-    → 跳过诱导重放，仅做 UI 更新
+  executor_id == 自己:
+    → REAL 已执行 → 跳过 apply，仅 UI/队列状态
 
-  非发送者（sender_id != 自己）:
-    → 进入 INDUCED 模式，遍历 operation_sequence:
+  executor_id != 自己:
+    1) AUTHORITATIVE_APPLY (suppressEvents)
+       → 写 damage/block/heal/… 与 power 层数投影
+       → 登记 ComponentAttachment（含 logic_owner_id）
+       → 不触发非本地所有权 buff 回调
 
-    事件步骤（不加 suppressEvents）:
-      1. play_card → 构造 CardStub(use()=no-op)
-         → AbstractPlayer.useCard(stubCard, target)
-         → useCard() 上的 @SpirePatch 拦截器全部触发
-         → useCard() 内部 BaseMod.publishOnCardUse() 自然触发
-         → 本地 monster power / relic 回调响应 → 产生新效果
-
-      2. apply_power → 构造 PowerStub
-         → AbstractPlayer.applyPower(stubPower)
-         → BaseMod.publishPostPowerApply() 自然触发
-
-      ...
-
-    效果步骤（suppressEvents 包裹）:
-      3. suppressEvents { creature.damage(info) }
-         → 仅写数值 + VFX，不触发钩子
-
-      4. suppressEvents { creature.addBlock(amount) }
-         → 仅写数值 + VFX，不触发钩子
-
-    → 若诱导重放产生新效果 → 收集并提交给房主（插入中央队列尾部）
+    2) LOCAL_OWNER_ONLY
+       → 仅执行 logic_owner_id == self 的遗物/buff/注册组件
+       → 禁止无门控全量 useCard / publishOnCardUse 让所有本地 patch 再算一遍
+       → 若本地被动改自己的玩家状态 → 本地权威写 + 广播
+       → 若本地被动改怪物 → monster_mutation_proposal → 图主（经房主）
+       → 新 effects 带 origin_owner_id + hop_count，提交房主队列尾部
 ```
 
-**深层空函数调用的关键规则**：
-- 事件步骤**不加 suppressEvents** — 直接调用真实游戏方法，让 @SpirePatch 拦截器和 BaseMod 事件链全量执行
-- 事件步骤产生的副作用（如怪物 power 回调导致对玩家的 damage）走正常方法调用路径，不被意外抑制
-- 效果步骤用 suppressEvents 包裹 — 禁止重复改变游戏状态
-- `suppressEvents` 的 `AtomicInteger` 计数器天然支持嵌套：若怪物 power 回调内部调用 `damage()` 且此时 suppressEvents 计数值 > 0，则自动跳过该 damage 触发的钩子
+**关键禁令**：
+- 不存在“图主/房主扫描 attachment 再远程 invoke 灾厄所有者”
+- 不存在“有兼容定义的节点都可跑该 buff”
+- 非 `logic_owner_id` 节点上同名 power：**无效果、不可被触发**
+- commit/权威 apply 的写入不得再次被捕获为 proposal
 
-**诱导重放实现了被动效果的自动传递**：每个人的本地引擎都走一遍完整的方法调用链，无论效果使用 BaseMod 标准钩子、自定义接口还是 @SpirePatch 深层拦截，只要它注册在本地引擎中就能被触发。
-
-诱导重放产出的新效果进入房主中央队列尾部，保证顺序正确且不打断当前队列执行。
+诱导重放产出的**本地所有者**新效果进入房主中央队列尾部，保证顺序；怪物核心变更必须等图主 commit。
 
 ### 玩家视角
 
@@ -593,67 +586,131 @@ interface QueueEntry {
 - 执行中的项高亮
 - 自己的项排队时可以看自己在第几个
 
+## Buff/Power 所有权与自发触发
+
+### 所有权规则
+
+| 规则 | 定义 |
+|------|------|
+| 默认 | `logic_owner_id = 施加者`（`apply_power` 时写入） |
+| 掉线回退 | content-hash 可本地执行者 → 宿主权威（怪物 host→图主；玩家 host→该玩家） |
+| 投影 | 非 logic_owner 节点可渲染层数/图标；**回调 no-op，不可被触发** |
+| 执行 | 房主阶段/combat 事实对齐后，**仅 logic_owner 在本地阶段自发执行** |
+
+不存在图主扫描 attachment 再 `invoke` 所有者的调度路径。
+
+### 数据模型
+
+```
+ComponentAttachment {
+  instance_id
+  resource_id / resource_hash
+  logic_owner_id          // 施加者优先
+  host_entity_id          // player:<id> | monster:<instance_id>
+  amount / power_id
+}
+```
+
+### 触发路径
+
+```
+房主广播阶段或 combat_result 事实
+        ↓
+各客户端本地进入对应 STS 阶段 / 收到事实
+        ↓
+仅 logic_owner_id == self 的 attachment 在本地 hook 中自发执行
+        ↓
+  改自己 → 玩家权威写入 + player_state / effects
+  改怪物 → monster_mutation_proposal → 图主 commit → 全员 AUTHORITATIVE_APPLY
+```
+
+### 灾厄示例
+
+```
+1. A 对怪物 M 施加灾厄 → effects.apply_power { logic_owner_id: A, host: monster:M }
+2. 房主同步阶段（如 queue_empty + 全员 end_turn 对齐 → 本地进入 pre_monster_turn）
+3. 仅 A 机器上灾厄逻辑自发执行；B/C/图主上同名投影无效果
+4. A 判定层数 >= HP → proposal { kill / set_monster_hp }
+5. 图主 apply 死亡生命周期 → commit { dead: true, revision++ }
+6. 全员只写 commit，不再跑灾厄逻辑
+```
+
+### 与诱导重放的关系
+
+- `combat_result` 提供**事实**与权威数值，不是“在每个客户端重算所有被动”的许可
+- 本地 owner-only 被动是跨 Mod 兼容的正确路径：只要求施加者安装定义
+- hop_count / origin_owner_id 防止 induced 副作用环
+
+## 房主战斗阶段同步
+
+**房主**是战斗阶段对齐的唯一协调者（图主不负责点名 buff）。
+
+| 信号 | 谁发 | 本地后果 |
+|------|------|----------|
+| `combat_result` | 房主广播 | AUTHORITATIVE_APPLY + local-owner-only 被动 |
+| `queue_empty` | 房主 | 允许结束回合；阶段门控 |
+| `player_end_turn` 聚合 | 玩家→房主，房主协调 | 对齐进入怪物回合侧本地阶段 |
+| `combat_phase`（计划） | 房主 | 显式枚举：`player_turn` / `resolving_queue` / `queue_empty` / `pre_monster_turn` / `monster_turn` / `post_monster_turn` |
+
+客户端在收到房主阶段信号后**跟本地引擎**推进；buff 在本地时机自发，不由房主远程 invoke。
+
 ## 怪物回合
 
-怪物由图主持有（所有者 = 图主），回合分三个阶段：
+怪物**核心状态**（HP/格挡/死亡/生成/AI 意图与 `takeTurn`）由图主持有。附着在怪物上的 **buff 逻辑**仍归施加者（见上一节）。
+
+回合分三个阶段：
 
 ### 阶段一：意图确定（回合开始时，玩家回合之前）
 
 ```
 1. 图主用本地 RNG 确定所有未死亡怪物的意图
 2. 图主 → 房主: monster_intent（全部怪物意图快照）
-3. 房主广播全员 → 渲染意图图标
+3. 房主广播全员 → 渲染意图图标（禁止客户端 createIntent 重算 AI）
 4. 玩家据此规划出牌、评估威胁
 ```
 
 ### 阶段二：玩家回合
 
-玩家提交卡牌到房主中央队列，房主调度执行（参见"房主中央队列"章节）。
+玩家提交卡牌到房主中央队列，房主调度执行（参见"房主中央队列"章节）。期间 local-owner buff 可响应 `combat_result` 事实。
 
 ### 阶段三：怪物动作执行（玩家回合结束后）
 
 ```
-1. 图主遍历所有未死亡怪物，对每个怪物解引用（始终本地，图主有怪物完整定义）
-2. 怪物执行动作（AI 逻辑，触发图主本地钩子）
-3. 收集效果结果 → 图主 → 房主: combat_result
-4. 房主转发 combat_result → 全员同步:
-   - 有该怪物定义者 → 操作重放 + suppressEvents
-   - 无该怪物定义者 → fallback 数值渲染
-5. 若怪物动作导致意图变更 → 图主立即广播 monster_intent（增量更新）
-6. 所有怪物动作完成后，回合结束
+1. 房主阶段对齐后，图主遍历未死亡怪物，本地执行 takeTurn / AI
+2. 收集图主侧权威效果 → 图主 → 房主: combat_result
+3. 房主转发 → 全员 AUTHORITATIVE_APPLY（suppressEvents 写数值）
+4. 若意图变更 → 图主经房主广播 monster_intent
+5. 各端 local-owner buff 若在该阶段有自发逻辑 → 各自执行；改怪物走 mutation
 ```
 
-怪物动作由图主解引用 → 始终本地执行，无网络往返。图主和房主分离时需经过一次转发。
+怪物 **AI 动作**由图主本地执行。图主和房主分离时消息经房主转发一次。
 
 ### 实现：HP 增量法（绕过 takeTurn 抽象方法限制）
 
-`AbstractMonster.takeTurn()` 为抽象方法，MTS 无法注入。采用 `@SpirePatch` 钩子链实现效果捕获：
+`AbstractMonster.takeTurn()` 为抽象方法，MTS 无法注入。采用 `@SpirePatch` 钩子链捕获图主侧净效果（实现细节可演进为完整 operation_sequence）：
 
 ```
-BeforeTurn: @SpirePostfixPatch AbstractMonster.applyStartOfTurnPowers()
-  → 记录 AbstractDungeon.player.currentHealth + currentBlock
-
-AfterMonsterTurns: @SpirePostfixPatch AbstractPlayer.applyStartOfTurnPowers()
-  → 计算 HP delta = preTurnHp - currentHealth
-  → 计算 block delta = currentBlock - preTurnBlock
-  → 广播 combat_result(damage=delta, gain_block=blockDiff)
+BeforeTurn: 采样玩家 HP/Block
+AfterMonsterTurns: 差值 → combat_result(damage/gain_block 等)
 ```
 
-此方法在怪物回合前后采样玩家 HP/Block，差值即为怪物造成的净效果。
+### 怪物状态 mutation（提案/提交）
 
-### 怪物被动效果与远程玩家动作
-
-怪物身上的 power/relic 可能响应玩家打牌等事件（如"玩家打出攻击牌时怪物回2血"）。在图主机器上，这些效果通过 INDUCED 重放的深层空函数调用触发：
+非图主不得直接把本地怪物投影上的修改当作最终状态广播。
 
 ```
-玩家 A 打牌 → REAL 模式执行 → combat_result 广播
-图主收到 → INDUCED 模式 → useCard(stubCard, target)
-  → useCard() 上的 @SpirePatch + 内部 publishOnCardUse 触发
-  → 怪物 power 回调执行 → 产生效果（如回血）
-  → 新效果提交房主 → 广播全员
+logic_owner 本地执行 buff/卡牌副作用
+  → 捕获对 monster_instance_id 的语义修改 + 可选 before/after
+  → monster_mutation_proposal { base_revision, effects, transaction_id }
+  → 房主路由 → 图主
+  → 图主 CAS revision → apply → 死亡/分裂等生命周期
+  → monster_mutation_commit { commit_revision, state }
+  → 房主广播 → 全员投影覆盖
 ```
 
-注意事件步骤**不加 suppressEvents**，否则怪物 power 回调产生的效果会被意外抑制。`suppressEvents` 的计数器式设计确保嵌套调用中仅效果步骤自身被抑制。
+过期 `base_revision` → reject + 最新快照，不得在旧状态上继续算。
+
+**后续（不阻塞本契约）**：策反等需 `turn_directive`（改 takeTurn 目标），不单靠状态 mutation。
 
 ## 事件处理
 
@@ -800,7 +857,7 @@ host 收到 transcript → 聚合（类似 room_pin）：
 | | 战斗卡片 | 事件 |
 |---|---------|------|
 | 所有者 | 卡牌所有者 = 执行者 | 图主 = 最终执行者 |
-| 非所有者做什么 | INDUCED 重放（stub 触发钩子 + suppressEvents 写数值） | 沙盒执行（snapshot/restore + 捕获 transcript） |
+| 非所有者做什么 | AUTHORITATIVE_APPLY + LOCAL_OWNER_ONLY（非 owner buff 无效果） | 沙盒执行（snapshot/restore + 捕获 transcript） |
 | 传输内容 | `combat_result { effects, operation_sequence }` | `event_transcript { actions[] }` |
 | 结果同步 | effects 直接生效 | 图主重播 → effects 走现有管道 |
 
@@ -900,61 +957,54 @@ function validateResource(resourceId: string, remoteHash: string): boolean {
 
 ### 交叉引用
 
-引用系统使交叉所有权变得自然：
+引用系统使交叉所有权变得自然，但**被动逻辑只在所有者节点执行**：
 
 ```
 A 打出 B 的远程卡牌 Strike_P:
-  A 提交到房主队列 → 房主调度 → 调用 B 执行 Strike_P
-  Strike_P 的效果触发"对所有玩家施加能力"
-    → B 持有对 A 远程角色的远程引用
-    → 解引用：B → 房主 → A → A 执行施加逻辑 → A 触发本地钩子
+  A 提交到房主队列 → 房主调度 → 调用 B 执行 Strike_P（REAL @ B）
+  若 Strike_P 对玩家施加能力 → apply_power.logic_owner_id = B（施加者）
+  房主广播 combat_result → 全员 AUTHORITATIVE_APPLY 写层数投影
 
-B 的远程卡牌触发 A 的本地遗物 Vajra:
-  B 执行卡牌时发出 BaseMod.publishOnCardUse()
-  A 本地遗物 Vajra 订阅了 onCardUse 事件
-    → Vajra 是本地引用 → A 直接执行遗物逻辑 → 触发 A 本地钩子
+B 的卡牌事实触发 A 的本地遗物（logic_owner = A）:
+  B REAL 执行 → combat_result
+  A：AUTHORITATIVE_APPLY 写卡牌效果数值
+  A：LOCAL_OWNER_ONLY 仅执行 A 自己的遗物/buff
+  B/其他人：不执行 A 的遗物逻辑
 ```
 
-远程遗物可以被本地卡牌触发（本地卡牌发出事件 → 远程遗物的引用订阅了该事件 → 经房主路由调用所有者执行）。远程卡牌也可以触发仅在本地存在的遗物（遗物在本地 → 本地引用 → 直接在本地生效）。
+远程对象的**逻辑**仍经引用对所有者 REAL 解引用；本地仅 owner 的被动可在收到事实后自发执行。禁止“全员诱导 = 全员跑被动”。
 
-### 自定义接口遗物与诱导重放
-
-深层空函数调用使得无论效果通过何种机制注册——BaseMod 订阅者、自定义接口、`@SpirePatch` 深层拦截——INDUCED 重放都能触发。因为重放调用的是**真实游戏方法**，方法体上的所有拦截器自然执行。
+### 自定义遗物 / 怪物 buff（local-owner-only）
 
 ```
-场景: A 有一个使用自定义 @SpirePatch 的遗物（打出攻击牌时生效），B 没有这个 mod
+场景: A 有自定义遗物（打出攻击牌时生效），B 没有该 mod
 
-1. B 打出自己的攻击牌（B 本地 REAL 模式执行，触发 B 本地钩子）
-2. B → 房主: invoke_result → 房主广播 combat_result
-3. A 收到 combat_result（sender_id = B ≠ A，进入 INDUCED 模式）
-4. 诱导重放 play_card 步骤 → 构造 CardStub(type = ATTACK, use()=no-op)
-   → AbstractPlayer.useCard(stubCard, target)
-   → useCard() 上的 @SpirePatch 全部触发 → 包括 A 的自定义遗物 patch ✓
-   → useCard() 内部 publishOnCardUse() 自然触发 → BaseMod 订阅者 ✓
-   → stubCard.use() 为 no-op → 不重复产生卡牌效果 ✓
-5. A 的遗物真实执行 → 产生新效果 → 提交给房主
-6. 房主广播新效果 → B 收到新效果 → INDUCED 重放 → suppressEvents 写数值 + VFX
-   → B 没有该遗物的真实逻辑 → 效果步骤仅同步状态 ✓
+1. B 打出攻击牌 → REAL @ B
+2. 房主广播 combat_result（executor_id = B）
+3. A：AUTHORITATIVE_APPLY 写 B 的伤害等数值
+4. A：LOCAL_OWNER_ONLY → 仅 A 的遗物执行 → 新 effects → 房主
+5. 全员对 A 的新 effects 做 AUTHORITATIVE_APPLY
+   B 不执行 A 的遗物代码 ✓
 ```
 
-同样适用于怪物 power 场景：
+灾厄类怪物 buff：
+
 ```
-图主机器上有怪物 power：玩家打牌时怪物回2血（通过 @SpirePatch 实现）
-1. 玩家 A 打牌 → REAL 模式在 A 机器执行
-2. combat_result 广播 → 图主 B 收到 → INDUCED 模式
-3. useCard(stubCard) → @SpirePatch 触发 → 怪物 power 回调 → 怪物回2血
-4. 新效果提交房主队列 → 广播全员 ✓
+1. A 施加灾厄 → logic_owner_id = A
+2. 房主阶段对齐 → 本地进入触发阶段
+3. 仅 A 自发执行灾厄 → proposal → 图主 commit
+4. 非 A 节点同名投影无效果、不可触发
 ```
 
-**注意**：事件步骤不加 suppressEvents 是关键。若 suppressEvents 包裹了 useCard() 调用，怪物 power 回调产生的 damage/gain_block 会被一并抑制，导致副作用丢失。
+**已否决**：图主 INDUCED 全量 useCard 以“自动”跑怪物 power；非所有者有定义即本地执行。
 
-### Fallback 效果类型（保持原有）
+### Fallback 效果类型
 
 | kind | 说明 | 关键字段 |
 |------|------|----------|
 | `damage` | 造成伤害 | `target`, `amount`, `damage_type` |
 | `gain_block` | 获得格挡 | `target`, `amount` |
-| `apply_power` | 施加能力 | `target`, `power_id`, `amount` |
+| `apply_power` | 施加能力 | `target`, `power_id`, `amount`, **`logic_owner_id`** |
 | `remove_power` | 移除能力 | `target`, `power_id` |
 | `heal` | 治疗 | `target`, `amount` |
 | `gain_energy` | 获得能量 | `target`, `amount` |
@@ -965,6 +1015,8 @@ B 的远程卡牌触发 A 的本地遗物 Vajra:
 | `obtain_relic` | 获得遗物 | `target`, `relic_id` |
 | `obtain_potion` | 获得药水 | `target`, `potion_id` |
 | `lose_hp` | 失去生命 | `target`, `amount` |
+| `set_monster_hp` | （计划）权威设怪物 HP | `target`, `amount` |
+| `monster_death` | （计划）权威怪物死亡 | `target` |
 
 ## BaseMod 事件抑制机制
 
@@ -986,19 +1038,21 @@ public class CrossSpireMod {
 ```
 
 抑制的触发场景：
-- 非发送者收到 `combat_result` → 诱导重放时，**事件步骤**（play_card/apply_power 等）**不加 suppressEvents**，以 no-op Stub 为参数调用真实游戏方法，让 @SpirePatch 拦截器和 BaseMod 事件链全量执行；**效果步骤**（damage/block/heal 等）用 suppressEvents 仅写入数值和 VFX
-- 在线角色状态写入（HP 变化、遗物获取等）时 suppressEvents 包裹
-- 引用的 REAL 模式解引用在所有者的远端触发钩子 → 结果经房主路由回来 → 本地 INDUCED 模式按上述规则处理
+- 非发送者 `combat_result` → **AUTHORITATIVE_APPLY** 全程 suppressEvents 写数值/VFX/层数投影
+- **LOCAL_OWNER_ONLY** 执行本地所有者被动时**不**开全局 suppress（否则 owner 被动无法改状态）；但其对怪物的修改走 proposal，对权威 apply 的二次捕获必须门控
+- 在线角色/怪物投影状态写入（HP、commit 覆盖）时 suppressEvents 包裹
+- REAL 在所有者远端触发钩子 → 结果经房主回来 → 他人只做权威 apply + 自己的 local-owner 被动
 
 ### 引用中的钩子触发规则
 
 | 场景 | 是否触发钩子 | 原因 |
 |------|-------------|------|
-| 所有者解引用自己的对象（REAL 模式） | 是 | 计算源点，钩子应触发 |
-| 非发送者诱导重放：事件步骤（play_card 等） | 是 | 不加 suppressEvents，调用真实方法 → @SpirePatch + BaseMod 全量触发 |
-| 非发送者诱导重放：效果步骤（damage 等） | 否（suppressEvents） | 效果数值已由所有者计算，不能重复改变状态 |
-| 诱导重放中嵌套触发（如怪物 power 回调调 damage） | 否（suppressEvents 计数器） | 外层 suppressEvents 已打开，嵌套 damage() 的钩子自动跳过 |
-| 交叉引用中本地遗物被 INDUCED 事件触发 | 是 | 遗物是本地引用，在本地直接执行 |
+| 所有者解引用自己的对象（REAL 模式） | 是 | 计算源点 |
+| 非发送者 AUTHORITATIVE_APPLY | 否（suppressEvents） | 数值已由 executor 计算 |
+| 非发送者 LOCAL_OWNER_ONLY（logic_owner==self） | 是（仅这些组件） | 施加者/所有者自发执行 |
+| 非发送者上他人 buff 投影 | 否 | 无效果、不可触发 |
+| 图主收到他人 combat_result | 否全量 hook；图主自有 logic_owner 组件可跑 | 禁止 INDUCED 自动跑全部怪物 power |
+| commit 覆盖怪物投影 | 否（suppressEvents） | 不得再捕获为 proposal |
 
 由于 BaseMod 没有 gold change hook，金币同步需要通过自定义 `@SpirePatch` 直接拦截 `AbstractPlayer.gainGold()` / `loseGold()` 方法。
 
@@ -1409,26 +1463,47 @@ operation: "reference_migrate"
 ```
 operation: "combat_result"
   payload: {
-    effects: EffectDescription[];
+    effects: EffectDescription[];  // apply_power 含 logic_owner_id
     operation_sequence: OperationStep[];
-    card_id?: string;       // 若为卡牌执行结果则包含
-    monster_id?: string;    // 若为怪物动作则包含
+    card_id?: string;
+    monster_id?: string;
+    executor_id: string;           // 原始 REAL 执行者，房主不得改写
   }
-  说明: 卡牌/怪物执行结果广播（房主→全员）
+  说明: 房主→全员。接收方 AUTHORITATIVE_APPLY + LOCAL_OWNER_ONLY，禁止全量 hook 重算
+
+operation: "combat_phase"   // 计划
+  payload: {
+    phase: "player_turn" | "resolving_queue" | "queue_empty"
+         | "pre_monster_turn" | "monster_turn" | "post_monster_turn";
+    transaction_id?: string;
+  }
+  说明: 房主→全员阶段对齐；客户端跟本地引擎；不远程点名 buff
+
+operation: "monster_mutation_proposal"   // 计划
+  payload: MonsterMutationProposal
+  说明: Peer→图主（经房主）：非图主对怪物核心状态的提案
+
+operation: "monster_mutation_commit"   // 计划
+  payload: MonsterMutationCommit
+  说明: 图主→全员（经房主）：权威怪物状态
+
+operation: "monster_mutation_reject"   // 计划
+  payload: { transaction_id, monster_instance_id, reason, commit_revision? }
+  说明: 图主→提案方：过期/非法
 
 operation: "monster_intent"
   payload: {
     monsters: { monster_id: string, intent: string }[];
   }
-  说明: 怪物意图（回合开始时全量快照 + 意图变更时增量推送）
+  说明: 图主意图快照经房主广播；客户端禁止 createIntent 重算
 
 operation: "player_state"
   payload: {
     hp: number; max_hp: number; current_block: number;
     energy: number; energy_per_turn: number;
     hand_size: number; draw_pile_size: number; discard_pile_size: number;
-    powers: { power_id: string, amount: number }[];
-    relics: string[];       // relic_id 列表
+    powers: { power_id: string, amount: number, logic_owner_id?: string }[];
+    relics: string[];
     potions: (string | null)[];
   }
   说明: 在线角色属性更新
@@ -1439,7 +1514,7 @@ operation: "full_snapshot"
     monsters: Record<string, MonsterState>;
     floor: number; act: number;
   }
-  说明: 完整阶段状态快照（房主启动/迁移时）
+  说明: 完整阶段状态快照（房主启动/迁移时）；应含 attachment 列表（计划）
 ```
 
 #### 事件操作
@@ -1604,8 +1679,13 @@ CrossSpire/
             ├── combat/
             │   ├── CentralQueueManager.java    # 房主中央队列调度
             │   ├── LocalCapturePatches.java    # 捕获本地操作 → 提交到房主
-            │   ├── CombatResultReplayer.java   # 操作重放 + suppressEvents
-            │   └── InteractionCapture.java     # 捕获 BaseMod 选择面板 → interact_request
+            │   ├── CombatResultReplayer.java   # AUTHORITATIVE_APPLY + LOCAL_OWNER_ONLY
+            │   ├── InteractionCapture.java     # 捕获 BaseMod 选择面板 → interact_request
+            │   ├── LocalOwnerGate.java         # planned: induced 仅 logic_owner==self
+            │   ├── ComponentAttachment.java    # planned: buff 实例元数据
+            │   ├── ComponentAttachmentRegistry.java  # planned
+            │   ├── MonsterMutationCapture.java # planned: 事务化怪物修改捕获
+            │   └── MonsterAuthorityCoordinator.java  # planned: 图主 proposal→commit
             └── ui/
                 ├── LobbyScreen.java            # 加入房间界面
                 ├── ServerPicker.java           # IP:port:password 输入

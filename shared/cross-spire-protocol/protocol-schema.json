@@ -24,7 +24,8 @@
           "type": "string",
           "enum": ["damage", "gain_block", "apply_power", "remove_power", "heal", "gain_energy",
             "draw_card", "discard_card", "exhaust_card", "gain_gold", "obtain_relic",
-            "obtain_potion", "lose_hp", "magic_number"]
+            "obtain_potion", "lose_hp", "magic_number", "set_monster_hp", "monster_death"],
+          "description": "set_monster_hp / monster_death are planned monster-authority effects"
         },
         "target": { "type": "string" },
         "amount": { "type": "integer" },
@@ -32,7 +33,19 @@
         "relic_id": { "type": "string" },
         "potion_id": { "type": "string" },
         "power_id": { "type": "string" },
-        "damage_type": { "type": "string" }
+        "damage_type": { "type": "string" },
+        "logic_owner_id": {
+          "type": "string",
+          "description": "Logic owner of a buff/power (applier-first). Required for apply_power semantics."
+        },
+        "origin_owner_id": {
+          "type": "string",
+          "description": "Owner that produced this effect during local-owner-only induced replay"
+        },
+        "hop_count": {
+          "type": "integer",
+          "description": "Induced side-effect hop count; drop when exceeding policy limit"
+        }
       }
     },
     "OperationStep": {
@@ -43,7 +56,53 @@
         "source": { "type": "string" },
         "target": { "type": "string" },
         "amount": { "type": "integer" },
-        "vfx_kind": { "type": "string" }
+        "vfx_kind": { "type": "string" },
+        "logic_owner_id": { "type": "string" },
+        "power_id": { "type": "string" }
+      }
+    },
+    "ComponentAttachment": {
+      "type": "object",
+      "description": "Buff/power instance attached to a host entity. Logic owner = applier-first.",
+      "properties": {
+        "instance_id": { "type": "string" },
+        "resource_id": { "type": "string" },
+        "resource_hash": { "type": "string" },
+        "logic_owner_id": { "type": "string", "description": "Applier-first logic owner" },
+        "host_entity_id": { "type": "string", "description": "player:<id> | monster:<instance_id>" },
+        "amount": { "type": "integer" },
+        "power_id": { "type": "string" }
+      }
+    },
+    "MonsterMutationProposal": {
+      "type": "object",
+      "description": "Planned: non-stage-host proposes monster state change; stage host is sole writer.",
+      "properties": {
+        "transaction_id": { "type": "string" },
+        "cause_packet_id": { "type": "string" },
+        "monster_instance_id": { "type": "string" },
+        "base_revision": { "type": "integer" },
+        "logic_owner_id": { "type": "string" },
+        "effects": { "type": "array", "items": { "$ref": "#/definitions/EffectDescription" } },
+        "operation_sequence": { "type": "array", "items": { "$ref": "#/definitions/OperationStep" } }
+      }
+    },
+    "MonsterMutationCommit": {
+      "type": "object",
+      "description": "Planned: stage host authoritative monster state commit after proposal.",
+      "properties": {
+        "transaction_id": { "type": "string" },
+        "monster_instance_id": { "type": "string" },
+        "commit_revision": { "type": "integer" },
+        "status": { "type": "string", "enum": ["accepted", "rejected", "stale", "duplicate"] },
+        "reason": { "type": "string" },
+        "effects": { "type": "array", "items": { "$ref": "#/definitions/EffectDescription" } },
+        "hp": { "type": "integer" },
+        "max_hp": { "type": "integer" },
+        "block": { "type": "integer" },
+        "dead": { "type": "boolean" },
+        "escaped": { "type": "boolean" },
+        "half_dead": { "type": "boolean" }
       }
     },
     "MemberInfo": {
@@ -188,12 +247,49 @@
       }
     },
     "combat_result": {
-      "description": "StageHost → Broadcast: monster action results",
+      "description": "Host → All: authoritative card/monster execution result. Receivers apply effects under suppression; induced passive fire is local-owner-only (logic_owner_id == self), not full hook replay.",
       "extends": "GameMessage",
       "properties": {
         "monster_id": { "type": "string" },
+        "card_id": { "type": "string" },
+        "executor_id": { "type": "string", "description": "Original REAL executor; must not be rewritten to room host" },
         "effects": { "type": "array", "items": { "$ref": "#/definitions/EffectDescription" } },
         "operation_sequence": { "type": "array", "items": { "$ref": "#/definitions/OperationStep" } }
+      }
+    },
+    "combat_phase": {
+      "description": "Planned: Room host → All authoritative combat phase alignment. Clients advance local STS phase gates; buffs fire spontaneously only for local logic owners.",
+      "extends": "GameMessage",
+      "properties": {
+        "phase": {
+          "type": "string",
+          "enum": ["player_turn", "resolving_queue", "queue_empty", "pre_monster_turn", "monster_turn", "post_monster_turn"]
+        },
+        "transaction_id": { "type": "string" }
+      }
+    },
+    "monster_mutation_proposal": {
+      "description": "Planned: Peer → StageHost (via room host): propose monster core-state change from local-owner buff/card logic.",
+      "extends": "GameMessage",
+      "properties": {
+        "proposal": { "$ref": "#/definitions/MonsterMutationProposal" }
+      }
+    },
+    "monster_mutation_commit": {
+      "description": "Planned: StageHost → All (via room host): authoritative monster state after proposal apply/reject.",
+      "extends": "GameMessage",
+      "properties": {
+        "commit": { "$ref": "#/definitions/MonsterMutationCommit" }
+      }
+    },
+    "monster_mutation_reject": {
+      "description": "Planned: StageHost → Proposer: proposal rejected (stale revision / invalid).",
+      "extends": "GameMessage",
+      "properties": {
+        "transaction_id": { "type": "string" },
+        "monster_instance_id": { "type": "string" },
+        "reason": { "type": "string" },
+        "commit_revision": { "type": "integer" }
       }
     },
     "event_result": {
@@ -284,7 +380,7 @@
       }
     },
     "player_end_turn": {
-      "description": "Player → Broadcast: end turn action",
+      "description": "Player → Room host: end turn signal. Room host aggregates alignment; does not mean stage host triggers remote buffs.",
       "extends": "GameMessage"
     },
     "queue_submit": {
@@ -320,7 +416,7 @@
       }
     },
     "queue_empty": {
-      "description": "Host → All: queue drained, end turn allowed",
+      "description": "Room host → All: queue drained, end turn allowed. Also a combat-phase alignment signal for local owner-only buff timing.",
       "extends": "GameMessage"
     }
   }

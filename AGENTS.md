@@ -72,8 +72,11 @@ The `docs/reference/` directory contains API documentation for the two key moddi
 
 ## Protocol Design Rules
 
-- All reference transport uses the `StandardPacket` envelope (see `docs/ARCHITECTURE.md` §17) with fixed header + `operation` + `payload`.
+- All reference transport uses the `StandardPacket` envelope (see `docs/ARCHITECTURE.md` §19) with fixed header + `operation` + `payload`.
 - Control messages (heartbeat, join/leave, elections) are not encapsulated as standard packets.
 - Every message has a `seq` field (monotonic integer, per-source) for ordering and deduplication.
 - `fallback.effects` is always an array — even for single-effect cards — for consistency.
 - Protocol changes should be backward-compatible within a major version.
+- Buff/power **logic owner = applier-first** (`logic_owner_id` on `apply_power`). Non-owners hold display-only projections (callbacks no-op).
+- Induced replay is **AUTHORITATIVE_APPLY + LOCAL_OWNER_ONLY** — never ungated full `useCard`/BaseMod hook replay on every client.
+- Combat **phase alignment is room-host responsibility**; buffs fire spontaneously on the logic owner’s machine. Monster core state mutations from non-stage-hosts go through proposal → stage-host commit.
