@@ -339,15 +339,18 @@ public class MessageRouter {
 
     private void broadcastCombatResult(Protocol.InvokeResultMessage result) {
         Protocol.CombatResultMessage broadcast = new Protocol.CombatResultMessage();
-        broadcast.source = CrossSpireMod.playerId;
+        // Preserve original REAL executor; do not rewrite to room host.
+        broadcast.executorId = result.source != null ? result.source : CrossSpireMod.playerId;
+        broadcast.source = broadcast.executorId;
         broadcast.seq = CrossSpireMod.nextSeq();
         broadcast.effects = result.effects;
         broadcast.operationSequence = result.operationSequence;
 
         if (CrossSpireMod.isConnected()) {
             CrossSpireMod.send(Protocol.GSON.toJson(broadcast));
-            BaseMod.logger.info("MessageRouter broadcast combat_result effects="
-                + (result.effects != null ? result.effects.length : 0));
+            BaseMod.logger.info("MessageRouter broadcast combat_result executor="
+                + (broadcast.executorId.length() >= 8 ? broadcast.executorId.substring(0, 8) : broadcast.executorId)
+                + " effects=" + (result.effects != null ? result.effects.length : 0));
         }
     }
 

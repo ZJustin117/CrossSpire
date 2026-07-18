@@ -18,6 +18,12 @@ public final class Protocol {
         @SerializedName("potion_id") public String potionId;
         @SerializedName("power_id") public String powerId;
         @SerializedName("damage_type") public String damageType;
+        /** Applier-first logic owner for apply_power / buffs. */
+        @SerializedName("logic_owner_id") public String logicOwnerId;
+        /** Owner that produced this effect during local-owner-only induced replay. */
+        @SerializedName("origin_owner_id") public String originOwnerId;
+        /** Induced side-effect hop count; drop when exceeding policy limit. */
+        @SerializedName("hop_count") public int hopCount;
     }
 
     public static class OperationStep {
@@ -31,6 +37,7 @@ public final class Protocol {
         @SerializedName("card_type") public String cardType;
         @SerializedName("card_rarity") public String cardRarity;
         @SerializedName("card_target") public String cardTarget;
+        @SerializedName("logic_owner_id") public String logicOwnerId;
     }
 
     // -- state sync payloads --
@@ -52,6 +59,9 @@ public final class Protocol {
 
     public static class CombatResultPayload {
         @SerializedName("monster_id") public String monsterId;
+        @SerializedName("card_id") public String cardId;
+        /** Original REAL executor; must not be rewritten to room host. */
+        @SerializedName("executor_id") public String executorId;
         public EffectDescription[] effects;
         @SerializedName("operation_sequence") public OperationStep[] operationSequence;
     }
@@ -107,6 +117,8 @@ public final class Protocol {
     public static class CombatResultMessage extends GameMessage {
         public CombatResultMessage() { type = "combat_result"; }
         @SerializedName("monster_id") public String monsterId;
+        @SerializedName("card_id") public String cardId;
+        @SerializedName("executor_id") public String executorId;
         public EffectDescription[] effects;
         @SerializedName("operation_sequence") public OperationStep[] operationSequence;
     }
@@ -114,6 +126,7 @@ public final class Protocol {
     public static class QueueComplete extends GameMessage {
         public QueueComplete() { type = "queue_complete"; }
         @SerializedName("packet_id") public String packetId;
+        @SerializedName("executor_id") public String executorId;
         public EffectDescription[] effects;
         @SerializedName("operation_sequence") public OperationStep[] operationSequence;
     }

@@ -53,13 +53,21 @@
 ## P5 Buff 所有权契约（2026-07-18）
 
 > Breaking：否决全量深层诱导与图主点名触发 buff。见 `plan.md` Phase 5、`ARCHITECTURE.md` §8–10、`spec.md` FR-2.4/2.8–2.10。
+> 实现与契约对照：`LocalOwnerGate` + Replayer 门控已落地；mutation/attachment 仍为后续。
 
 - [x] T5.0 文档 + schema：`logic_owner_id`、mutation/phase 草案；ARCHITECTURE/spec/plan/task
-- [ ] T5.1 `LocalOwnerGate` + `CombatResultReplayer` local-owner-only
-- [ ] T5.2 `apply_power` / ComponentAttachment + 非 owner no-op
-- [ ] T5.3 怪物 mutation proposal/commit
-- [ ] T5.4 房主阶段同步 / 可选 `combat_phase`
-- [ ] T5.5 验收测试：无二次被动 combat_result；灾厄跨节点
+- [x] T5.1 `LocalOwnerGate` + `CombatResultReplayer` AUTHORITATIVE_APPLY + LOCAL_OWNER_ONLY
+  - 删除 induced 路径上的 `BaseMod.publishOnCardUse`
+  - 仅 fire `TriggerRegistry` 中 `ownerId == self` 的条目
+  - `executor_id` 在 MessageRouter / QueueComplete / LocalReference 保留
+  - induced 副作用带 `origin_owner_id` + `hop_count`（上限 3）
+  - 测试：`LocalOwnerGateTest` + Protocol logic_owner 序列化
+- [ ] T5.2 `apply_power` 全面写入 `logic_owner_id` + ComponentAttachment 注册表 + PowerStub 非 owner no-op 接线
+  - 已有：Protocol 字段、`LocalReference.applyPowerEffect` 辅助、`PowerStub.logicOwnerId`
+  - 未有：战斗中真实 ApplyPower 捕获、attachment 广播/快照
+- [ ] T5.3 怪物 mutation proposal/commit（图主 revision CAS）
+- [ ] T5.4 房主显式 `combat_phase`（当前依赖 queue_empty + player_end_turn 聚合）
+- [ ] T5.5 E2E 验收：非 owner 无二次被动 combat_result；灾厄跨节点
 
 ## 归档 ✅
 

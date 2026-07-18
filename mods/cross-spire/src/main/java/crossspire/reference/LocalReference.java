@@ -50,6 +50,7 @@ public class LocalReference<T> extends Reference<T> {
 
         Protocol.QueueComplete complete = new Protocol.QueueComplete();
         complete.source = ownerId;
+        complete.executorId = ownerId;
         complete.seq = CrossSpireMod.nextSeq();
         complete.type = "combat_result";
         complete.packetId = refId + "/" + UUID.randomUUID().toString().substring(0, 8);
@@ -103,6 +104,7 @@ public class LocalReference<T> extends Reference<T> {
             pow.powerId = "Vulnerable";
             pow.target = targetId;
             pow.amount = card.magicNumber;
+            pow.logicOwnerId = ownerId;
             list.add(pow);
         }
         return list.toArray(new Protocol.OperationStep[0]);
@@ -132,5 +134,16 @@ public class LocalReference<T> extends Reference<T> {
             list.add(mgc);
         }
         return list.toArray(new Protocol.EffectDescription[0]);
+    }
+
+    /** Build apply_power effect with applier-first logic_owner_id. */
+    public static Protocol.EffectDescription applyPowerEffect(String powerId, String targetId, int amount, String applierId) {
+        Protocol.EffectDescription eff = new Protocol.EffectDescription();
+        eff.kind = "apply_power";
+        eff.powerId = powerId;
+        eff.target = targetId;
+        eff.amount = amount;
+        eff.logicOwnerId = applierId;
+        return eff;
     }
 }

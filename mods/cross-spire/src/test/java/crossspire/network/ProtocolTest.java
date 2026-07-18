@@ -32,7 +32,8 @@ public class ProtocolTest {
     @Test
     public void shouldSerializeAndDeserializeCombatResultMessage() {
         Protocol.CombatResultMessage msg = new Protocol.CombatResultMessage();
-        msg.source = "host-001";
+        msg.source = "executor-a";
+        msg.executorId = "executor-a";
         msg.seq = 43;
         msg.monsterId = "Cultist";
 
@@ -48,7 +49,8 @@ public class ProtocolTest {
         Protocol.CombatResultMessage parsed = Protocol.GSON.fromJson(json, Protocol.CombatResultMessage.class);
 
         assertEquals("combat_result", parsed.type);
-        assertEquals("host-001", parsed.source);
+        assertEquals("executor-a", parsed.source);
+        assertEquals("executor-a", parsed.executorId);
         assertEquals(43, parsed.seq);
         assertEquals("Cultist", parsed.monsterId);
         assertNotNull(parsed.effects);
@@ -56,6 +58,24 @@ public class ProtocolTest {
         assertEquals("damage", parsed.effects[0].kind);
         assertEquals(6, parsed.effects[0].amount);
         assertEquals("player-a", parsed.effects[0].target);
+    }
+
+    @Test
+    public void applyPowerEffectShouldCarryLogicOwnerId() {
+        Protocol.EffectDescription eff = new Protocol.EffectDescription();
+        eff.kind = "apply_power";
+        eff.powerId = "Vulnerable";
+        eff.target = "monster_0";
+        eff.amount = 2;
+        eff.logicOwnerId = "applier-a";
+
+        String json = Protocol.GSON.toJson(eff);
+        Protocol.EffectDescription parsed = Protocol.GSON.fromJson(json, Protocol.EffectDescription.class);
+
+        assertEquals("apply_power", parsed.kind);
+        assertEquals("Vulnerable", parsed.powerId);
+        assertEquals("applier-a", parsed.logicOwnerId);
+        assertTrue(json.contains("logic_owner_id"));
     }
 
     @Test

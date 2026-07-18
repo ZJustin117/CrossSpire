@@ -127,7 +127,8 @@ public class CentralQueueManager {
         CSLog.log("CentralQueueManager invoke_result: " + result.refId);
 
         Protocol.QueueComplete complete = new Protocol.QueueComplete();
-        complete.source = CrossSpireMod.playerId;
+        complete.source = result.source != null ? result.source : CrossSpireMod.playerId;
+        complete.executorId = complete.source;
         complete.seq = CrossSpireMod.nextSeq();
         complete.type = "combat_result";
         complete.packetId = result.refId;

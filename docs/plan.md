@@ -10,7 +10,7 @@
 | P2 功能补全 | 🟡 6/10 完成 (T2.1-T2.3, T2.7d/e/f) | `89bbb1e` `447a216` `1e4070f` |
 | P3 清理稳定 | 🟡 3/8 完成 (T3.2-T3.4) | `0975c5a` |
 | 归档 | 🟡 1/6 完成 (A1) | — |
-| P5 Buff 所有权契约 | 🟡 文档/schema 进行中；实现未开始 | — |
+| P5 Buff 所有权契约 | 🟡 T5.0–T5.1 完成；T5.2–T5.5 未开始 | — |
 | **总** | **15/29 + P5** | 51 tests pass |
 
 ## 目录
@@ -773,9 +773,9 @@ JAR 已推送到两台设备 (localhost:15555, 25555)，JUnit 51/51 通过。
 
 | Task | 内容 | 状态 |
 |------|------|------|
-| T5.0 | 文档 + `protocol-schema.json`：logic_owner、mutation、combat_phase 草案；ARCHITECTURE/spec/plan/task | 本轮 |
-| T5.1 | `LocalOwnerGate` + `CombatResultReplayer` 门控；删除无门控 publishOnCardUse 全量路径 | 未开始 |
-| T5.2 | `apply_power` 携带 `logic_owner_id`；ComponentAttachment 注册/投影 no-op | 未开始 |
+| T5.0 | 文档 + `protocol-schema.json`：logic_owner、mutation、combat_phase 草案 | ✅ |
+| T5.1 | `LocalOwnerGate` + Replayer AUTHORITATIVE_APPLY / LOCAL_OWNER_ONLY；保留 executor_id；hop 限制 | ✅ |
+| T5.2 | `apply_power` 全面写入 `logic_owner_id`；ComponentAttachment 注册/投影 no-op | 未开始 |
 | T5.3 | 怪物 mutation proposal/commit 路径 + 图主 revision | 未开始 |
 | T5.4 | 房主阶段信号澄清；可选 `combat_phase` | 未开始 |
 | T5.5 | 验收：非 owner 无二次 combat_result；灾厄跨节点仅施加者执行 + 图主 commit | 未开始 |

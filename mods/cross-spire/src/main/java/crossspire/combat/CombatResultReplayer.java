@@ -20,15 +20,17 @@ import crossspire.network.StandardPacket;
 
 public class CombatResultReplayer {
 
+    private static final int MAX_INDUCED_HOP = 3;
+
     public void handleCombatResult(String rawMessage) {
         if (AbstractDungeon.player == null) {
             BaseMod.logger.info("CombatResultReplayer skipped: not in game");
             return;
         }
         JsonObject msg = Protocol.GSON.fromJson(rawMessage, JsonObject.class);
-        String senderId = msg.has("source") ? msg.get("source").getAsString() : "";
+        String executorId = resolveExecutorId(msg);
 
-        if (senderId.equals(CrossSpireMod.playerId)) {
+        if (executorId.equals(CrossSpireMod.playerId)) {
             BaseMod.logger.info("CombatResultReplayer skip: own result (REAL mode already executed)");
             return;
         }
@@ -36,40 +38,28 @@ public class CombatResultReplayer {
         JsonArray effects = msg.has("effects") ? msg.getAsJsonArray("effects") : new JsonArray();
         JsonArray opSeq = msg.has("operation_sequence") ? msg.getAsJsonArray("operation_sequence") : new JsonArray();
 
-        BaseMod.logger.info("CombatResultReplayer INDUCED mode: sender=" + senderId.substring(0, 8)
+        BaseMod.logger.info("CombatResultReplayer INDUCED: executor="
+            + (executorId.length() >= 8 ? executorId.substring(0, 8) : executorId)
             + " ops=" + opSeq.size() + " eff=" + effects.size());
 
+        // 1) AUTHORITATIVE_APPLY — write numbers under suppression, no passive re-fire
+        authoritativeApply(effects);
+
+        // 2) LOCAL_OWNER_ONLY — fire only logic_owner_id == self components
         if (opSeq.size() > 0) {
-            replayInduced(opSeq, effects);
-        } else {
-            fallbackEffects(effects, "unknown");
+            localOwnerReplay(opSeq, effects);
         }
     }
 
-    private void replayInduced(JsonArray opSeq, JsonArray effects) {
-        EffectCapture.startCapture();
-
-        for (JsonElement el : opSeq) {
-            JsonObject op = el.getAsJsonObject();
-            String step = op.has("step") ? op.get("step").getAsString() : "";
-
-            switch (step) {
-                case "play_card":
-                    inducedUseCard(op);
-                    break;
-                case "apply_power":
-                    publishPostPowerApply(op);
-                    break;
-                case "vfx":
-                    replaySingleVfx(op);
-                    break;
-                default:
-                    break;
-            }
+    private static String resolveExecutorId(JsonObject msg) {
+        if (msg.has("executor_id") && !msg.get("executor_id").isJsonNull()) {
+            String id = msg.get("executor_id").getAsString();
+            if (id != null && !id.isEmpty()) return id;
         }
+        return msg.has("source") ? msg.get("source").getAsString() : "";
+    }
 
-        Protocol.EffectDescription[] newEffects = EffectCapture.stopCapture();
-
+    private void authoritativeApply(JsonArray effects) {
         EventSuppression.suppressEvents(() -> {
             for (JsonElement el : effects) {
                 JsonObject eff = el.getAsJsonObject();
@@ -79,67 +69,129 @@ public class CombatResultReplayer {
                 applyEffect(kind, target, amount, eff);
             }
         });
-
-        if (newEffects.length > 0 && CrossSpireMod.isConnected()) {
-            BaseMod.logger.info("CombatResultReplayer submitting " + newEffects.length + " new induced effects");
-            Protocol.CombatResultPayload payload = new Protocol.CombatResultPayload();
-            payload.effects = newEffects;
-            payload.operationSequence = new Protocol.OperationStep[0];
-
-            StandardPacket pkt = new StandardPacket();
-            pkt.packetId = CrossSpireMod.playerId + "-" + CrossSpireMod.nextSeq();
-            pkt.source = CrossSpireMod.playerId;
-            pkt.seq = CrossSpireMod.nextSeq();
-            pkt.timestamp = System.currentTimeMillis();
-            pkt.refId = "combat:induced@" + CrossSpireMod.playerId;
-            pkt.ownerId = CrossSpireMod.playerId;
-            pkt.operation = PacketOperation.COMBAT_RESULT;
-            pkt.payload = Protocol.GSON.toJsonTree(payload).getAsJsonObject();
-
-            CrossSpireMod.send(StandardPacket.toJson(pkt));
-        }
     }
 
-    private void inducedUseCard(JsonObject op) {
-        String cardId = op.has("card_id") ? op.get("card_id").getAsString() : "";
-        String targetId = op.has("target") ? op.get("target").getAsString() : "self";
-        if (cardId.isEmpty()) return;
+    private void localOwnerReplay(JsonArray opSeq, JsonArray effects) {
+        EffectCapture.startCapture();
 
-        String cardType = op.has("card_type") ? op.get("card_type").getAsString() : "ATTACK";
-        String cardRarity = op.has("card_rarity") ? op.get("card_rarity").getAsString() : "BASIC";
-        String cardTarget = op.has("card_target") ? op.get("card_target").getAsString() : "ENEMY";
+        for (JsonElement el : opSeq) {
+            JsonObject op = el.getAsJsonObject();
+            String step = op.has("step") ? op.get("step").getAsString() : "";
 
-        AbstractCard stubCard = new CardStub(cardId, 1,
-            AbstractCard.CardType.valueOf(cardType),
-            AbstractCard.CardRarity.valueOf(cardRarity),
-            AbstractCard.CardTarget.valueOf(cardTarget));
+            switch (step) {
+                case "play_card":
+                    fireLocalOwnerCardTriggers(op);
+                    break;
+                case "apply_power":
+                    applyPowerProjectionOnly(op);
+                    break;
+                case "vfx":
+                    replaySingleVfx(op);
+                    break;
+                default:
+                    break;
+            }
+        }
 
-        try {
-            BaseMod.publishOnCardUse(stubCard);
-            BaseMod.logger.info("CombatResultReplayer INDUCED publishOnCardUse: " + cardId);
-
-            for (crossspire.reference.Reference<?> ref : crossspire.reference.TriggerRegistry.getTriggers("onCardUse", cardId)) {
+        // Also fire local-owner triggers keyed by apply_power effects
+        for (JsonElement el : effects) {
+            JsonObject eff = el.getAsJsonObject();
+            if (!"apply_power".equals(eff.has("kind") ? eff.get("kind").getAsString() : "")) continue;
+            String logicOwner = eff.has("logic_owner_id") ? eff.get("logic_owner_id").getAsString() : "";
+            if (!LocalOwnerGate.isLocalOwner(logicOwner)) continue;
+            String powerId = eff.has("power_id") ? eff.get("power_id").getAsString() : "";
+            if (powerId.isEmpty()) continue;
+            for (crossspire.reference.Reference<?> ref
+                    : crossspire.reference.TriggerRegistry.getTriggers("onPowerApply", powerId)) {
+                if (!LocalOwnerGate.mayFirePassive(logicOwner, ref)) continue;
                 try { ref.dereference(); } catch (Exception ignored) {}
             }
-        } catch (Exception e) {
-            BaseMod.logger.info("CombatResultReplayer publishOnCardUse failed (" + cardId + "): " + e.getClass().getName() + ": " + e.getMessage());
+        }
+
+        Protocol.EffectDescription[] newEffects = EffectCapture.stopCapture();
+        submitInducedEffects(newEffects);
+    }
+
+    /**
+     * LOCAL_OWNER_ONLY card fact: do NOT call BaseMod.publishOnCardUse (ungated full hook replay).
+     * Only dereference TriggerRegistry entries owned by self.
+     */
+    private void fireLocalOwnerCardTriggers(JsonObject op) {
+        String cardId = op.has("card_id") ? op.get("card_id").getAsString() : "";
+        if (cardId.isEmpty()) return;
+
+        for (crossspire.reference.Reference<?> ref
+                : crossspire.reference.TriggerRegistry.getTriggers("onCardUse", cardId)) {
+            if (!LocalOwnerGate.isLocalOwner(ref)) continue;
+            try {
+                ref.dereference();
+                BaseMod.logger.info("CombatResultReplayer LOCAL_OWNER onCardUse: " + cardId
+                    + " owner=" + ref.ownerId.substring(0, Math.min(8, ref.ownerId.length())));
+            } catch (Exception e) {
+                BaseMod.logger.info("CombatResultReplayer local trigger failed (" + cardId + "): "
+                    + e.getClass().getName() + ": " + e.getMessage());
+            }
+        }
+
+        for (crossspire.reference.Reference<?> ref
+                : crossspire.reference.TriggerRegistry.getTriggers("onCardUse", "*")) {
+            if (!LocalOwnerGate.isLocalOwner(ref)) continue;
+            try { ref.dereference(); } catch (Exception ignored) {}
         }
     }
 
-    private void publishPostPowerApply(JsonObject op) {
+    /** Projection-only power apply for non-owners; local owners may run registered triggers. */
+    private void applyPowerProjectionOnly(JsonObject op) {
         String powerId = op.has("power_id") ? op.get("power_id").getAsString() : "";
         int amount = op.has("amount") ? op.get("amount").getAsInt() : 0;
+        String logicOwner = op.has("logic_owner_id") ? op.get("logic_owner_id").getAsString() : "";
         if (powerId.isEmpty()) return;
 
-        AbstractPower power = resolvePower(powerId, amount);
-        if (power == null) return;
-
-        try {
-            BaseMod.publishPostPowerApply(power, AbstractDungeon.player, AbstractDungeon.player);
-            BaseMod.logger.info("CombatResultReplayer published postPowerApply: " + powerId + " x" + amount);
-        } catch (Exception e) {
-            BaseMod.logger.info("CombatResultReplayer postPowerApply failed (" + powerId + "): " + e.getMessage());
+        if (!LocalOwnerGate.isLocalOwner(logicOwner)) {
+            BaseMod.logger.info("CombatResultReplayer skip non-owner power logic: " + powerId
+                + " logic_owner=" + (logicOwner.isEmpty() ? "?" : logicOwner.substring(0, Math.min(8, logicOwner.length()))));
+            return;
         }
+
+        for (crossspire.reference.Reference<?> ref
+                : crossspire.reference.TriggerRegistry.getTriggers("onPowerApply", powerId)) {
+            if (!LocalOwnerGate.mayFirePassive(logicOwner, ref)) continue;
+            try { ref.dereference(); } catch (Exception ignored) {}
+        }
+    }
+
+    private void submitInducedEffects(Protocol.EffectDescription[] newEffects) {
+        if (newEffects == null || newEffects.length == 0 || !CrossSpireMod.isConnected()) return;
+
+        for (Protocol.EffectDescription e : newEffects) {
+            if (e.hopCount >= MAX_INDUCED_HOP) {
+                BaseMod.logger.info("CombatResultReplayer drop induced effect hop=" + e.hopCount);
+                return;
+            }
+            e.originOwnerId = CrossSpireMod.playerId;
+            e.hopCount = e.hopCount + 1;
+            if (e.logicOwnerId == null || e.logicOwnerId.isEmpty()) {
+                e.logicOwnerId = CrossSpireMod.playerId;
+            }
+        }
+
+        BaseMod.logger.info("CombatResultReplayer submitting " + newEffects.length + " local-owner induced effects");
+        Protocol.CombatResultPayload payload = new Protocol.CombatResultPayload();
+        payload.executorId = CrossSpireMod.playerId;
+        payload.effects = newEffects;
+        payload.operationSequence = new Protocol.OperationStep[0];
+
+        StandardPacket pkt = new StandardPacket();
+        pkt.packetId = CrossSpireMod.playerId + "-" + CrossSpireMod.nextSeq();
+        pkt.source = CrossSpireMod.playerId;
+        pkt.seq = CrossSpireMod.nextSeq();
+        pkt.timestamp = System.currentTimeMillis();
+        pkt.refId = "combat:induced@" + CrossSpireMod.playerId;
+        pkt.ownerId = CrossSpireMod.playerId;
+        pkt.operation = PacketOperation.COMBAT_RESULT;
+        pkt.payload = Protocol.GSON.toJsonTree(payload).getAsJsonObject();
+
+        CrossSpireMod.send(StandardPacket.toJson(pkt));
     }
 
     private void replaySingleVfx(JsonObject op) {

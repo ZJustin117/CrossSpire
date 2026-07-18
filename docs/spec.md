@@ -76,20 +76,20 @@ GIVEN 队列头部是 A 的 Strike_R（owner_id = A）
 WHEN  房主调度该项
 THEN  房主 → A: invoke 标准包
       A 本地 REAL 模式执行 Strike_R：触发钩子、计算伤害、渲染动画
-      A → 房主: invoke_result（含 effects + operation_sequence；apply_power 含 logic_owner_id）
+      A → 房主: invoke_result（含 effects + operation_sequence）
       房主 → 全员: combat_result（executor_id = A，不得改写为房主）
       非执行者：AUTHORITATIVE_APPLY（suppressEvents 写数值/VFX）
-                + LOCAL_OWNER_ONLY（仅 logic_owner_id==self 的被动可执行）
-      禁止无门控全量 useCard/BaseMod hook 重算所有本地补丁
+                + LOCAL_OWNER_ONLY（仅 TriggerRegistry 中 ownerId==self 的被动）
+      禁止无门控 BaseMod.publishOnCardUse / 全量 useCard hook 重算
 
 GIVEN 队列全部完成
 WHEN  房主广播 queue_empty
 THEN  所有玩家的"结束回合"按钮变为可用
       该信号同时作为房主战斗阶段对齐的一部分
 
-GIVEN A 对怪物施加灾厄（logic_owner_id = A）
+GIVEN A 对怪物施加灾厄（logic_owner_id = A）  [P5 目标；mutation 路径未实现]
 WHEN  房主同步阶段后本地进入对应触发阶段
-THEN  仅 A 的灾厄逻辑自发执行；其他节点同名投影无效果
+THEN  仅 A 的灾厄逻辑应自发执行；其他节点同名投影无效果
       A 若判定击杀 → monster_mutation_proposal → 图主 commit → 全员只写权威状态
 ```
 
@@ -112,19 +112,19 @@ THEN  queue_submit 标准包携带 resource_hash = H1
 GIVEN B 收到 combat_result（executor_id = A，B 非执行者）
 WHEN  B 处理该消息
 THEN  B 做 AUTHORITATIVE_APPLY：suppressEvents 写 effects 数值/VFX
-      B 不因“本地有兼容定义”而全量重放 useCard 触发所有 hook
-      仅当 B 拥有 logic_owner_id==B 的组件时，LOCAL_OWNER_ONLY 执行 B 自己的被动
+      B 不调用 BaseMod.publishOnCardUse（禁止无门控全量 hook）
+      B 仅 fire TriggerRegistry 中 ownerId==B 的 onCardUse 条目（LOCAL_OWNER_ONLY）
 
-GIVEN A 拥有 logic_owner 为自己的遗物/buff（含自定义 @SpirePatch 实现）
+GIVEN A 通过 TriggerRegistry 注册了 owner=A 的 onCardUse 被动
 WHEN  B 打出自己的攻击牌（B REAL 执行）且房主广播 combat_result
 THEN  A：AUTHORITATIVE_APPLY 写入 B 的权威效果
-      A：LOCAL_OWNER_ONLY 仅执行 A 的遗物/buff → 新 effects 提交房主（带 origin_owner_id）
-      B 及其他节点不执行 A 的遗物逻辑
-      全员对 A 的新 effects 仅做权威写入
+      A：LOCAL_OWNER_ONLY 仅 dereference A 的 TriggerRegistry 条目 → 新 effects 可提交（origin_owner_id + hop_count）
+      B 及其他节点不执行 A 的被动逻辑
+      注：未注册到 TriggerRegistry 的裸 @SpirePatch 不会被 induced 自动触发（契约：须经所有权门控）
 
-GIVEN 怪物上有 A 施加的灾厄（logic_owner_id = A），图主可以是 B
+GIVEN 怪物上有 A 施加的灾厄（logic_owner_id = A），图主可以是 B  [P5 目标；mutation 未实现]
 WHEN  房主同步阶段后本地进入触发时机
-THEN  仅 A 自发执行灾厄；B/其他人同名投影无效果、不可触发
+THEN  仅 A 应自发执行灾厄；B/其他人同名投影无效果、不可触发
       A → 图主 proposal → 图主 commit 死亡/HP → 全员状态一致
       不存在图主扫描 attachment 再 invoke A
 
@@ -384,28 +384,28 @@ THEN  塔2 客户端实现相同的 StandardPacket 协议 + Reference<T> 抽象
 
 ### FR-2 战斗系统
 
-| ID | 需求 | 关联故事 |
-|----|------|---------|
-| FR-2.1 | 中央队列：房主接收 queue_submit → 排序 → 逐个调度 | US-2 |
-| FR-2.2 | 引用解引用：远程 invoke → owner 本地 REAL 执行 → invoke_result 回传 | US-2 |
-| FR-2.3 | combat_result 广播：房主转发全员；payload 保留 `executor_id`（不得改写为房主） | US-2 |
-| FR-2.4 | 诱导重放：AUTHORITATIVE_APPLY（suppressEvents 写数值）+ LOCAL_OWNER_ONLY（仅 `logic_owner_id==self`）；禁止无门控全量 hook 重算 | US-2, US-3, US-7 |
-| FR-2.5 | 回合结束：队列清空后房主广播 queue_empty，全员可结束回合 | US-2 |
-| FR-2.6 | 怪物核心状态：图主统一管理意图/AI/`takeTurn`/HP 死亡权威；附着 buff 逻辑归施加者自发执行 | US-2, US-4 |
-| FR-2.7 | 在线角色渲染：RemotePlayer overrides AbstractPlayer，BaseMod RenderSubscriber 渲染 | US-2 |
-| FR-2.8 | 战斗阶段：由**房主**同步（queue_empty / 聚合 end_turn；计划 combat_phase）；客户端跟本地引擎；不远程点名 buff | US-2 |
-| FR-2.9 | Buff 逻辑所有权：施加者优先；掉线按 content-hash → 宿主权威回退；非所有者投影无效果 | US-2, US-3 |
-| FR-2.10 | 怪物 mutation：非图主 proposal → 图主 revision 校验 → commit 广播；commit 不得再捕获为 proposal | US-2, US-3 |
+| ID | 需求 | 关联故事 | 实现状态 |
+|----|------|---------|---------|
+| FR-2.1 | 中央队列：房主接收 queue_submit → 排序 → 逐个调度 | US-2 | 已实现 |
+| FR-2.2 | 引用解引用：远程 invoke → owner 本地 REAL 执行 → invoke_result 回传 | US-2 | 已实现 |
+| FR-2.3 | combat_result 广播：房主转发全员；保留 `executor_id`（不得改写为房主） | US-2 | 已实现（MessageRouter/QueueComplete） |
+| FR-2.4 | 诱导重放：AUTHORITATIVE_APPLY + LOCAL_OWNER_ONLY（TriggerRegistry owner==self）；禁止 publishOnCardUse 全量 hook | US-2, US-3, US-7 | 已实现（CombatResultReplayer + LocalOwnerGate） |
+| FR-2.5 | 回合结束：队列清空后房主广播 queue_empty，全员可结束回合 | US-2 | 已实现 |
+| FR-2.6 | 怪物核心状态：图主意图/AI；附着 buff 归施加者自发 | US-2, US-4 | 部分：意图广播+HP 增量；buff 自发/mutation 未完 |
+| FR-2.7 | 在线角色渲染：RemotePlayer + RenderSubscriber | US-2 | 已实现 |
+| FR-2.8 | 战斗阶段：房主同步（queue_empty / end_turn 聚合；计划 combat_phase） | US-2 | 部分：现有信号可用；无显式 combat_phase |
+| FR-2.9 | Buff 逻辑所有权：施加者优先；协议字段 `logic_owner_id`；非 owner 投影 no-op | US-2, US-3 | 部分：字段+门控已有；ComponentAttachment 注册未完 |
+| FR-2.10 | 怪物 mutation：proposal → 图主 commit | US-2, US-3 | 未实现（schema 草案 only） |
 
 ### FR-3 Mod 兼容性
 
-| ID | 需求 | 关联故事 |
-|----|------|---------|
-| FR-3.1 | 内容校验：resource_hash (SHA-256) 比对，决定本地引用 vs 远程引用 | US-3 |
-| FR-3.2 | 分层引用：hash 一致 → 本地引用；不一致/无定义 → 远程引用 + fallback | US-3 |
-| FR-3.3 | 交叉触发：本地所有权组件在收到 combat 事实后自发执行；远程逻辑仍经引用对所有者 REAL 解引用。禁止“人人诱导即触发” | US-3 |
-| FR-3.4 | 诱导重放门控：非 logic_owner 组件 no-op；不得用全量 useCard 链触发所有本地 @SpirePatch | US-3, US-7 |
-| FR-3.5 | Fallback 效果类型：既有 13 种 + 计划 `set_monster_hp` / `monster_death`；`apply_power` 携带 `logic_owner_id` | US-3 |
+| ID | 需求 | 关联故事 | 实现状态 |
+|----|------|---------|---------|
+| FR-3.1 | 内容校验：resource_hash (SHA-256) 比对，决定本地引用 vs 远程引用 | US-3 | 已实现 |
+| FR-3.2 | 分层引用：hash 一致 → 本地引用；不一致/无定义 → 远程引用 + fallback | US-3 | 已实现 |
+| FR-3.3 | 交叉触发：LOCAL_OWNER_ONLY 经 TriggerRegistry；远程逻辑经引用 REAL 解引用 | US-3 | 部分：门控已有；全量 attachment 调度未完 |
+| FR-3.4 | 诱导重放门控：非 local owner 不 fire；禁止 publishOnCardUse 全量链 | US-3, US-7 | 已实现 |
+| FR-3.5 | Fallback 效果 + `logic_owner_id` 字段；计划 `set_monster_hp`/`monster_death` | US-3 | 部分：字段已有；新 kind 未接线 |
 
 ### FR-4 地图与事件
 
