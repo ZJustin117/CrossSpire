@@ -1,5 +1,5 @@
 ---
-description: Run Android dual-device CrossSpire E2E via SlayTheAmethyst harness/connector and BaseMod console. Use for host/join/status, multiplayer smoke, or harness troubleshooting. Read-only — does not edit source. Requires .env.local.
+description: Run Android dual-device CrossSpire E2E via SlayTheAmethyst harness/connector and BaseMod console. Use for host/join/status, multiplayer smoke, or harness troubleshooting. Read-only — does not edit source. Requires .env.local. Invoke via Task without task_id for new runs; only pass task_id when resuming a prior ses… session (never invent UUIDs).
 mode: subagent
 temperature: 0.1
 permission:

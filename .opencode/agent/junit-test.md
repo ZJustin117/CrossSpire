@@ -1,5 +1,5 @@
 ---
-description: Run and report CrossSpire JUnit tests (mods/cross-spire ./gradlew test). Use when verifying unit tests, test failures, or after logic changes. Read-only — does not edit source.
+description: Run and report CrossSpire JUnit tests (mods/cross-spire ./gradlew test). Use when verifying unit tests, test failures, or after logic changes. Read-only — does not edit source. Invoke via Task without task_id for new runs; only pass task_id when resuming a prior ses… session (never invent UUIDs).
 mode: subagent
 temperature: 0.1
 permission:
