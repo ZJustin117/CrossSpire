@@ -13,8 +13,9 @@
 | P3 清理稳定 | ✅ 完成 | T3.1–T3.8 |
 | P4 Android 调试清理 | ✅ 完成 | T4.1–T4.7（见 `task.md` / `development/`） |
 | 归档 | ✅ 完成 | A1–A6 |
-| P5 Buff 所有权契约 | 🟡 进行中 | T5.0–T5.2 + T5.4–T5.5 ✅（原版）；**T5.3 灾厄/mutation 延后** |
-| **总** | **历史阶段完成 + P5 原版契约完成** | 以构建结果为准 |
+| P5 Buff 所有权契约 | ✅ 原版完成 | T5.0–T5.2 + T5.4–T5.5 ✅；**T5.3 灾厄/mutation 延后** |
+| P6 战斗回合闭环 | ✅ 核心完成 | T6.0–T6.2/T6.4/T6.5 ✅；T6.3 可选增强 |
+| **总** | **P5 原版完成 + P6 进行中** | 以构建结果为准 |
 
 ## 目录
 
@@ -24,6 +25,7 @@
 4. [Phase 3: 清理与稳定](#phase-3-清理与稳定)
 5. [归档: 不影响运行的顺路修](#归档-不影响运行的顺路修)
 6. [Phase 5: Buff 所有权与诱导重放门控](#phase-5-buff-所有权与诱导重放门控)
+7. [Phase 6: 战斗回合闭环](#phase-6-战斗回合闭环)
 
 ---
 
@@ -814,3 +816,33 @@ P5.T5.0–T5.2 + T5.4–T5.5 ✅（原版 Bash/Vulnerable）
 | D2 诱导 | `apply_power: Vulnerable→Cultist x2 logic_owner=<D1>`；`skip non-owner power logic` |
 | phase | `resolving_queue` → `queue_empty` → `pre_monster_turn` 双端一致 |
 | 诊断 | Arthas `jad` 核对新类；冷启动后加载新 JAR |
+
+---
+
+## Phase 6: 战斗回合闭环
+
+> 在 P5 原版 buff 契约之上，打通 end_turn → 怪物回合权威 → 回玩家回合。**T5.3 mutation 仍延后。**
+
+### 状态机
+
+```
+queue_empty / player_turn
+  --all end_turn--> pre_monster_turn --> monster_turn
+  --stage host HP delta combat_result--> post_monster_turn --> player_turn
+```
+
+### 任务
+
+| Task | 内容 | 状态 |
+|------|------|------|
+| T6.0 | 文档 + 阶段表对齐 | ✅ |
+| T6.1 | `CombatTurnOrchestrator` 合法转换 + host 广播 `monster_turn` | ✅ |
+| T6.2 | 图主 `MonsterGroup.applyPreTurnLogic` HP 增量 → combat_result | ✅ |
+| T6.3 | logic_owner 原版 power 自发（随引擎；gate 已有） | 部分 |
+| T6.4 | monster 阶段拒绝 queue_submit；end_turn 门控 | ✅ |
+| T6.5 | JUnit + 双机 E2E 一回合闭环 | ✅ |
+
+### 文件
+
+- `CombatTurnOrchestrator.java`, `MonsterTurnCapture.java`, `MonsterTurnPatches.java`
+- `CombatPhaseCoordinator`, `MessageRouter`, `EndTurnSyncPatches`, `CentralQueueManager`

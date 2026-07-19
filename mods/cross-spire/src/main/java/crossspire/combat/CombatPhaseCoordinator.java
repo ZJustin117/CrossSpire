@@ -44,14 +44,14 @@ public final class CombatPhaseCoordinator {
             lastTransactionId = transactionId;
         }
         try {
-            if (CombatPhase.QUEUE_EMPTY.equals(phase)) {
+            if (CombatPhase.QUEUE_EMPTY.equals(phase)
+                || CombatPhase.PLAYER_TURN.equals(phase)) {
                 QueueDisplay.onQueueEmpty();
             } else if (CombatPhase.RESOLVING_QUEUE.equals(phase)
-                || CombatPhase.PLAYER_TURN.equals(phase)
-                || CombatPhase.PRE_MONSTER_TURN.equals(phase)) {
-                if (!CombatPhase.QUEUE_EMPTY.equals(phase)) {
-                    QueueDisplay.resetEndTurn();
-                }
+                || CombatPhase.PRE_MONSTER_TURN.equals(phase)
+                || CombatPhase.MONSTER_TURN.equals(phase)
+                || CombatPhase.POST_MONSTER_TURN.equals(phase)) {
+                QueueDisplay.resetEndTurn();
             }
         } catch (Throwable t) {
             // QueueDisplay / BaseMod may be unavailable in pure unit tests
@@ -62,9 +62,19 @@ public final class CombatPhaseCoordinator {
     /**
      * Room host: set phase and broadcast combat_phase to all peers.
      * No-op network when not connected; still updates local state when host.
+     * When connected as host, rejects illegal transitions (P6 state machine).
      */
     public static void broadcast(String phase) {
         if (!CombatPhase.isValid(phase)) return;
+
+        if (CrossSpireMod.isConnected() && CrossSpireMod.isRoomHost()) {
+            if (!CombatTurnOrchestrator.canBroadcast(phase)
+                && !phase.equals(currentPhase)) {
+                log("reject illegal broadcast " + currentPhase + " -> " + phase);
+                return;
+            }
+        }
+
         String tx = UUID.randomUUID().toString().substring(0, 8);
         applyLocal(phase, tx);
 
@@ -78,6 +88,21 @@ public final class CombatPhaseCoordinator {
         msg.transactionId = tx;
         CrossSpireMod.send(Protocol.GSON.toJson(msg));
         log("broadcast " + phase + " tx=" + tx);
+    }
+
+    /**
+     * Host: legal transition + broadcast. Returns false if transition illegal.
+     */
+    public static boolean broadcastTransition(String phase) {
+        if (!CombatPhase.isValid(phase)) return false;
+        if (CrossSpireMod.isConnected() && CrossSpireMod.isRoomHost()
+            && !CombatTurnOrchestrator.canBroadcast(phase)
+            && !phase.equals(currentPhase)) {
+            log("reject transition " + currentPhase + " -> " + phase);
+            return false;
+        }
+        broadcast(phase);
+        return true;
     }
 
     /** Build JSON for tests without mutating global state. */

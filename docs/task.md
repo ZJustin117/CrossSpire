@@ -1,7 +1,7 @@
 # CrossSpire — SDD 迁移任务清单 (Task)
 
 > 历史阶段 30/30 完成。当前测试数和 JAR 大小以构建结果为准。
-> 与 `plan.md` 执行状态对齐：2026-07-19。**T5.2–T5.5 ✅（原版 buff）；T5.3 灾厄/mutation 延后**。
+> 与 `plan.md` 执行状态对齐：2026-07-19。**P5 原版 ✅；P6 战斗回合闭环进行中；T5.3 延后**。
 
 ## P4 Android 调试基础设施清理 ✅
 
@@ -88,6 +88,17 @@
   - **D1 日志**：`queue_complete: Bash [damage=8, apply_power=2]`；`CombatPhaseCoordinator broadcast resolving_queue / queue_empty / pre_monster_turn`
   - **D2 日志**：`INDUCED … apply_power: Vulnerable→Cultist x2 logic_owner=<D1>`；`skip non-owner power logic: Vulnerable logic_owner=<D1>`；`combat_phase: queue_empty`
   - T5.3 后：灾厄跨节点 — 暂无内容支持时跳过
+
+## P6 战斗回合闭环（2026-07-19）
+
+> 目标：`end_turn` 共识 → `pre_monster_turn` → `monster_turn`（图主权威）→ `post_monster_turn` → `player_turn`。不接 T5.3 mutation。
+
+- [x] T6.0 文档：plan/task/spec 阶段表
+- [x] T6.1 `CombatTurnOrchestrator` 状态机 + host 广播 `MONSTER_TURN`（end_turn 共识后）
+- [x] T6.2 `MonsterTurnCapture` + `MonsterGroup.applyPreTurnLogic` Prefix/Postfix HP 增量 → combat_result；host 推进 post/player
+- [x] T6.4 `CentralQueueManager` 在 pre/monster/post 拒绝 queue_submit
+- [x] T6.5 双机 E2E：`pre_monster`→`monster`→`post`→`player` + T5.5 Bash 回归（2026-07-19）
+- [ ] T6.3 增强：phase 边界显式 fire owner-only 原版 power（引擎自发为主；可选）
 
 ## 归档 ✅
 

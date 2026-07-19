@@ -21,6 +21,11 @@ public class CentralQueueManager {
     };
 
     public void onQueueSubmit(Protocol.QueueSubmitMessage pkt) {
+        if (!CombatTurnOrchestrator.allowsQueueSubmitCurrent()) {
+            CSLog.log("CentralQueueManager reject submit in phase="
+                + CombatPhaseCoordinator.getCurrentPhase() + " card=" + pkt.cardId);
+            return;
+        }
         String dedupKey = pkt.senderId + "/" + pkt.seq;
         pkt.packetId = dedupKey;
         boolean becameNonEmpty;

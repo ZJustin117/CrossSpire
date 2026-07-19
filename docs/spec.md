@@ -401,9 +401,9 @@ THEN  塔2 客户端实现相同的 StandardPacket 协议 + Reference<T> 抽象
 | FR-2.3 | combat_result 广播：房主转发全员；保留 `executor_id`（不得改写为房主） | US-2 | 已实现（MessageRouter/QueueComplete） |
 | FR-2.4 | 诱导重放：AUTHORITATIVE_APPLY + LOCAL_OWNER_ONLY（TriggerRegistry owner==self）；禁止 publishOnCardUse 全量 hook | US-2, US-3, US-7 | 已实现（CombatResultReplayer + LocalOwnerGate） |
 | FR-2.5 | 回合结束：队列清空后房主广播 queue_empty，全员可结束回合 | US-2 | 已实现 |
-| FR-2.6 | 怪物核心状态：图主意图/AI；附着 buff 归施加者自发 | US-2, US-4 | 部分：意图广播+HP 增量；buff 自发/mutation 未完（mutation 延后 T5.3） |
+| FR-2.6 | 怪物核心状态：图主意图/AI；附着 buff 归施加者自发 | US-2, US-4 | 部分：意图广播；P6 HP 增量 capture；mutation 延后 T5.3 |
 | FR-2.7 | 在线角色渲染：RemotePlayer + RenderSubscriber | US-2 | 已实现 |
-| FR-2.8 | 战斗阶段：房主同步（queue_empty / end_turn 聚合 + 显式 combat_phase） | US-2 | 已实现（T5.4；legacy queue_empty 并存） |
+| FR-2.8 | 战斗阶段：房主同步（queue_empty / end_turn 聚合 + 显式 combat_phase） | US-2 | 已实现（T5.4 + P6：pre_monster→monster→post→player） |
 | FR-2.9 | Buff 逻辑所有权：施加者优先；协议字段 `logic_owner_id`；非 owner 投影 no-op | US-2, US-3 | 已实现（T5.2 原版 Vulnerable）；灾厄/mutation 仍延后 |
 | FR-2.10 | 怪物 mutation：proposal → 图主 commit | US-2, US-3 | 未实现（schema 草案 only）；**延后**至有灾厄/改怪物核心状态内容后 |
 

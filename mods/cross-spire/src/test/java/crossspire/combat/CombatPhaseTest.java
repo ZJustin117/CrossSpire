@@ -37,6 +37,13 @@ public class CombatPhaseTest {
         assertTrue(CombatPhase.allowsEndTurn(CombatPhase.PLAYER_TURN));
         assertFalse(CombatPhase.allowsEndTurn(CombatPhase.RESOLVING_QUEUE));
         assertFalse(CombatPhase.allowsEndTurn(CombatPhase.PRE_MONSTER_TURN));
+        assertFalse(CombatPhase.allowsEndTurn(CombatPhase.MONSTER_TURN));
+    }
+
+    @Test
+    public void allowsQueueSubmitDelegatesToOrchestrator() {
+        assertTrue(CombatPhase.allowsQueueSubmit(CombatPhase.PLAYER_TURN));
+        assertFalse(CombatPhase.allowsQueueSubmit(CombatPhase.MONSTER_TURN));
     }
 
     @Test

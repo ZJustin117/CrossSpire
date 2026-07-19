@@ -29,4 +29,9 @@ public final class CombatPhase {
     public static boolean allowsEndTurn(String phase) {
         return QUEUE_EMPTY.equals(phase) || PLAYER_TURN.equals(phase);
     }
+
+    /** Whether queue_submit / card play is allowed (player side of the turn). */
+    public static boolean allowsQueueSubmit(String phase) {
+        return CombatTurnOrchestrator.allowsQueueSubmit(phase);
+    }
 }

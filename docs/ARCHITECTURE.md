@@ -650,7 +650,7 @@ ComponentAttachment {
 | `combat_result` | 房主广播 | AUTHORITATIVE_APPLY + local-owner-only 被动 |
 | `queue_empty` | 房主 | 允许结束回合；阶段门控 |
 | `player_end_turn` 聚合 | 玩家→房主，房主协调 | 对齐进入怪物回合侧本地阶段 |
-| `combat_phase`（计划） | 房主 | 显式枚举：`player_turn` / `resolving_queue` / `queue_empty` / `pre_monster_turn` / `monster_turn` / `post_monster_turn` |
+| `combat_phase` | 房主 | 显式枚举：`player_turn` / `resolving_queue` / `queue_empty` / `pre_monster_turn` / `monster_turn` / `post_monster_turn`（P6 已接线） |
 
 客户端在收到房主阶段信号后**跟本地引擎**推进；buff 在本地时机自发，不由房主远程 invoke。
 
@@ -1682,8 +1682,10 @@ CrossSpire/
             │   ├── CombatResultReplayer.java   # AUTHORITATIVE_APPLY + LOCAL_OWNER_ONLY
             │   ├── InteractionCapture.java     # 捕获 BaseMod 选择面板 → interact_request
             │   ├── LocalOwnerGate.java         # 已实现: induced 仅 logic_owner==self
-            │   ├── ComponentAttachment.java    # planned (T5.2): buff 实例元数据
-            │   ├── ComponentAttachmentRegistry.java  # planned (T5.2)
+            │   ├── ComponentAttachment.java    # 已实现 (T5.2)
+            │   ├── ComponentAttachmentRegistry.java  # 已实现 (T5.2)
+            │   ├── CombatTurnOrchestrator.java # 已实现 (P6): 回合阶段状态机
+            │   ├── MonsterTurnCapture.java     # 已实现 (P6): HP 增量纯逻辑
             │   ├── MonsterMutationCapture.java # planned (T5.3): 事务化怪物修改捕获
             │   └── MonsterAuthorityCoordinator.java  # planned (T5.3): 图主 proposal→commit
             └── ui/

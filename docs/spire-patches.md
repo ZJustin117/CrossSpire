@@ -84,3 +84,5 @@ CrossSpire 全部 MTS 注入点，按功能域分组。最后更新: 2026-07-19
 - 修改: `MonsterTurnPatches` — 回退为 `usePreBattleAction` (T2.3, HP 增量法暂不实现)
 - T5.2（无新 @SpirePatch）：`ComponentAttachmentRegistry` + `ApplyPowerEffects` + `PowerStub`/`PowerLogicGate` 回调 no-op；Replayer AUTHORITATIVE_APPLY 登记 attachment；Bash 启发式 `magic_number`→`apply_power`+`logic_owner_id`
 - T5.4（无新 @SpirePatch）：`CombatPhaseCoordinator` + 房主 `combat_phase` 广播；`RoomHost` end-turn 共识 → `pre_monster_turn`
+- P6/T6.2：`MonsterTurnPatches` — `MonsterGroup.applyPreTurnLogic` Prefix 采样玩家 HP/Block + Postfix 差值 `combat_result`；仅 stage host 且 `combat_phase=monster_turn`
+- P6/T6.1：无新 patch — `CombatTurnOrchestrator` + end_turn 后广播 `pre_monster_turn`→`monster_turn`

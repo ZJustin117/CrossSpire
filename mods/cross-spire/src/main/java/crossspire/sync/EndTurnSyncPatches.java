@@ -40,6 +40,8 @@ public class EndTurnSyncPatches {
                 CrossSpireMod.roomHost.clearEndTurns();
                 crossspire.combat.CombatPhaseCoordinator.broadcast(
                     crossspire.combat.CombatPhase.PRE_MONSTER_TURN);
+                crossspire.combat.CombatPhaseCoordinator.broadcast(
+                    crossspire.combat.CombatPhase.MONSTER_TURN);
             }
         }
         BaseMod.logger.info("EndTurnSync broadcast player_end_turn");

@@ -99,6 +99,8 @@ public class MessageRouter {
 
         if ("combat_result".equals(type)) {
             resultReplayer.handleCombatResult(rawMessage);
+            // P6: if room host (not same as stage) receives stage-host monster_turn result, advance phase.
+            maybeAdvanceAfterMonsterCombatResult(msg);
         } else if ("player_state".equals(type)) {
             syncExecutor.handleSync("remote_player", null, 1, rawMessage);
         } else if ("stage_sync".equals(type)) {
@@ -326,7 +328,8 @@ public class MessageRouter {
         String tx = msg.has("transaction_id") ? msg.get("transaction_id").getAsString() : "";
         BaseMod.logger.info("MessageRouter combat_phase: " + phase + " tx=" + tx);
         crossspire.combat.CombatPhaseCoordinator.applyLocal(phase, tx);
-        if (crossspire.combat.CombatPhase.QUEUE_EMPTY.equals(phase)) {
+        if (crossspire.combat.CombatPhase.QUEUE_EMPTY.equals(phase)
+            || crossspire.combat.CombatPhase.PLAYER_TURN.equals(phase)) {
             Gdx.app.postRunnable(new Runnable() {
                 @Override public void run() {
                     if (AbstractDungeon.overlayMenu != null
@@ -336,6 +339,39 @@ public class MessageRouter {
                 }
             });
         }
+    }
+
+    /** Host advances after stage-host monster_turn combat_result when not already advanced locally. */
+    private void maybeAdvanceAfterMonsterCombatResult(JsonObject msg) {
+        if (!CrossSpireMod.isRoomHost()) return;
+        if (!crossspire.combat.CombatPhase.MONSTER_TURN.equals(
+            crossspire.combat.CombatPhaseCoordinator.getCurrentPhase())) {
+            return;
+        }
+        String monsterId = msg.has("monsterId") ? msg.get("monsterId").getAsString()
+            : (msg.has("monster_id") ? msg.get("monster_id").getAsString() : "");
+        String source = msg.has("source") ? msg.get("source").getAsString() : "";
+        if (!"monster_turn".equals(monsterId) && !crossspire.combat.MonsterTurnPatches.lastBroadcastWasMonsterTurn) {
+            return;
+        }
+        // Avoid double-advance when host==stage already advanced in MonsterTurnPatches.
+        if (source.equals(CrossSpireMod.playerId)
+            && !crossspire.combat.CombatPhase.MONSTER_TURN.equals(
+                crossspire.combat.CombatPhaseCoordinator.getCurrentPhase())) {
+            return;
+        }
+        if (source.equals(CrossSpireMod.playerId)) {
+            // Local stage already sent; patches may have advanced — only advance if still MONSTER_TURN.
+            if (!crossspire.combat.CombatPhase.MONSTER_TURN.equals(
+                crossspire.combat.CombatPhaseCoordinator.getCurrentPhase())) {
+                return;
+            }
+        }
+        crossspire.combat.CombatPhaseCoordinator.broadcast(
+            crossspire.combat.CombatPhase.POST_MONSTER_TURN);
+        crossspire.combat.CombatPhaseCoordinator.broadcast(
+            crossspire.combat.CombatPhase.PLAYER_TURN);
+        crossspire.combat.MonsterTurnPatches.lastBroadcastWasMonsterTurn = false;
     }
 
     private void handlePlayerEndTurn(JsonObject msg) {
@@ -351,8 +387,11 @@ public class MessageRouter {
             BaseMod.logger.info("MessageRouter end_turn ready=" + ready + "/" + total);
             if (CrossSpireMod.roomHost.checkEndTurnConsensus()) {
                 CrossSpireMod.roomHost.clearEndTurns();
+                // P6: pre_monster → monster_turn (host-driven; stage host runs AI in MONSTER_TURN)
                 crossspire.combat.CombatPhaseCoordinator.broadcast(
                     crossspire.combat.CombatPhase.PRE_MONSTER_TURN);
+                crossspire.combat.CombatPhaseCoordinator.broadcast(
+                    crossspire.combat.CombatPhase.MONSTER_TURN);
             }
         }
 
