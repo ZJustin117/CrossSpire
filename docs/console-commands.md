@@ -235,53 +235,52 @@ crossspire confirm
 
 ## Android 双设备联机测试
 
-当前维护者测试台使用 D1 `localhost:15555` 和 D2 `localhost:25555`。命令由 SlayTheAmethyst Harness 经 **connector daemon** 调用标准 BaseMod console，不再通过 ADB 写入 batch 文件，也不直接连 game-probe。
+命令由 SlayTheAmethyst Harness 经 **connector daemon** 调用标准 BaseMod console，不再通过 ADB 写入 batch 文件，也不直接连 game-probe。
 
-D2 的 `127.0.0.1:54321` 由外部测试基础设施自动转发到 D1 的 `127.0.0.1:54321`；这不是普通双设备网络的默认行为，也不由 CrossSpire 维护。完整环境、前置条件和故障定位见 [`development/android-harness.md`](./development/android-harness.md)。
+设备 serial、connector 端口与路径来自仓库根 `.env.local`（见 [`.env.example`](../.env.example)）。D2 的 `127.0.0.1:$CROSSSPIRE_GAME_PORT` 由外部测试基础设施转发到 D1；这不是普通双设备网络的默认行为，也不由 CrossSpire 维护。完整环境、前置条件和故障定位见 [`development/android-harness.md`](./development/android-harness.md)。
 
 ```bash
-export SLAY_THE_AMETHYST_ROOT=/path/to/SlayTheAmethystModded
-export STS_CONNECTOR_PORT=39999
+set -a && source .env.local && set +a
 
 # 一次会话启动一次 connector（在 Amethyst 仓库根）
 cd "$SLAY_THE_AMETHYST_ROOT"
 python3 -m scripts.tools.connector start --port "$STS_CONNECTOR_PORT"
 
-# 以下可在 CrossSpire 根用 scripts/tools symlink，或继续用 $SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py
+# 以下可在 CrossSpire 根用 scripts/tools symlink
 # 已 export STS_CONNECTOR_PORT 时可不传 -ConnectorPort；双设备时每条命令必须 -DeviceSerial
 
 # D1 (host)
 python3 scripts/tools/main.py sts-harness \
-  -Command console -DeviceSerial localhost:15555 \
-  -ConsoleCommand "crossspire host 127.0.0.1 54321"
+  -Command console -DeviceSerial "$CROSSSPIRE_D1_SERIAL" \
+  -ConsoleCommand "crossspire host 127.0.0.1 $CROSSSPIRE_GAME_PORT"
 
 # D2 (join)
 python3 scripts/tools/main.py sts-harness \
-  -Command console -DeviceSerial localhost:25555 \
-  -ConsoleCommand "crossspire join 127.0.0.1 54321"
+  -Command console -DeviceSerial "$CROSSSPIRE_D2_SERIAL" \
+  -ConsoleCommand "crossspire join 127.0.0.1 $CROSSSPIRE_GAME_PORT"
 
 # 战斗
 python3 scripts/tools/main.py sts-harness \
-  -Command console -DeviceSerial localhost:15555 \
+  -Command console -DeviceSerial "$CROSSSPIRE_D1_SERIAL" \
   -ConsoleCommand "crossspire start IRONCLAD"
 python3 scripts/tools/main.py sts-harness \
-  -Command console -DeviceSerial localhost:15555 \
+  -Command console -DeviceSerial "$CROSSSPIRE_D1_SERIAL" \
   -ConsoleCommand "fight Cultist"
 python3 scripts/tools/main.py sts-harness \
-  -Command console -DeviceSerial localhost:15555 \
+  -Command console -DeviceSerial "$CROSSSPIRE_D1_SERIAL" \
   -ConsoleCommand "crossspire play Strike_R"
 
 # 事件
 python3 scripts/tools/main.py sts-harness \
-  -Command console -DeviceSerial localhost:15555 \
+  -Command console -DeviceSerial "$CROSSSPIRE_D1_SERIAL" \
   -ConsoleCommand "crossspire cevent Living Wall"
 python3 scripts/tools/main.py sts-harness \
-  -Command console -DeviceSerial localhost:25555 \
+  -Command console -DeviceSerial "$CROSSSPIRE_D2_SERIAL" \
   -ConsoleCommand "crossspire eselect 0 Strike_R"
 
 # 诊断
 python3 scripts/tools/main.py sts-harness \
-  -Command console -DeviceSerial localhost:15555 \
+  -Command console -DeviceSerial "$CROSSSPIRE_D1_SERIAL" \
   -ConsoleCommand "crossspire gamestate"
 ```
 

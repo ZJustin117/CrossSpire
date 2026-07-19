@@ -47,10 +47,37 @@ The `docs/reference/` directory contains API documentation for the two key moddi
 | `basemod-custom-keywords.md` | Keyword JSON registration, `addKeyword` |
 | `basemod-custom-potions.md` | `addPotion` API |
 
+## Local machine config (not production)
+
+- Maintainer paths, ADB serials, and connector ports live in gitignored `.env.local` (template: `.env.example`).
+- Process docs under `docs/development/` use env **names** only (`$CROSSSPIRE_*`, `$STS_*`, `$SLAY_THE_AMETHYST_ROOT`).
+- OpenCode plugin `.opencode/plugins/local-env.ts` loads whitelist keys into shell env and test-agent system context. Restart opencode after changing agents/plugins.
+
+## OpenCode 测试 subagent
+
+只读验证用，定义在 `.opencode/agent/*.md`。主 agent **写代码**；跑测与联机检查用 Task / `@` 委派，避免主会话堆满 gradle/harness 日志。
+
+| Agent | 何时用 | 何时不用 |
+|-------|--------|----------|
+| `junit-test` | 逻辑/协议改完要回归；排查 unit 失败；用户明确要 JUnit 结果 | 纯读代码/设计；代码尚不可编译；只改 docs |
+| `android-harness` | 联机、host/join/console、真机路径必须验证；用户明确 E2E | 默认每次改动；无 `.env.local`/设备；unit 已覆盖 |
+
+### 委派规则（省 token / 防涣散）
+
+1. **一次委派 = 一个窄目标**（如「全量 `./gradlew test`」或「D1 host + D2 join + `crossspire status`」）。禁止「重构 + 跑测 + 翻日志 + 修代码」塞进同一子任务。
+2. **顺序**：改代码 → 需要时 `junit-test` → **仅当**联机契约或 Android 路径受影响再 `android-harness`。不要默认双开 E2E。
+3. **失败**：子 agent **只回摘要**（pass/fail、失败类/方法、关键输出摘录）。**主 agent 修源码**后再委派复测；子 agent 不 edit。
+4. **不要**在主会话里自己跑完整 suite/长 harness，除非 subagent 不可用；也不要把整份 test 日志贴回主对话。
+5. JUnit 与 harness **一般串行**（先 unit）；无依赖的并行 harness 不要开。
+6. Task 恢复会话时 `task_id` 仅用 `ses…`；**新任务省略 `task_id`**（勿传随机 UUID）。
+7. 依赖 `.env.local`；缺变量时子 agent 应阻塞并列出键名，主 agent 勿发明绝对路径。
+
 ## Storage
+
 
 - Temporary files, decompiled sources, and scratch files go into `agent-tmp/` directory. Do not commit them.
 - Debug artifacts go into `debug-artifacts/` (gitignored).
+
 
 ## Git
 

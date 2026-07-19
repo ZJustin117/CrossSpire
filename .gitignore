@@ -6,8 +6,6 @@ dist/
 .gradle/
 .kotlin/
 build/
-!scripts/build/
-!scripts/build/**
 *.iml
 .idea/
 local.properties
@@ -53,9 +51,21 @@ mods/*/build/
 /.codex/
 /.codex_tmp/
 /.codex-tmp/
-/.opencode/
+/.codenomad/
+
+# OpenCode: ignore caches/deps; keep shared agents + plugins
+/.opencode/*
+!/.opencode/agent/
+!/.opencode/agent/**
+!/.opencode/plugins/
+!/.opencode/plugins/**
+!/.opencode/package.json
+/.opencode/node_modules/
+/.opencode/bun.lock
+/.opencode/bun.lockb
+
 
 # SlayTheAmethyst symlinks
-/scripts/tools
+/scripts
 /gradlew
 /desktop-1.0.jar
