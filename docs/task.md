@@ -1,7 +1,7 @@
 # CrossSpire — SDD 迁移任务清单 (Task)
 
 > 历史阶段 30/30 完成。当前测试数和 JAR 大小以构建结果为准。
-> 与 `plan.md` 执行状态对齐：2026-07-19。**下一步：T5.2**。
+> 与 `plan.md` 执行状态对齐：2026-07-19。**T5.2–T5.5 ✅（原版 buff）；T5.3 灾厄/mutation 延后**。
 
 ## P4 Android 调试基础设施清理 ✅
 
@@ -13,7 +13,7 @@
 - [x] T4.6 使用 Harness → BaseMod console 完成 D1/D2 Android E2E
 - [x] T4.7 静态审计发布源码/JAR 不含 Android 测试台硬编码和 Harness 依赖
 
-本阶段测试环境：D1 `localhost:15555`、D2 `localhost:25555`；D2 的 `localhost:54321` 由外部测试基础设施自动转发到 D1 的 `localhost:54321`。Desktop 验证暂缓。
+本阶段测试环境：D1/D2 ADB serial 与游戏端口见仓库根 `.env.local`（模板 `.env.example`）；D2 loopback 游戏端口由外部测试基础设施转发到 D1。Desktop 验证暂缓。
 
 ## P1 架构修复 ✅
 
@@ -55,6 +55,9 @@
 
 > Breaking：否决全量深层诱导与图主点名触发 buff。见 `plan.md` Phase 5、`ARCHITECTURE.md` §8–10、`spec.md` FR-2.4/2.8–2.10。
 > 实现与契约对照：`LocalOwnerGate` + Replayer 门控已落地；mutation/attachment 仍为后续。
+>
+> **范围修订（2026-07-19）**：当前无灾厄等自定义 buff 支持。T5.2 用**原版 buff**验收（优先 `Bash` → `Vulnerable`）。
+> 灾厄 / Mod-only power / `monster_mutation_*` 整段延后至 T5.3+，不阻塞 T5.2 交付。
 
 - [x] T5.0 文档 + schema：`logic_owner_id`、mutation/phase 草案；ARCHITECTURE/spec/plan/task
 - [x] T5.1 `LocalOwnerGate` + `CombatResultReplayer` AUTHORITATIVE_APPLY + LOCAL_OWNER_ONLY
@@ -63,12 +66,28 @@
   - `executor_id` 在 MessageRouter / QueueComplete / LocalReference 保留
   - induced 副作用带 `origin_owner_id` + `hop_count`（上限 3）
   - 测试：`LocalOwnerGateTest` + Protocol logic_owner 序列化
-- [ ] T5.2 `apply_power` 全面写入 `logic_owner_id` + ComponentAttachment 注册表 + PowerStub 非 owner no-op 接线
-  - 已有：Protocol 字段、`LocalReference.applyPowerEffect` 辅助、`PowerStub.logicOwnerId`
-  - 未有：战斗中真实 ApplyPower 捕获、attachment 广播/快照
-- [ ] T5.3 怪物 mutation proposal/commit（图主 revision CAS）
-- [ ] T5.4 房主显式 `combat_phase`（当前依赖 queue_empty + player_end_turn 聚合）
-- [ ] T5.5 E2E 验收：非 owner 无二次被动 combat_result；灾厄跨节点
+- [x] T5.2 `apply_power` 全面写入 `logic_owner_id` + ComponentAttachment 注册表 + PowerStub 非 owner no-op 接线（2026-07-19）
+  - **验收基准**：原版 `Bash` → `Vulnerable`（`logic_owner_id = 施加者`）
+  - 落地：`ApplyPowerEffects`、`ComponentAttachment`/`Registry`、Replayer AUTHORITATIVE_APPLY 登记、`PowerLogicGate`+`PowerStub` 回调 no-op、`EffectCapture.recordApplyPower`
+  - REAL effects：`magic_number` → `apply_power`+`logic_owner_id`（LocalReference + MessageRouter）
+  - 单测：`ComponentAttachmentRegistryTest`、`ApplyPowerOwnershipTest`、`PowerStubTest`、`LocalReferenceApplyPowerTest`、`EffectCapture` owner 路径
+  - **未做（可选增强）**：真实 `ApplyPowerAction` 全量捕获 patch；snapshot 带 attachment
+  - **不做（延后）**：灾厄/自定义 power / mutation
+- [ ] T5.3 怪物 mutation proposal/commit（图主 revision CAS）— **延后**；依赖自定义/灾厄类 buff 再测
+- [x] T5.4 房主显式 `combat_phase`（2026-07-19）
+  - `CombatPhase` 枚举 + `CombatPhaseCoordinator` 广播/本地应用
+  - 房主：首项 `queue_submit` → `resolving_queue`；队列空 → `queue_empty`（仍发 legacy `queue_empty`）
+  - 房主：全员 `player_end_turn` 共识 → `pre_monster_turn`
+  - `crossspire phase` / `status` 显示当前阶段；`RoomHost` end-turn 聚合
+  - 测试：`CombatPhaseTest` + `RoomHostTest` end-turn 共识
+- [x] T5.5 E2E 验收（2026-07-19，原版 Bash/Vulnerable + combat_phase）
+  - 前置：`adb force-stop` 冷启动后加载新 JAR（SkipInstall 热重启可能仍跑旧类；Arthas `jad` 可核对）
+  - 游戏网：`adb -s D1 forward tcp:15432 tcp:54321` + `adb -s D2 reverse tcp:54321 tcp:15432`（openp2p 仅 ADB 端口，不转游戏 54321）
+  - D1 host + D2 join → room size=2
+  - D1 `start IRONCLAD` → `fight Cultist` → `play Bash Cultist`
+  - **D1 日志**：`queue_complete: Bash [damage=8, apply_power=2]`；`CombatPhaseCoordinator broadcast resolving_queue / queue_empty / pre_monster_turn`
+  - **D2 日志**：`INDUCED … apply_power: Vulnerable→Cultist x2 logic_owner=<D1>`；`skip non-owner power logic: Vulnerable logic_owner=<D1>`；`combat_phase: queue_empty`
+  - T5.3 后：灾厄跨节点 — 暂无内容支持时跳过
 
 ## 归档 ✅
 

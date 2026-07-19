@@ -15,6 +15,8 @@ public class RoomHost {
     private final Map<String, Integer> playerPins = new HashMap<String, Integer>();
     private final Map<String, String> stageVotes = new HashMap<String, String>();
     private final Map<String, Integer> eventVotes = new HashMap<String, Integer>();
+    /** Players who have sent player_end_turn this round (host-side aggregation). */
+    private final Map<String, Boolean> endTurnReady = new HashMap<String, Boolean>();
 
     public RoomHost(String hostPlayerId) {
         this.hostPlayerId = hostPlayerId;
@@ -58,6 +60,34 @@ public class RoomHost {
         playerPins.remove(playerId);
         stageVotes.remove(playerId);
         eventVotes.remove(playerId);
+        endTurnReady.remove(playerId);
+    }
+
+    public void markEndTurn(String playerId) {
+        if (playerId != null) endTurnReady.put(playerId, Boolean.TRUE);
+    }
+
+    public void clearEndTurns() {
+        endTurnReady.clear();
+    }
+
+    /**
+     * @return true when every connected player has marked end-turn this round.
+     */
+    public boolean checkEndTurnConsensus() {
+        if (playerIds.isEmpty()) return false;
+        for (String id : playerIds) {
+            if (!Boolean.TRUE.equals(endTurnReady.get(id))) return false;
+        }
+        return true;
+    }
+
+    public int getEndTurnReadyCount() {
+        int n = 0;
+        for (String id : playerIds) {
+            if (Boolean.TRUE.equals(endTurnReady.get(id))) n++;
+        }
+        return n;
     }
 
     public boolean hasPlayer(String playerId) {

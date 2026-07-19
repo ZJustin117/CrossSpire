@@ -47,6 +47,18 @@ public final class EffectCapture {
         captured.add(eff);
     }
 
+    /** Record apply_power with applier-first logic_owner_id. */
+    public static void recordApplyPower(String target, int amount, String powerId, String logicOwnerId) {
+        if (!capturing) return;
+        Protocol.EffectDescription eff = new Protocol.EffectDescription();
+        eff.kind = "apply_power";
+        eff.target = target;
+        eff.amount = amount;
+        eff.powerId = powerId;
+        eff.logicOwnerId = logicOwnerId;
+        captured.add(eff);
+    }
+
     public static Protocol.EffectDescription[] getCaptured() {
         return captured.toArray(new Protocol.EffectDescription[0]);
     }

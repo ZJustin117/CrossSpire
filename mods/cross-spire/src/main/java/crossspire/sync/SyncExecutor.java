@@ -101,20 +101,35 @@ public class SyncExecutor {
 
         CombatSyncPatches.suppressBroadcast = true;
 
+        // GameStarter uses menu fade-out; player/dungeon exist only after CardCrawlGame.update.
+        // Retry a few frames so remote clients are not stuck without a MonsterRoom.
+        scheduleRemoteCombatEntry(firstMonster, 0);
+    }
+
+    private void scheduleRemoteCombatEntry(final String monsterName, final int attempt) {
         Gdx.app.postRunnable(new Runnable() {
             @Override public void run() {
                 createGameIfNeeded();
-                if (AbstractDungeon.player != null) {
-                    Gdx.app.postRunnable(new Runnable() {
-                        @Override public void run() {
-                            EventSuppression.suppressEvents(() -> {
-                                enterRemoteCombat(firstMonster);
-                            });
-                            BaseMod.logger.info("SyncExecutor done: screen=" + AbstractDungeon.screen
-                                + " room=" + (AbstractDungeon.getCurrRoom() != null ? AbstractDungeon.getCurrRoom().getClass().getSimpleName() : "null"));
-                        }
-                    });
+                crossspire.remote.GameStarter.bindLocalPlayerIfReady();
+
+                if (AbstractDungeon.player == null
+                        || CardCrawlGame.mode != CardCrawlGame.GameMode.GAMEPLAY
+                        || AbstractDungeon.getCurrMapNode() == null) {
+                    if (attempt < 12) {
+                        scheduleRemoteCombatEntry(monsterName, attempt + 1);
+                    } else {
+                        BaseMod.logger.error("SyncExecutor room_enter: game not ready after retries");
+                    }
+                    return;
                 }
+
+                EventSuppression.suppressEvents(() -> {
+                    enterRemoteCombat(monsterName);
+                });
+                BaseMod.logger.info("SyncExecutor done: attempt=" + attempt
+                    + " screen=" + AbstractDungeon.screen
+                    + " room=" + (AbstractDungeon.getCurrRoom() != null
+                        ? AbstractDungeon.getCurrRoom().getClass().getSimpleName() : "null"));
             }
         });
     }
@@ -128,7 +143,8 @@ public class SyncExecutor {
     }
 
     private static void enterRemoteCombat(String monsterName) {
-        if (AbstractDungeon.getCurrRoom() instanceof MonsterRoom) {
+        if (AbstractDungeon.getCurrRoom() instanceof MonsterRoom
+                && AbstractDungeon.getCurrRoom().monsters != null) {
             BaseMod.logger.info("SyncExecutor already in combat, skip");
             return;
         }
@@ -137,6 +153,11 @@ public class SyncExecutor {
         BaseMod.logger.info("SyncExecutor entering combat: " + monsterName + " key=" + key);
 
         try {
+            if (AbstractDungeon.getCurrMapNode() == null) {
+                BaseMod.logger.error("SyncExecutor enterRemoteCombat: no map node");
+                return;
+            }
+
             MonsterGroup group = MonsterHelper.getEncounter(key);
             MonsterRoom room = new MonsterRoom();
             room.monsters = group;
@@ -156,7 +177,8 @@ public class SyncExecutor {
 
             BaseMod.logger.info("SyncExecutor combat entered: " + monsterName);
         } catch (Exception e) {
-            BaseMod.logger.error("SyncExecutor enterRemoteCombat: " + e.getMessage());
+            BaseMod.logger.error("SyncExecutor enterRemoteCombat: " + e.getClass().getSimpleName()
+                + ": " + e.getMessage());
         }
     }
 

@@ -87,7 +87,12 @@ WHEN  房主广播 queue_empty
 THEN  所有玩家的"结束回合"按钮变为可用
       该信号同时作为房主战斗阶段对齐的一部分
 
-GIVEN A 对怪物施加灾厄（logic_owner_id = A）  [P5 目标；mutation 路径未实现]
+GIVEN A 对怪物施加原版 Vulnerable（logic_owner_id = A）  [P5/T5.2 验收基准]
+WHEN  房主广播 combat_result 且非执行者 AUTHORITATIVE_APPLY
+THEN  全员怪物上有 Vulnerable 层数投影；登记 ComponentAttachment(logic_owner=A)
+      非 A 节点不因该 power 产生无门控二次 combat_result 环
+
+GIVEN A 对怪物施加灾厄（logic_owner_id = A）  [P5/T5.3+ 目标；当前无灾厄内容，mutation 延后]
 WHEN  房主同步阶段后本地进入对应触发阶段
 THEN  仅 A 的灾厄逻辑应自发执行；其他节点同名投影无效果
       A 若判定击杀 → monster_mutation_proposal → 图主 commit → 全员只写权威状态
@@ -122,7 +127,12 @@ THEN  A：AUTHORITATIVE_APPLY 写入 B 的权威效果
       B 及其他节点不执行 A 的被动逻辑
       注：未注册到 TriggerRegistry 的裸 @SpirePatch 不会被 induced 自动触发（契约：须经所有权门控）
 
-GIVEN 怪物上有 A 施加的灾厄（logic_owner_id = A），图主可以是 B  [P5 目标；mutation 未实现]
+GIVEN 怪物上有 A 施加的原版 Vulnerable（logic_owner_id = A）  [P5/T5.2]
+WHEN  非 A 节点收到 combat_result
+THEN  AUTHORITATIVE_APPLY 写层数投影；LOCAL_OWNER_ONLY 不 fire A 的 power 逻辑
+      PowerStub/投影回调在非 owner 上 no-op
+
+GIVEN 怪物上有 A 施加的灾厄（logic_owner_id = A），图主可以是 B  [P5/T5.3+；当前无灾厄内容]
 WHEN  房主同步阶段后本地进入触发时机
 THEN  仅 A 应自发执行灾厄；B/其他人同名投影无效果、不可触发
       A → 图主 proposal → 图主 commit 死亡/HP → 全员状态一致
@@ -391,11 +401,11 @@ THEN  塔2 客户端实现相同的 StandardPacket 协议 + Reference<T> 抽象
 | FR-2.3 | combat_result 广播：房主转发全员；保留 `executor_id`（不得改写为房主） | US-2 | 已实现（MessageRouter/QueueComplete） |
 | FR-2.4 | 诱导重放：AUTHORITATIVE_APPLY + LOCAL_OWNER_ONLY（TriggerRegistry owner==self）；禁止 publishOnCardUse 全量 hook | US-2, US-3, US-7 | 已实现（CombatResultReplayer + LocalOwnerGate） |
 | FR-2.5 | 回合结束：队列清空后房主广播 queue_empty，全员可结束回合 | US-2 | 已实现 |
-| FR-2.6 | 怪物核心状态：图主意图/AI；附着 buff 归施加者自发 | US-2, US-4 | 部分：意图广播+HP 增量；buff 自发/mutation 未完 |
+| FR-2.6 | 怪物核心状态：图主意图/AI；附着 buff 归施加者自发 | US-2, US-4 | 部分：意图广播+HP 增量；buff 自发/mutation 未完（mutation 延后 T5.3） |
 | FR-2.7 | 在线角色渲染：RemotePlayer + RenderSubscriber | US-2 | 已实现 |
-| FR-2.8 | 战斗阶段：房主同步（queue_empty / end_turn 聚合；计划 combat_phase） | US-2 | 部分：现有信号可用；无显式 combat_phase |
-| FR-2.9 | Buff 逻辑所有权：施加者优先；协议字段 `logic_owner_id`；非 owner 投影 no-op | US-2, US-3 | 部分：字段+门控已有；ComponentAttachment 注册未完 |
-| FR-2.10 | 怪物 mutation：proposal → 图主 commit | US-2, US-3 | 未实现（schema 草案 only） |
+| FR-2.8 | 战斗阶段：房主同步（queue_empty / end_turn 聚合 + 显式 combat_phase） | US-2 | 已实现（T5.4；legacy queue_empty 并存） |
+| FR-2.9 | Buff 逻辑所有权：施加者优先；协议字段 `logic_owner_id`；非 owner 投影 no-op | US-2, US-3 | 已实现（T5.2 原版 Vulnerable）；灾厄/mutation 仍延后 |
+| FR-2.10 | 怪物 mutation：proposal → 图主 commit | US-2, US-3 | 未实现（schema 草案 only）；**延后**至有灾厄/改怪物核心状态内容后 |
 
 ### FR-3 Mod 兼容性
 
@@ -403,9 +413,9 @@ THEN  塔2 客户端实现相同的 StandardPacket 协议 + Reference<T> 抽象
 |----|------|---------|---------|
 | FR-3.1 | 内容校验：resource_hash (SHA-256) 比对，决定本地引用 vs 远程引用 | US-3 | 已实现 |
 | FR-3.2 | 分层引用：hash 一致 → 本地引用；不一致/无定义 → 远程引用 + fallback | US-3 | 已实现 |
-| FR-3.3 | 交叉触发：LOCAL_OWNER_ONLY 经 TriggerRegistry；远程逻辑经引用 REAL 解引用 | US-3 | 部分：门控已有；全量 attachment 调度未完 |
+| FR-3.3 | 交叉触发：LOCAL_OWNER_ONLY 经 TriggerRegistry；远程逻辑经引用 REAL 解引用 | US-3 | 部分：门控+ComponentAttachment（原版）；Mod 交叉/灾厄后续 |
 | FR-3.4 | 诱导重放门控：非 local owner 不 fire；禁止 publishOnCardUse 全量链 | US-3, US-7 | 已实现 |
-| FR-3.5 | Fallback 效果 + `logic_owner_id` 字段；计划 `set_monster_hp`/`monster_death` | US-3 | 部分：字段已有；新 kind 未接线 |
+| FR-3.5 | Fallback 效果 + `logic_owner_id` 字段；计划 `set_monster_hp`/`monster_death` | US-3 | 部分：字段已有；`set_monster_hp`/`monster_death` 随 T5.3 接线 |
 
 ### FR-4 地图与事件
 
@@ -504,6 +514,7 @@ AND 该转发由 CrossSpire 外部基础设施负责
 - 图主扫描 attachment 远程 invoke buff 所有者
 - 非 logic_owner 节点有定义即执行被动（全量诱导重放）
 - 策反等 turn_directive（协议预留后续）
+- **本阶段（T5.2）**：灾厄等自定义 buff 内容；怪物 mutation proposal/commit 真机验收（schema 草案保留，实现延后 T5.3）
 
 ### 技术约束
 

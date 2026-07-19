@@ -1,6 +1,6 @@
 # @SpirePatch 清单
 
-CrossSpire 全部 MTS 注入点，按功能域分组。最后更新: 2026-07-16
+CrossSpire 全部 MTS 注入点，按功能域分组。最后更新: 2026-07-19
 
 ## BaseMod 事件抑制 (12 Prefix)
 
@@ -82,3 +82,5 @@ CrossSpire 全部 MTS 注入点，按功能域分组。最后更新: 2026-07-16
 - 修改: `EndTurnSyncPatches` — 增加 Prefix gate (T2.2)
 - 修改: `LocalCapturePatches` — 增加 `suppressDepth` 计数防护 (T2.7e)
 - 修改: `MonsterTurnPatches` — 回退为 `usePreBattleAction` (T2.3, HP 增量法暂不实现)
+- T5.2（无新 @SpirePatch）：`ComponentAttachmentRegistry` + `ApplyPowerEffects` + `PowerStub`/`PowerLogicGate` 回调 no-op；Replayer AUTHORITATIVE_APPLY 登记 attachment；Bash 启发式 `magic_number`→`apply_power`+`logic_owner_id`
+- T5.4（无新 @SpirePatch）：`CombatPhaseCoordinator` + 房主 `combat_phase` 广播；`RoomHost` end-turn 共识 → `pre_monster_turn`

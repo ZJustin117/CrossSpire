@@ -8,6 +8,7 @@ public final class PacketOperation {
     public static final String INVOKE = "invoke";
     public static final String INVOKE_RESULT = "invoke_result";
     public static final String COMBAT_RESULT = "combat_result";
+    public static final String COMBAT_PHASE = "combat_phase";
     public static final String MONSTER_INTENT = "monster_intent";
     public static final String PLAYER_STATE = "player_state";
     public static final String FULL_SNAPSHOT = "full_snapshot";

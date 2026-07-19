@@ -179,7 +179,9 @@ public class MessageRouter {
         } else if ("animation_sync".equals(type)) {
             handleAnimationSync(rawMessage);
         } else if ("player_end_turn".equals(type)) {
-            handlePlayerEndTurn();
+            handlePlayerEndTurn(msg);
+        } else if ("combat_phase".equals(type)) {
+            handleCombatPhase(msg);
         } else if ("queue_submit".equals(type)) {
             handleQueueSubmit(rawMessage);
             QueueDisplay.resetEndTurn();
@@ -187,7 +189,10 @@ public class MessageRouter {
             Protocol.QueueUpdateMessage upd = Protocol.GSON.fromJson(rawMessage, Protocol.QueueUpdateMessage.class);
             QueueDisplay.onUpdate(upd.entries);
         } else if ("queue_empty".equals(type)) {
+            // Legacy signal; combat_phase=queue_empty is authoritative when present.
             QueueDisplay.onQueueEmpty();
+            crossspire.combat.CombatPhaseCoordinator.applyLocal(
+                crossspire.combat.CombatPhase.QUEUE_EMPTY, "");
             Gdx.app.postRunnable(new Runnable() {
                 @Override public void run() {
                     if (AbstractDungeon.overlayMenu != null
@@ -310,21 +315,53 @@ public class MessageRouter {
             list.add(blk);
         }
         if (card.magicNumber > 0) {
-            Protocol.EffectDescription mgc = new Protocol.EffectDescription();
-            mgc.kind = "magic_number";
-            mgc.target = targetId;
-            mgc.amount = card.magicNumber;
-            list.add(mgc);
+            list.add(crossspire.combat.ApplyPowerEffects.applyPowerEffect(
+                "Vulnerable", targetId, card.magicNumber, CrossSpireMod.playerId));
         }
         return list.toArray(new Protocol.EffectDescription[0]);
     }
 
-    private void handlePlayerEndTurn() {
-        String source = CrossSpireMod.playerId;
+    private void handleCombatPhase(JsonObject msg) {
+        String phase = msg.has("phase") ? msg.get("phase").getAsString() : "";
+        String tx = msg.has("transaction_id") ? msg.get("transaction_id").getAsString() : "";
+        BaseMod.logger.info("MessageRouter combat_phase: " + phase + " tx=" + tx);
+        crossspire.combat.CombatPhaseCoordinator.applyLocal(phase, tx);
+        if (crossspire.combat.CombatPhase.QUEUE_EMPTY.equals(phase)) {
+            Gdx.app.postRunnable(new Runnable() {
+                @Override public void run() {
+                    if (AbstractDungeon.overlayMenu != null
+                        && AbstractDungeon.overlayMenu.endTurnButton != null) {
+                        AbstractDungeon.overlayMenu.endTurnButton.enable();
+                    }
+                }
+            });
+        }
+    }
+
+    private void handlePlayerEndTurn(JsonObject msg) {
+        String source = msg.has("source") ? msg.get("source").getAsString() : "";
+        BaseMod.logger.info("MessageRouter player_end_turn from "
+            + (source.length() >= 8 ? source.substring(0, 8) : source));
+
+        // Room host aggregates end-turn; when all ready → pre_monster_turn.
+        if (CrossSpireMod.isRoomHost() && CrossSpireMod.roomHost != null && !source.isEmpty()) {
+            CrossSpireMod.roomHost.markEndTurn(source);
+            int ready = CrossSpireMod.roomHost.getEndTurnReadyCount();
+            int total = CrossSpireMod.roomHost.getPlayerCount();
+            BaseMod.logger.info("MessageRouter end_turn ready=" + ready + "/" + total);
+            if (CrossSpireMod.roomHost.checkEndTurnConsensus()) {
+                CrossSpireMod.roomHost.clearEndTurns();
+                crossspire.combat.CombatPhaseCoordinator.broadcast(
+                    crossspire.combat.CombatPhase.PRE_MONSTER_TURN);
+            }
+        }
+
+        // Mirror remote end-turn locally (disable button) when not self.
+        if (source.equals(CrossSpireMod.playerId)) return;
         if (AbstractDungeon.player == null || AbstractDungeon.overlayMenu == null) return;
         com.megacrit.cardcrawl.ui.buttons.EndTurnButton btn = AbstractDungeon.overlayMenu.endTurnButton;
         if (btn != null && btn.enabled) {
-            BaseMod.logger.info("MessageRouter player_end_turn: ending turn");
+            BaseMod.logger.info("MessageRouter player_end_turn: ending turn (remote mirror)");
             EndTurnSyncPatches.suppressEndTurn = true;
             AbstractDungeon.overlayMenu.endTurnButton.disable(true);
             EndTurnSyncPatches.suppressEndTurn = false;

@@ -8,6 +8,7 @@ import com.megacrit.cardcrawl.dungeons.AbstractDungeon;
 import com.megacrit.cardcrawl.helpers.CardLibrary;
 import com.megacrit.cardcrawl.monsters.AbstractMonster;
 import crossspire.CrossSpireMod;
+import crossspire.combat.ApplyPowerEffects;
 import crossspire.network.Protocol;
 import java.util.ArrayList;
 import java.util.List;
@@ -111,39 +112,13 @@ public class LocalReference<T> extends Reference<T> {
     }
 
     private Protocol.EffectDescription[] buildEffects(AbstractCard card, String targetId) {
-        List<Protocol.EffectDescription> list = new ArrayList<>();
-        if (card.baseDamage > 0) {
-            Protocol.EffectDescription dmg = new Protocol.EffectDescription();
-            dmg.kind = "damage";
-            dmg.target = targetId;
-            dmg.amount = card.baseDamage;
-            list.add(dmg);
-        }
-        if (card.baseBlock > 0) {
-            Protocol.EffectDescription blk = new Protocol.EffectDescription();
-            blk.kind = "gain_block";
-            blk.target = "self";
-            blk.amount = card.baseBlock;
-            list.add(blk);
-        }
-        if (card.magicNumber > 0) {
-            Protocol.EffectDescription mgc = new Protocol.EffectDescription();
-            mgc.kind = "magic_number";
-            mgc.target = targetId;
-            mgc.amount = card.magicNumber;
-            list.add(mgc);
-        }
-        return list.toArray(new Protocol.EffectDescription[0]);
+        return ApplyPowerEffects.buildCardEffects(
+            card.baseDamage, card.baseBlock, card.magicNumber, targetId, ownerId);
     }
 
-    /** Build apply_power effect with applier-first logic_owner_id. */
-    public static Protocol.EffectDescription applyPowerEffect(String powerId, String targetId, int amount, String applierId) {
-        Protocol.EffectDescription eff = new Protocol.EffectDescription();
-        eff.kind = "apply_power";
-        eff.powerId = powerId;
-        eff.target = targetId;
-        eff.amount = amount;
-        eff.logicOwnerId = applierId;
-        return eff;
+    /** @deprecated use {@link ApplyPowerEffects#applyPowerEffect} */
+    public static Protocol.EffectDescription applyPowerEffect(
+            String powerId, String targetId, int amount, String applierId) {
+        return ApplyPowerEffects.applyPowerEffect(powerId, targetId, amount, applierId);
     }
 }

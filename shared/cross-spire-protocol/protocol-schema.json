@@ -258,7 +258,7 @@
       }
     },
     "combat_phase": {
-      "description": "Planned: Room host → All authoritative combat phase alignment. Clients advance local STS phase gates; buffs fire spontaneously only for local logic owners.",
+      "description": "Room host → All authoritative combat phase alignment (T5.4). Clients advance local STS phase gates; buffs fire spontaneously only for local logic owners. Emitted on queue non-empty (resolving_queue), queue drain (queue_empty), and end-turn consensus (pre_monster_turn).",
       "extends": "GameMessage",
       "properties": {
         "phase": {

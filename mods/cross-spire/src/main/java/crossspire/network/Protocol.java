@@ -269,5 +269,12 @@ public final class Protocol {
         public QueueEmptyMessage() { type = "queue_empty"; }
     }
 
+    /** Room host → all: explicit combat phase alignment (T5.4 / FR-2.8). */
+    public static class CombatPhaseMessage extends GameMessage {
+        public CombatPhaseMessage() { type = "combat_phase"; }
+        public String phase;
+        @SerializedName("transaction_id") public String transactionId;
+    }
+
     private Protocol() {}
 }

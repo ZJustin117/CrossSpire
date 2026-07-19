@@ -157,4 +157,31 @@ public class RoomHostTest {
         host.castVote("alice", "alice");
         assertNull(host.checkStageVoteConsensus());
     }
+
+    @Test
+    public void endTurnConsensusRequiresAllPlayers() {
+        RoomHost host = new RoomHost("host");
+        host.addPlayer("host");
+        host.addPlayer("alice");
+        host.markEndTurn("host");
+        assertFalse(host.checkEndTurnConsensus());
+        assertEquals(1, host.getEndTurnReadyCount());
+        host.markEndTurn("alice");
+        assertTrue(host.checkEndTurnConsensus());
+        assertEquals(2, host.getEndTurnReadyCount());
+        host.clearEndTurns();
+        assertFalse(host.checkEndTurnConsensus());
+        assertEquals(0, host.getEndTurnReadyCount());
+    }
+
+    @Test
+    public void removePlayerClearsEndTurn() {
+        RoomHost host = new RoomHost("host");
+        host.addPlayer("host");
+        host.addPlayer("alice");
+        host.markEndTurn("alice");
+        host.removePlayer("alice");
+        host.markEndTurn("host");
+        assertTrue(host.checkEndTurnConsensus());
+    }
 }

@@ -254,8 +254,12 @@ public class CombatResultReplayer {
             switch (kind) {
                 case "damage": {
                     AbstractMonster m = findMonster(target);
-                    if (m != null) {
-                        m.damage(new DamageInfo(getPlayer(), amount, DamageInfo.DamageType.NORMAL));
+                    com.megacrit.cardcrawl.characters.AbstractPlayer src = getPlayer();
+                    if (m != null && src != null) {
+                        m.damage(new DamageInfo(src, amount, DamageInfo.DamageType.NORMAL));
+                    } else {
+                        BaseMod.logger.info("CombatResultReplayer damage skipped: m="
+                            + (m != null) + " player=" + (src != null) + " target=" + target);
                     }
                     break;
                 }
@@ -277,9 +281,28 @@ public class CombatResultReplayer {
                     break;
                 case "apply_power": {
                     String powerId = eff.has("power_id") ? eff.get("power_id").getAsString() : "";
+                    String logicOwner = eff.has("logic_owner_id") ? eff.get("logic_owner_id").getAsString() : "";
                     if (!powerId.isEmpty()) {
+                        com.megacrit.cardcrawl.core.AbstractCreature powerTarget =
+                            resolvePowerTarget(target);
+                        com.megacrit.cardcrawl.characters.AbstractPlayer src = getPlayer();
+                        if (powerTarget == null || src == null
+                                || AbstractDungeon.actionManager == null) {
+                            BaseMod.logger.info("CombatResultReplayer apply_power skipped: target="
+                                + target + " power=" + powerId);
+                            break;
+                        }
+                        String hostEntityId = ComponentAttachmentRegistry.hostEntityIdForTarget(target);
+                        ComponentAttachmentRegistry.registerApplyPower(
+                            powerId, logicOwner, hostEntityId, amount);
                         AbstractDungeon.actionManager.addToBottom(
-                            new ApplyPowerAction(resolvePowerTarget(target), getPlayer(), resolvePower(powerId, amount)));
+                            new ApplyPowerAction(
+                                powerTarget,
+                                src,
+                                resolvePower(powerId, amount, logicOwner)));
+                        BaseMod.logger.info("CombatResultReplayer apply_power: " + powerId
+                            + "→" + target + " x" + amount
+                            + " logic_owner=" + (logicOwner.isEmpty() ? "?" : logicOwner.substring(0, Math.min(8, logicOwner.length()))));
                     }
                     break;
                 }
@@ -359,9 +382,20 @@ public class CombatResultReplayer {
     }
 
     private AbstractMonster findMonster(String targetId) {
-        if (AbstractDungeon.getCurrRoom() == null) return null;
+        if (AbstractDungeon.getCurrRoom() == null
+                || AbstractDungeon.getCurrRoom().monsters == null
+                || AbstractDungeon.getCurrRoom().monsters.monsters == null) {
+            return null;
+        }
         for (AbstractMonster m : AbstractDungeon.getCurrRoom().monsters.monsters) {
-            if (targetId.equals(m.id)) return m;
+            if (m == null) continue;
+            if (targetId != null && (targetId.equals(m.id) || targetId.equals(m.name))) {
+                return m;
+            }
+        }
+        // Fallback: first living monster when target is a bare encounter id mismatch
+        for (AbstractMonster m : AbstractDungeon.getCurrRoom().monsters.monsters) {
+            if (m != null && !m.isDeadOrEscaped()) return m;
         }
         return null;
     }
@@ -372,8 +406,14 @@ public class CombatResultReplayer {
     }
 
     private void applyPower(String powerId, String target, int amount) {
+        applyPower(powerId, target, amount, "");
+    }
+
+    private void applyPower(String powerId, String target, int amount, String logicOwnerId) {
+        ComponentAttachmentRegistry.registerApplyPower(
+            powerId, logicOwnerId, ComponentAttachmentRegistry.hostEntityIdForTarget(target), amount);
         AbstractDungeon.actionManager.addToBottom(
-            new ApplyPowerAction(resolvePowerTarget(target), getPlayer(), resolvePower(powerId, amount)));
+            new ApplyPowerAction(resolvePowerTarget(target), getPlayer(), resolvePower(powerId, amount, logicOwnerId)));
         BaseMod.logger.info("CombatResultReplayer apply_power: " + powerId + "→" + target + " x" + amount);
     }
 
@@ -386,13 +426,28 @@ public class CombatResultReplayer {
     }
 
     private AbstractPower resolvePower(String powerId, int amount) {
+        return resolvePower(powerId, amount, null);
+    }
+
+    private AbstractPower resolvePower(String powerId, int amount, String logicOwnerId) {
+        String className = powerId.endsWith("Power") ? powerId : powerId + "Power";
+        com.megacrit.cardcrawl.core.AbstractCreature owner = getPlayer();
         try {
-            return (AbstractPower) Class.forName("com.megacrit.cardcrawl.powers." + powerId)
-                .getConstructor(com.megacrit.cardcrawl.core.AbstractCreature.class, int.class)
-                .newInstance(getPlayer(), amount);
+            Class<?> cls = Class.forName("com.megacrit.cardcrawl.powers." + className);
+            try {
+                return (AbstractPower) cls
+                    .getConstructor(com.megacrit.cardcrawl.core.AbstractCreature.class, int.class)
+                    .newInstance(owner, amount);
+            } catch (NoSuchMethodException e2) {
+                // VulnerablePower / WeakPower: (owner, amount, isSourceMonster)
+                return (AbstractPower) cls
+                    .getConstructor(com.megacrit.cardcrawl.core.AbstractCreature.class, int.class, boolean.class)
+                    .newInstance(owner, amount, false);
+            }
         } catch (Exception e) {
-            BaseMod.logger.info("CombatResultReplayer resolvePower fallback to PowerStub: " + powerId);
-            return new PowerStub(powerId, amount);
+            BaseMod.logger.info("CombatResultReplayer resolvePower fallback to PowerStub: " + powerId
+                + " logic_owner=" + (logicOwnerId == null ? "?" : logicOwnerId));
+            return new PowerStub(powerId, amount, logicOwnerId);
         }
     }
 }

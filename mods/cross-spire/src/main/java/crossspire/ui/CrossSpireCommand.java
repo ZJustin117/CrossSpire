@@ -56,6 +56,7 @@ public class CrossSpireCommand extends ConsoleCommand {
         else if ("evote".equals(sub)) { cmdEventVote(tokens, depth); }
         else if ("gamestate".equals(sub)) { cmdGameState(); }
         else if ("confirm".equals(sub)) { cmdConfirm(); }
+        else if ("phase".equals(sub)) { cmdPhase(tokens, depth); }
         else { errorMsg(); }
     }
 
@@ -112,6 +113,27 @@ public class CrossSpireCommand extends ConsoleCommand {
             ? CrossSpireMod.connectionManager.connectionCount() : 0));
         DevConsole.log("Queue size: " + (CrossSpireMod.centralQueueManager != null
             ? CrossSpireMod.centralQueueManager.size() : 0));
+        DevConsole.log("Combat phase: " + crossspire.combat.CombatPhaseCoordinator.getCurrentPhase());
+    }
+
+    private void cmdPhase(String[] tokens, int depth) {
+        if (tokens.length <= depth + 1) {
+            DevConsole.log("Combat phase: " + crossspire.combat.CombatPhaseCoordinator.getCurrentPhase());
+            DevConsole.log("Usage: crossspire phase <player_turn|resolving_queue|queue_empty|pre_monster_turn|monster_turn|post_monster_turn>");
+            return;
+        }
+        String phase = tokens[depth + 1].toLowerCase();
+        if (!crossspire.combat.CombatPhase.isValid(phase)) {
+            DevConsole.log("Invalid phase: " + phase);
+            return;
+        }
+        if (CrossSpireMod.isRoomHost()) {
+            crossspire.combat.CombatPhaseCoordinator.broadcast(phase);
+            DevConsole.log("Broadcast combat_phase=" + phase);
+        } else {
+            DevConsole.log("Only room host can set combat phase (current="
+                + crossspire.combat.CombatPhaseCoordinator.getCurrentPhase() + ")");
+        }
     }
 
     private void cmdInfo() {
@@ -180,20 +202,40 @@ public class CrossSpireCommand extends ConsoleCommand {
     }
 
     private void cmdStart(String[] tokens, int depth) {
-        String charName = tokens.length > depth + 1 ? tokens[depth + 1].toUpperCase() : "IRONCLAD";
-        String seed = tokens.length > depth + 2 ? tokens[depth + 2] : "";
-        DevConsole.log("Starting " + charName + " seed=" + (seed.isEmpty() ? "(auto)" : seed));
-        try {
-            crossspire.remote.GameStarter.start(charName, seed.isEmpty() ? null : seed);
-            BaseMod.logger.info("CrossSpire start result: player=" + (AbstractDungeon.player != null ? AbstractDungeon.player.name : "null")
-                + " mode=" + CardCrawlGame.mode + " floor=" + AbstractDungeon.floorNum);
-        } catch (Exception e) {
-            BaseMod.logger.error("CrossSpire start failed: " + e.getClass().getName() + ": " + e.getMessage());
-            StringWriter sw = new StringWriter();
-            e.printStackTrace(new PrintWriter(sw));
-            BaseMod.logger.error("CrossSpire start stack: " + sw.toString());
-            DevConsole.log("Start failed: " + e.getMessage());
-        }
+        final String charName = tokens.length > depth + 1 ? tokens[depth + 1].toUpperCase() : "IRONCLAD";
+        final String seed = tokens.length > depth + 2 ? tokens[depth + 2] : "";
+        DevConsole.log("Starting " + charName + " seed=" + (seed.isEmpty() ? "(auto)" : seed) + " (next frame)");
+        // Console / game-probe run off the GL thread. GameStarter mutates CardCrawlGame.mode
+        // and dungeon state; concurrent MainMenuScreen.render → FontHelper GlyphLayout IOB.
+        Gdx.app.postRunnable(new Runnable() {
+            @Override public void run() {
+                try {
+                    crossspire.remote.GameStarter.start(charName, seed.isEmpty() ? null : seed);
+                    BaseMod.logger.info("CrossSpire start queued: mode=" + CardCrawlGame.mode
+                        + " fading=" + (CardCrawlGame.mainMenuScreen != null
+                            && CardCrawlGame.mainMenuScreen.isFadingOut));
+                } catch (Exception e) {
+                    BaseMod.logger.error("CrossSpire start failed: " + e.getClass().getName() + ": " + e.getMessage());
+                    StringWriter sw = new StringWriter();
+                    e.printStackTrace(new PrintWriter(sw));
+                    BaseMod.logger.error("CrossSpire start stack: " + sw.toString());
+                    DevConsole.log("Start failed: " + e.getMessage());
+                }
+                // Frame order: this runnable → update sees fadedOut → dungeon built.
+                // Re-post so bind runs after that update (next frame).
+                Gdx.app.postRunnable(new Runnable() {
+                    @Override public void run() {
+                        crossspire.remote.GameStarter.bindLocalPlayerIfReady();
+                        BaseMod.logger.info("CrossSpire start result: player="
+                            + (AbstractDungeon.player != null ? AbstractDungeon.player.name : "null")
+                            + " mode=" + CardCrawlGame.mode + " floor=" + AbstractDungeon.floorNum
+                            + " dungeon=" + (CardCrawlGame.dungeon != null
+                                ? CardCrawlGame.dungeon.getClass().getSimpleName() : "null")
+                            + " transition=" + (CardCrawlGame.dungeonTransitionScreen != null));
+                    }
+                });
+            }
+        });
     }
 
     private void cmdPlay(String[] tokens, int depth) {
@@ -573,6 +615,6 @@ public class CrossSpireCommand extends ConsoleCommand {
 
     @Override
     public void errorMsg() {
-        DevConsole.log("crossspire: host <advertised-ip> <port> | join <ip> <port> | disconnect | status | info | lobby | combat | gamestate | ready [char] | start [char] [seed] | play <card> [target] | queue | room <index> | snapshot | vote <player> | select <card> | cevent <name> | eventsel <index> | eselect <index> <card> | evote <index> | confirm");
+        DevConsole.log("crossspire: host <advertised-ip> <port> | join <ip> <port> | disconnect | status | info | lobby | combat | gamestate | ready [char] | start [char] [seed] | play <card> [target] | queue | room <index> | phase [name] | snapshot | vote <player> | select <card> | cevent <name> | eventsel <index> | eselect <index> <card> | evote <index> | confirm");
     }
 }

@@ -53,6 +53,20 @@ public class EffectCaptureTest {
     }
 
     @Test
+    public void shouldCaptureApplyPowerWithLogicOwner() {
+        EffectCapture.startCapture();
+        EffectCapture.recordApplyPower("Cultist", 2, "Vulnerable", "player-a");
+
+        Protocol.EffectDescription[] effects = EffectCapture.getCaptured();
+        assertEquals(1, effects.length);
+        assertEquals("apply_power", effects[0].kind);
+        assertEquals("Vulnerable", effects[0].powerId);
+        assertEquals("player-a", effects[0].logicOwnerId);
+        assertEquals(2, effects[0].amount);
+        assertEquals("Cultist", effects[0].target);
+    }
+
+    @Test
     public void shouldIgnoreWhenNotCapturing() {
         EffectCapture.startCapture();
         EffectCapture.stopCapture();

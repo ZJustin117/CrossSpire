@@ -33,6 +33,15 @@ public class EndTurnSyncPatches {
         msg.source = CrossSpireMod.playerId;
         msg.seq = CrossSpireMod.nextSeq();
         CrossSpireMod.send(Protocol.GSON.toJson(msg));
+        // Room host does not re-receive own broadcast — mark self for end-turn consensus (T5.4).
+        if (CrossSpireMod.isRoomHost() && CrossSpireMod.roomHost != null) {
+            CrossSpireMod.roomHost.markEndTurn(CrossSpireMod.playerId);
+            if (CrossSpireMod.roomHost.checkEndTurnConsensus()) {
+                CrossSpireMod.roomHost.clearEndTurns();
+                crossspire.combat.CombatPhaseCoordinator.broadcast(
+                    crossspire.combat.CombatPhase.PRE_MONSTER_TURN);
+            }
+        }
         BaseMod.logger.info("EndTurnSync broadcast player_end_turn");
     }
 }

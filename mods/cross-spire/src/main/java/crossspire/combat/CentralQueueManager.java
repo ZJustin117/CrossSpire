@@ -23,14 +23,19 @@ public class CentralQueueManager {
     public void onQueueSubmit(Protocol.QueueSubmitMessage pkt) {
         String dedupKey = pkt.senderId + "/" + pkt.seq;
         pkt.packetId = dedupKey;
+        boolean becameNonEmpty;
         synchronized (queue) {
             for (Protocol.QueueSubmitMessage existing : queue) {
                 if (existing.packetId != null && existing.packetId.equals(dedupKey)) return;
             }
+            becameNonEmpty = queue.isEmpty();
             queue.add(pkt);
             Collections.sort(queue, ORDER);
         }
         CSLog.log("CentralQueueManager added: " + pkt.cardId + " size=" + queue.size());
+        if (becameNonEmpty) {
+            CombatPhaseCoordinator.broadcast(CombatPhase.RESOLVING_QUEUE);
+        }
         broadcastUpdate();
         if (!processing) processNext();
     }
@@ -166,6 +171,10 @@ public class CentralQueueManager {
     }
 
     private void broadcastQueueEmpty() {
+        processing = false;
+        // Explicit phase (T5.4); clients also keep legacy queue_empty for compatibility.
+        CombatPhaseCoordinator.broadcast(CombatPhase.QUEUE_EMPTY);
+
         if (!CrossSpireMod.isConnected()) return;
 
         Protocol.QueueEmptyMessage empty = new Protocol.QueueEmptyMessage();
@@ -173,7 +182,6 @@ public class CentralQueueManager {
         empty.seq = CrossSpireMod.nextSeq();
         CrossSpireMod.send(Protocol.GSON.toJson(empty));
 
-        processing = false;
         CSLog.log("CentralQueueManager queue_empty broadcast");
     }
 
