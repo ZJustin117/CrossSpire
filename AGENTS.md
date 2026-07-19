@@ -69,7 +69,7 @@ The `docs/reference/` directory contains API documentation for the two key moddi
 3. **失败**：子 agent **只回摘要**（pass/fail、失败类/方法、关键输出摘录）。**主 agent 修源码**后再委派复测；子 agent 不 edit。
 4. **不要**在主会话里自己跑完整 suite/长 harness，除非 subagent 不可用；也不要把整份 test 日志贴回主对话。
 5. JUnit 与 harness **一般串行**（先 unit）；无依赖的并行 harness 不要开。
-6. Task 恢复会话时 `task_id` 仅用 `ses…`；**新任务省略 `task_id`**（勿传随机 UUID）。
+6. Task 恢复会话时 `task_id` 仅用系统返回的 `ses…`；**新任务省略 `task_id`**（勿传随机 UUID）。插件 `local-env` 会在执行前**剥离**非 `ses` 前缀的 `task_id`（不当作 resume）。
 7. 依赖 `.env.local`；缺变量时子 agent 应阻塞并列出键名，主 agent 勿发明绝对路径。
 
 ## Storage

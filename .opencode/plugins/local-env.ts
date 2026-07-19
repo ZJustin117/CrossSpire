@@ -104,6 +104,33 @@ function formatSystemBlock(
   return lines.join("\n")
 }
 
+/** OpenCode child sessions are ses… ; models often invent UUIDs for task_id. */
+function isTaskTool(name: string): boolean {
+  return name.toLowerCase() === "task"
+}
+
+function isValidSessionTaskId(id: unknown): boolean {
+  return typeof id === "string" && id.startsWith("ses")
+}
+
+/**
+ * Drop invented task_id so Task creates a new session instead of failing
+ * schema validation (Expected a string starting with "ses").
+ * Never rewrite UUID → ses_+UUID (that still does not resume a real session).
+ */
+function stripInvalidTaskId(args: Record<string, unknown>): void {
+  for (const key of ["task_id", "taskId"] as const) {
+    if (!(key in args)) continue
+    const id = args[key]
+    if (id == null || id === "") {
+      delete args[key]
+      continue
+    }
+    if (isValidSessionTaskId(id)) continue
+    delete args[key]
+  }
+}
+
 export const LocalEnvPlugin = async ({ directory }: { directory: string }) => {
   const root = directory
   const { filePath, merged, missingFile } = loadLocalEnv(root)
@@ -125,6 +152,17 @@ export const LocalEnvPlugin = async ({ directory }: { directory: string }) => {
       for (const [k, v] of Object.entries(merged)) {
         if (!output.env[k]) output.env[k] = v
       }
+    },
+
+    // Models often pass invented UUIDs as task_id after reading AGENTS.md.
+    // Strip non-ses ids so new Task runs succeed; keep real ses… for resume.
+    "tool.execute.before": async (
+      input: { tool: string },
+      output: { args?: Record<string, unknown> },
+    ) => {
+      if (!output.args || typeof output.args !== "object") return
+      if (!isTaskTool(input.tool)) return
+      stripInvalidTaskId(output.args)
     },
 
     // Inject into system prompts for test subagents when the hook is available.
