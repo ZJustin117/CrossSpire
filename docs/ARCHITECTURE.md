@@ -1681,11 +1681,11 @@ CrossSpire/
             │   ├── LocalCapturePatches.java    # 捕获本地操作 → 提交到房主
             │   ├── CombatResultReplayer.java   # AUTHORITATIVE_APPLY + LOCAL_OWNER_ONLY
             │   ├── InteractionCapture.java     # 捕获 BaseMod 选择面板 → interact_request
-            │   ├── LocalOwnerGate.java         # planned: induced 仅 logic_owner==self
-            │   ├── ComponentAttachment.java    # planned: buff 实例元数据
-            │   ├── ComponentAttachmentRegistry.java  # planned
-            │   ├── MonsterMutationCapture.java # planned: 事务化怪物修改捕获
-            │   └── MonsterAuthorityCoordinator.java  # planned: 图主 proposal→commit
+            │   ├── LocalOwnerGate.java         # 已实现: induced 仅 logic_owner==self
+            │   ├── ComponentAttachment.java    # planned (T5.2): buff 实例元数据
+            │   ├── ComponentAttachmentRegistry.java  # planned (T5.2)
+            │   ├── MonsterMutationCapture.java # planned (T5.3): 事务化怪物修改捕获
+            │   └── MonsterAuthorityCoordinator.java  # planned (T5.3): 图主 proposal→commit
             └── ui/
                 ├── LobbyScreen.java            # 加入房间界面
                 ├── ServerPicker.java           # IP:port:password 输入

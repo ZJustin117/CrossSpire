@@ -4,14 +4,17 @@
 
 ## 执行状态
 
-| Phase | 进度 | Commit |
-|-------|------|--------|
-| P1 架构修复 | ✅ 5/5 完成 | `9df0e44` `3ce46d7` `ad8318c` |
-| P2 功能补全 | 🟡 6/10 完成 (T2.1-T2.3, T2.7d/e/f) | `89bbb1e` `447a216` `1e4070f` |
-| P3 清理稳定 | 🟡 3/8 完成 (T3.2-T3.4) | `0975c5a` |
-| 归档 | 🟡 1/6 完成 (A1) | — |
-| P5 Buff 所有权契约 | 🟡 T5.0–T5.1 完成；T5.2–T5.5 未开始 | — |
-| **总** | **15/29 + P5** | 51 tests pass |
+> 与 `task.md` 对齐（2026-07-19）。历史 commit 见各阶段实施记录；测试数以 `./gradlew test` 为准。
+
+| Phase | 进度 | 说明 |
+|-------|------|------|
+| P1 架构修复 | ✅ 完成 | T1.1–T1.4 |
+| P2 功能补全 | ✅ 完成 | T2.1–T2.7 + 事件/房间/投票等 SDD 驱动项 |
+| P3 清理稳定 | ✅ 完成 | T3.1–T3.8 |
+| P4 Android 调试清理 | ✅ 完成 | T4.1–T4.7（见 `task.md` / `development/android-harness.md`） |
+| 归档 | ✅ 完成 | A1–A6 |
+| P5 Buff 所有权契约 | 🟡 进行中 | T5.0–T5.1 ✅；**下一步 T5.2**；T5.3–T5.5 未开始 |
+| **总** | **历史阶段完成 + P5 进行中** | 以构建结果为准 |
 
 ## 目录
 
@@ -677,26 +680,26 @@ P3.4 bug修复清单
 | |
 | P3 验证: 45 tests pass, JAR 454KB, 双设备 game_ready 无 crash | |
 
-### 当前状态 (12/26)
+### 当前状态（2026-07-19 文档对齐）
 
-**已完成 SDD 需求**:
-- FR-6.1/6.2/6.3 — 独立本地 RNG 策略 ✅
-- NFR-7 — StandardPacket 信封引入 (基础设施就位, 全量迁移待 T2+) ✅
-- ARCH §16 — 星型拓扑 (P2P 互连代码已清) ✅
-- FR-2.4/3.4 — 诱导重放: stub-only + PowerStub fallback + 效果回收集 ✅
-- FR-2.5 — EndTurnButton gate ✅
-- FR-2.6 — 怪物回合 HP 增量法 ✅
-- Protocol Design Rules — 全域 monotonic seq ✅
-- AGENTS/Code — EventSuppression guard 全覆盖 ✅
+**历史阶段（已完成）**:
+- P1–P3、归档 A1–A6、P4 Android Harness 边界清理 — 见 `task.md`
+- FR-6.1/6.2/6.3 — 独立本地 RNG ✅
+- StandardPacket / 星型拓扑 / 全域 seq ✅
+- FR-2.1–2.5、2.7 — 中央队列、诱导门控基础、EndTurn gate、RemotePlayer ✅
+- FR-1.5 / 事件就近+transcript / 房间标注共识 / Cache LRU / ResourceRegistry — 已在 P2–P3 落地 ✅
 
-**剩余 SDD 需求**:
-- FR-1.5 — 房主迁移 (T2.4)
-- FR-4.3~4.5 — 事件就近原则 + 沙盒转录 (T2.5 revised) [新设计]
-- FR-4.6 — 被 §2.5 覆盖 (事件交互统一走 transcript)
-- FR-4.7/4.8 — 房间标注与共识 (T2.7a/b/c) [新]
-- FR-5.2 — Cache LRU + SHA-256 校验 (T3.1)
-- FR-5.1 — ResourceRegistry 查询 API (T3.5)
-- 文档同步 (T3.7)
+**P5 进行中（唯一未完成实现阶段）**:
+| Task | 状态 | 对应 FR |
+|------|------|---------|
+| T5.0 文档 + schema 草案 | ✅ | FR-2.8–2.10 草案 |
+| T5.1 LocalOwnerGate + Replayer 门控 | ✅ | FR-2.4 / FR-3.4 |
+| **T5.2** ComponentAttachment + apply_power 全量 logic_owner | **下一步** | FR-2.9 / FR-3.3 |
+| T5.3 monster mutation proposal/commit | 未开始 | FR-2.10 / FR-2.6 剩余 |
+| T5.4 显式 combat_phase（可选） | 未开始 | FR-2.8 剩余 |
+| T5.5 E2E 验收 | 未开始 | US-2/US-3 灾厄跨节点 |
+
+> 旧进度表中的「15/29」「51 tests」已废弃。测试类数量与 pass 数以 `./gradlew test` 为准。
 
 ### 2026-07-16 — 事件就近原则设计（ARCHITECTURE.md §9 重写）
 
@@ -789,4 +792,13 @@ JAR 已推送到两台设备 (localhost:15555, 25555)，JUnit 51/51 通过。
 
 ### 与历史 T2.1 的关系
 
-T2.1 实现了 stub-only 与效果回收集，但验收仍写「全量 hook」。P5 **收紧**诱导语义；实现必须改 Replayer，不能只改文档。
+T2.1 实现了 stub-only 与效果回收集，但验收仍写「全量 hook」。P5 **收紧**诱导语义；T5.1 已改 Replayer（AUTHORITATIVE_APPLY + LOCAL_OWNER_ONLY），T5.2+ 补全 attachment / mutation / phase。
+
+### 依赖与入口
+
+```
+P1–P4 + 归档 ✅
+        │
+        ▼
+P5.T5.0–T5.1 ✅  →  下一步: T5.2 → T5.3 → T5.4 → T5.5
+```
