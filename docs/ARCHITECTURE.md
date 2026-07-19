@@ -58,7 +58,7 @@ Harness、game-probe 和 ADB 属于外部开发基础设施，不进入 CrossSpi
 
 Desktop 继续以标准 ModTheSpire + BaseMod API 为兼容目标，可以使用相同的 BaseMod console 命令；本阶段不执行 Desktop 端到端验证，因此不将其列为已验证平台。
 
-维护者测试台的 D1/D2 serial、loopback 转发和复现步骤见 [`development/android-harness.md`](./development/android-harness.md)。这些值不得成为生产代码默认值。
+维护者测试台的 D1/D2 serial、loopback 转发和复现步骤见 [`development/`](./development/)（入口 [`development/README.md`](./development/README.md)）。这些值不得成为生产代码默认值。
 
 ## 关键术语定义
 

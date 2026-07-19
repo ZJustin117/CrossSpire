@@ -39,5 +39,5 @@ cd mods/cross-spire
 
 - `../../docs/ARCHITECTURE.md` — 架构设计
 - `../../docs/console-commands.md` — BaseMod console 命令
-- `../../docs/development/android-harness.md` — Android 双设备 Harness 运行手册
+- `../../docs/development/` — Android Harness / Arthas 开发手册（维护者参考）
 - `../../docs/reference/` — BaseMod + ModTheSpire API 参考
