@@ -16,7 +16,7 @@ const ALLOWED_KEYS = new Set([
   "CROSSSPIRE_ARTHAS_PORT",
 ])
 
-const TEST_AGENTS = new Set(["junit-test", "android-harness"])
+const TEST_AGENTS = new Set(["junit-test", "android-harness", "android-arthas"])
 
 function parseDotEnv(content: string): Record<string, string> {
   const out: Record<string, string> = {}

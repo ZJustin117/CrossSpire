@@ -25,6 +25,7 @@ OpenCode 项目插件 [`.opencode/plugins/local-env.ts`](../../.opencode/plugins
 |-------|------|------|
 | `junit-test` | `@junit-test` | `mods/cross-spire` 下 `./gradlew test`；只读 |
 | `android-harness` | `@android-harness` | connector + harness console E2E；只读；依赖 `.env.local` |
+| `android-arthas` | `@android-arthas` | 设备 JVM 的 Arthas 线程、类加载、方法与调用链诊断；只读；按 `start → query → stop` 清理 bridge；依赖 `.env.local` |
 
 定义位置：`.opencode/agent/*.md`。修改 agent/plugin 后需**重启 opencode**。
 

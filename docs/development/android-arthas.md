@@ -73,6 +73,17 @@ python3 -m scripts.tools.arthas --device "$CROSSSPIRE_D1_SERIAL" stop
 
 `start` 结束后关闭 game-probe 会话；`shell` / `query` 在成功、失败或中断时关闭 stream 并 `unforward`。遇 `TypeNotPresentException` 时 CLI 会自动重连并保持同一 serial。
 
+## OpenCode subagent
+
+`@android-arthas` 是只读诊断 subagent，适用于有明确目标的 Android JVM 线程、类加载、方法观察、调用耗时或 bridge 故障调查。它不替代 `@android-harness`：游戏语义、BaseMod console 和联机 host/join/status 仍由 harness 处理。
+
+- 每次委派只给出一个有界诊断目标，并明确目标设备。
+- subagent 从 `$SLAY_THE_AMETHYST_ROOT` 执行，使用显式 `--device`，按 `start → query → stop` 工作；即使查询失败也会尝试清理 bridge。
+- 它只运行可审计的单次 `query`，不会进入交互式 `shell`，也不会执行 `retransform`、`redefine`、`heapdump`、`jfr`、`profiler` 或有副作用的 OGNL；这类操作需要单独的人工诊断会话。
+- connector daemon 必须已经在线；subagent 只检查状态，不能管理 connector 生命周期。
+
+定义位于 `.opencode/agent/android-arthas.md`。修改 agent 或 `.opencode/plugins/local-env.ts` 后需退出并重启 OpenCode。
+
 ## 维护者常用场景
 
 以下假设已 `start`，且每条命令带正确 `--device`。
