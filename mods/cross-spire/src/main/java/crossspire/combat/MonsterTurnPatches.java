@@ -4,6 +4,7 @@ import basemod.BaseMod;
 import com.evacipated.cardcrawl.modthespire.lib.SpirePatch;
 import com.evacipated.cardcrawl.modthespire.lib.SpirePostfixPatch;
 import com.evacipated.cardcrawl.modthespire.lib.SpirePrefixPatch;
+import com.evacipated.cardcrawl.modthespire.lib.SpireReturn;
 import com.megacrit.cardcrawl.dungeons.AbstractDungeon;
 import com.megacrit.cardcrawl.monsters.AbstractMonster;
 import com.megacrit.cardcrawl.monsters.MonsterGroup;
@@ -22,9 +23,6 @@ import java.util.List;
 public class MonsterTurnPatches {
 
     private static MonsterTurnCapture.Snapshot preTurnPlayer;
-
-    /** Marks that the next combat_result from stage host finishes monster_turn for host phase advance. */
-    public static volatile boolean lastBroadcastWasMonsterTurn = false;
 
     @SpirePatch(clz = AbstractMonster.class, method = "usePreBattleAction", paramtypez = {})
     public static class PreBattle {
@@ -56,12 +54,17 @@ public class MonsterTurnPatches {
     @SpirePatch(clz = MonsterGroup.class, method = "applyPreTurnLogic", paramtypez = {})
     public static class PreTurnLogic {
         @SpirePrefixPatch
-        public static void prefix(MonsterGroup __instance) {
+        public static SpireReturn<Void> prefix(MonsterGroup __instance) {
             preTurnPlayer = null;
-            if (!CombatTurnOrchestrator.shouldStageHostRunMonsterAi()) return;
-            if (CrossSpireMod.stageHost == null || !CrossSpireMod.stageHost.isStageHost()) return;
-            if (!CrossSpireMod.isConnected()) return;
-            if (AbstractDungeon.player == null) return;
+            boolean isStageHost = CrossSpireMod.stageHost != null
+                && CrossSpireMod.stageHost.isStageHost();
+            if (!CombatTurnOrchestrator.shouldAllowMonsterAi(
+                    CrossSpireMod.isConnected(), isStageHost,
+                    CombatPhaseCoordinator.getCurrentPhase())) {
+                return SpireReturn.Return(null);
+            }
+            if (!CrossSpireMod.isConnected()) return SpireReturn.Continue();
+            if (AbstractDungeon.player == null) return SpireReturn.Continue();
 
             preTurnPlayer = new MonsterTurnCapture.Snapshot(
                 AbstractDungeon.player.currentHealth,
@@ -69,6 +72,7 @@ public class MonsterTurnPatches {
                 "self");
             BaseMod.logger.info("MonsterTurnPatches pre-turn snapshot hp="
                 + preTurnPlayer.hp + " block=" + preTurnPlayer.block);
+            return SpireReturn.Continue();
         }
 
         @SpirePostfixPatch
@@ -99,10 +103,10 @@ public class MonsterTurnPatches {
             result.source = CrossSpireMod.playerId;
             result.seq = CrossSpireMod.nextSeq();
             result.monsterId = "monster_turn";
+            result.turnTransactionId = CombatPhaseCoordinator.getLastTransactionId();
             result.effects = effects;
             result.operationSequence = new Protocol.OperationStep[0];
 
-            lastBroadcastWasMonsterTurn = true;
             CrossSpireMod.send(Protocol.GSON.toJson(result));
             BaseMod.logger.info("MonsterTurnPatches combat_result damage=" + delta.damageToPlayer);
 
@@ -110,7 +114,6 @@ public class MonsterTurnPatches {
             if (CrossSpireMod.isRoomHost()) {
                 CombatPhaseCoordinator.broadcast(CombatPhase.POST_MONSTER_TURN);
                 CombatPhaseCoordinator.broadcast(CombatPhase.PLAYER_TURN);
-                lastBroadcastWasMonsterTurn = false;
             }
         }
     }

@@ -846,3 +846,42 @@ queue_empty / player_turn
 
 - `CombatTurnOrchestrator.java`, `MonsterTurnCapture.java`, `MonsterTurnPatches.java`
 - `CombatPhaseCoordinator`, `MessageRouter`, `EndTurnSyncPatches`, `CentralQueueManager`
+
+---
+
+## Phase 7: 小队化冒险推进与批准式事件
+
+> P7 将房间级玩法状态收敛为小队域：房主保留网络路由与房间目录，图主保留阶段地图和房间内容权威，队长负责本队队列、阶段和地图共识。事件从 sandbox transcript 改为“原生选择先请求房主批准，获批后选择者本地执行”。详见 `ARCHITECTURE.md` §6、§7、§11、§19 与 `spec.md` US-4/US-4a/US-4c。
+
+### 依赖顺序
+
+```
+P7.0 战斗权威/快照硬化
+  → P7.1 PartyState + party_id 路由
+    → P7.2 队列、阶段、可见性和地图标注按小队隔离
+      → P7.3 图主地图/房间目录与正常导航
+        → P7.4 批准式原生事件 + RemoteEventDisplay fallback
+          → P7.5 事件内房间与 voting
+```
+
+### 任务
+
+| Task | 内容 | 状态 |
+|------|------|------|
+| T7.0a | 战斗权威：非图主禁止本地怪物 AI；phase transaction 去重/授权；明确 monster-turn result 关联 | ✅ JUnit 144/144；Android E2E 待重试 |
+| T7.0b | attachment 生命周期基础：原子替换、remove_power 清理、战斗边界清空 | ✅ 聚焦 JUnit 9/9 |
+| T7.0c | monster-turn transaction gate：连续回合、零伤害、host≠stage-host 的图主来源验证、重复/延迟 result 拒绝 | ✅ JUnit 153/153；Android 双机 E2E 两轮闭环通过（2026-07-20） |
+| T7.1 | Schema-first `PartyState`/`PartyManager`、默认 P0、成员最小 ID 队长、leave/join 请求与批准/拒绝状态 | ✅ JUnit 159/159；router/命令 wiring 留给 T7.2 |
+| T7.2a | Party snapshot 路由：房主默认 P0、标准包广播、客户端原子应用与 status 诊断 | ✅ JUnit 159/159；Android 双机 P0 snapshot 通过（2026-07-20） |
+| T7.2b | `party_id` 隔离中央队列、end-turn、combat phase、room pins 与同队渲染；RoomHost 仅路由/目录 | 进行中：queue/end-turn/phase 的数据与接收 UI 已按 party 隔离（2026-07-20）；成员→RoomHost→队长的定向路由和队长→RoomHost→本队的玩法中继已完成（2026-07-21）。`PartyVisibility` 已限制远程角色渲染/状态 UI/怪物目标计数为同队成员；room pins 仍依赖 T7.3 |
+| T7.3 | 图主地图快照、房间目录与正常相邻节点导航；按小队 room consensus | 进行中：MapHost/NIH + pin/allocate + NIH open/`node_instance_opened`（诊断 Cultist）已完成，Android D1/D2 全链路通过（2026-07-21）。真实节点生成 RNG 与多房间类型待实现 |
+| T7.4 | `event_choice_request/approved/rejected/player_result`；hash 匹配时原生 UI，不用 sandbox；fallback 由图主定向执行 | 进行中：individual 审批状态机、StandardPacket 路由、诊断命令与 Android D1/D2 approval/result relay 通过（2026-07-21）；原生 buttonEffect 门控、fallback NIH 执行与 voting 待实现 |
+| T7.5 | event-room instance、同选项成员路径与按小队 voting；跨队相遇仅记录 | 待开始 |
+| T7.6 | Schema/FullSnapshot 对齐 attachment 与 parties；Android 双机和 Desktop smoke 验证 | 待开始 |
+
+### 事件约束
+
+1. 非 voting 事件的个人收益允许每名成员独立选择；每个有效请求由房主独立批准，获批选择者本地执行并同步自己的状态差量。
+2. 内容类和 hash 匹配才可执行本地原生事件；缺类或 hash 不匹配时用 `RemoteEventDisplay`，由图主执行并定向应用结果。
+3. 事件不得隐式让同一小队成员走向不同地图节点。产生事件内房间时，图主创建稳定 instance，选择相同选项者走同一小队路径；直接离开去地图节点前必须显式离队。
+4. 投票仅按 `party_id` 聚合；房间全员不再是默认玩法共识范围。

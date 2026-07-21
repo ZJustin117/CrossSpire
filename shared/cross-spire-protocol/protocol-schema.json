@@ -127,6 +127,65 @@
         "relics": { "type": "array", "items": { "type": "string" } },
         "potions": { "type": "array", "items": { "type": "string" } }
       }
+    },
+    "PartyInfo": {
+      "type": "object",
+      "required": ["party_id", "leader_id", "member_ids", "phase_status", "act_id", "party_revision"],
+      "properties": {
+        "party_id": { "type": "string" },
+        "leader_id": { "type": "string" },
+        "member_ids": { "type": "array", "items": { "type": "string" } },
+        "phase_status": { "type": "string", "enum": ["stage_transition", "map_active", "active_node", "map_completed"] },
+        "act_id": { "type": "string" },
+        "map_instance_id": { "type": "string" },
+        "map_position": { "type": "string", "description": "Stable current node_id; absent before a map is bound" },
+        "node_instance_host_id": { "type": "string" },
+        "active_node_instance_id": { "type": "string" },
+        "party_revision": { "type": "integer" }
+      }
+    },
+    "MapDefinition": {
+      "type": "object",
+      "description": "Immutable map topology. It never contains generated node content.",
+      "required": ["map_instance_id", "act_id", "map_revision", "start_node_id", "nodes"],
+      "properties": {
+        "map_instance_id": { "type": "string" },
+        "act_id": { "type": "string" },
+        "map_revision": { "type": "integer" },
+        "generation_digest": { "type": "string" },
+        "start_node_id": { "type": "string", "description": "Stable entry node for a party newly bound to this map" },
+        "boss_descriptor": { "type": "object" },
+        "nodes": { "type": "array", "items": { "$ref": "#/definitions/MapNode" } }
+      }
+    },
+    "MapNode": {
+      "type": "object",
+      "description": "Immutable topology node. Node content is resolved only by NodeInstanceHost after allocation.",
+      "required": ["node_id", "outgoing_node_ids"],
+      "properties": {
+        "node_id": { "type": "string" },
+        "x": { "type": "integer" },
+        "y": { "type": "integer" },
+        "room_type": { "type": "string" },
+        "icon": { "type": "string" },
+        "burning_elite": { "type": "boolean" },
+        "outgoing_node_ids": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "NodeInstanceInfo": {
+      "type": "object",
+      "required": ["node_instance_id", "map_instance_id", "party_id", "node_id", "visit_id", "node_instance_host_id", "status"],
+      "properties": {
+        "node_instance_id": { "type": "string" },
+        "map_instance_id": { "type": "string" },
+        "party_id": { "type": "string" },
+        "node_id": { "type": "string" },
+        "visit_id": { "type": "integer" },
+        "node_instance_host_id": { "type": "string" },
+        "status": { "type": "string", "enum": ["allocated", "generating", "active", "cleared", "abandoned"] },
+        "generation_revision": { "type": "integer" },
+        "state_revision": { "type": "integer" }
+      }
     }
   },
   "messageTypes": {
@@ -225,7 +284,7 @@
       "properties": { "player": { "$ref": "#/definitions/RemotePlayerState" } }
     },
     "stage_sync": {
-      "description": "StageHost → Broadcast: stage/map/battle synchronization",
+      "description": "Deprecated legacy StageHost synchronization. New map and node contracts are map_* and node_instance_* messages.",
       "extends": "GameMessage",
       "properties": {
         "character": { "type": "string" },
@@ -236,7 +295,7 @@
       }
     },
     "monster_intent": {
-      "description": "StageHost → Broadcast: monster intent change",
+      "description": "NodeInstanceHost → party: monster intent change for the active node instance",
       "extends": "GameMessage",
       "properties": {
         "monster_id": { "type": "string" },
@@ -247,10 +306,11 @@
       }
     },
     "combat_result": {
-      "description": "Host → All: authoritative card/monster execution result. Receivers apply effects under suppression; induced passive fire is local-owner-only (logic_owner_id == self), not full hook replay.",
+      "description": "Party coordinator/NodeInstanceHost → party: authoritative card or monster execution result. Receivers apply effects under suppression; induced passive fire is local-owner-only (logic_owner_id == self), not full hook replay. monster_id=monster_turn carries turn_transaction_id to bind a NodeInstanceHost completion result to one combat_phase transaction.",
       "extends": "GameMessage",
       "properties": {
         "monster_id": { "type": "string" },
+        "turn_transaction_id": { "type": "string", "description": "Required for monster_id=monster_turn; matches the active monster_turn combat_phase transaction" },
         "card_id": { "type": "string" },
         "executor_id": { "type": "string", "description": "Original REAL executor; must not be rewritten to room host" },
         "effects": { "type": "array", "items": { "$ref": "#/definitions/EffectDescription" } },
@@ -265,18 +325,170 @@
           "type": "string",
           "enum": ["player_turn", "resolving_queue", "queue_empty", "pre_monster_turn", "monster_turn", "post_monster_turn"]
         },
+        "party_id": { "type": "string", "description": "Gameplay party; absent legacy packets default to P0" },
         "transaction_id": { "type": "string" }
       }
     },
+    "party_snapshot": {
+      "description": "RoomHost → peers: authoritative party directory snapshot",
+      "properties": {
+        "parties": { "type": "array", "items": { "$ref": "#/definitions/PartyInfo" } }
+      }
+    },
+    "party_leave_request": {
+      "description": "Member → RoomHost: leave current party into a single-member party",
+      "properties": { "party_id": { "type": "string" } }
+    },
+    "party_join_request": {
+      "description": "Member → RoomHost → party leader: request to join a party",
+      "properties": {
+        "party_id": { "type": "string" },
+        "request_id": { "type": "string" }
+      }
+    },
+    "party_join_approved": {
+      "description": "Party leader → RoomHost: accept a pending join request",
+      "properties": {
+        "party_id": { "type": "string" },
+        "request_id": { "type": "string" },
+        "player_id": { "type": "string" }
+      }
+    },
+    "party_join_rejected": {
+      "description": "Party leader → RoomHost: reject a pending join request",
+      "properties": {
+        "party_id": { "type": "string" },
+        "request_id": { "type": "string" },
+        "player_id": { "type": "string" },
+        "reason": { "type": "string" }
+      }
+    },
+    "party_leader_changed": {
+      "description": "RoomHost → peers: deterministic party leader changed",
+      "properties": {
+        "party_id": { "type": "string" },
+        "leader_id": { "type": "string" }
+      }
+    },
+    "stage_transition_open": {
+      "description": "RoomHost → party: opens a party-scoped transition outside any map or node instance.",
+      "properties": {
+        "party_id": { "type": "string" },
+        "act_id": { "type": "string" },
+        "party_revision": { "type": "integer" }
+      }
+    },
+    "map_host_vote": {
+      "description": "Party member → RoomHost: nominate a MapHost when creating a new map.",
+      "properties": {
+        "party_id": { "type": "string" },
+        "candidate_id": { "type": "string" },
+        "party_revision": { "type": "integer" }
+      }
+    },
+    "map_host_result": {
+      "description": "RoomHost → party: unanimous MapHost result for a new MapInstance.",
+      "properties": {
+        "party_id": { "type": "string" },
+        "map_host_id": { "type": "string" },
+        "party_revision": { "type": "integer" }
+      }
+    },
+    "map_register": {
+      "description": "MapHost → RoomHost: register one immutable MapDefinition. The MapHost has no node-content duties after acceptance.",
+      "properties": {
+        "party_id": { "type": "string" },
+        "map_host_id": { "type": "string" },
+        "request_id": { "type": "string" },
+        "map": { "$ref": "#/definitions/MapDefinition" }
+      }
+    },
+    "map_registered": {
+      "description": "RoomHost → party: accepted immutable map registration and initial party binding.",
+      "properties": {
+        "party_id": { "type": "string" },
+        "map_instance_id": { "type": "string" },
+        "start_node_id": { "type": "string" },
+        "map_revision": { "type": "integer" },
+        "party_revision": { "type": "integer" }
+      }
+    },
+    "map_join_request": {
+      "description": "Party → RoomHost: bind the party to an already registered map of the requested act.",
+      "properties": {
+        "party_id": { "type": "string" },
+        "map_instance_id": { "type": "string" },
+        "request_id": { "type": "string" },
+        "party_revision": { "type": "integer" }
+      }
+    },
+    "map_joined": {
+      "description": "RoomHost → party: accepted map binding; the party must still select its own NodeInstanceHost.",
+      "properties": {
+        "party_id": { "type": "string" },
+        "map": { "$ref": "#/definitions/MapDefinition" },
+        "start_node_id": { "type": "string" },
+        "party_revision": { "type": "integer" }
+      }
+    },
+    "node_instance_host_vote": {
+      "description": "Party member → RoomHost: nominate the party's single NodeInstanceHost.",
+      "properties": {
+        "party_id": { "type": "string" },
+        "candidate_id": { "type": "string" },
+        "party_revision": { "type": "integer" }
+      }
+    },
+    "node_instance_host_result": {
+      "description": "RoomHost → party: unanimous NodeInstanceHost result.",
+      "properties": {
+        "party_id": { "type": "string" },
+        "node_instance_host_id": { "type": "string" },
+        "party_revision": { "type": "integer" }
+      }
+    },
+    "stage_transition_complete": {
+      "description": "RoomHost → party: map binding and NodeInstanceHost are confirmed; party may enter MAP_ACTIVE.",
+      "properties": {
+        "party_id": { "type": "string" },
+        "map_instance_id": { "type": "string" },
+        "node_instance_host_id": { "type": "string" },
+        "start_node_id": { "type": "string" },
+        "party_revision": { "type": "integer" }
+      }
+    },
+    "node_instance_allocate": {
+      "description": "RoomHost → NodeInstanceHost: allocate or return an idempotent node instance after path validation.",
+      "properties": {
+        "node_instance": { "$ref": "#/definitions/NodeInstanceInfo" },
+        "request_id": { "type": "string" }
+      }
+    },
+    "node_generation_commit": {
+      "description": "NodeInstanceHost → RoomHost: atomically commit generated node content metadata and room-generation modifier state deltas.",
+      "properties": {
+        "node_instance_id": { "type": "string" },
+        "generation_revision": { "type": "integer" },
+        "generation_result": { "type": "object" },
+        "modifier_state_delta": { "type": "object" }
+      }
+    },
+    "node_instance_opened": {
+      "description": "RoomHost → party: node generation is committed and the party may enter the instance.",
+      "properties": {
+        "node_instance": { "$ref": "#/definitions/NodeInstanceInfo" },
+        "generation_result": { "type": "object" }
+      }
+    },
     "monster_mutation_proposal": {
-      "description": "Planned: Peer → StageHost (via room host): propose monster core-state change from local-owner buff/card logic.",
+      "description": "Planned: Peer → current NodeInstanceHost (via RoomHost): propose monster core-state change from local-owner buff/card logic.",
       "extends": "GameMessage",
       "properties": {
         "proposal": { "$ref": "#/definitions/MonsterMutationProposal" }
       }
     },
     "monster_mutation_commit": {
-      "description": "Planned: StageHost → All (via room host): authoritative monster state after proposal apply/reject.",
+      "description": "Planned: NodeInstanceHost → party (via RoomHost): authoritative monster state after proposal apply/reject.",
       "extends": "GameMessage",
       "properties": {
         "commit": { "$ref": "#/definitions/MonsterMutationCommit" }
@@ -300,6 +512,73 @@
         "effects": { "type": "array", "items": { "$ref": "#/definitions/EffectDescription" } }
       }
     },
+    "event_interface": {
+      "description": "NodeInstanceHost → RoomHost → party: open a party-scoped event instance with class/hash for native or fallback UI.",
+      "properties": {
+        "event_instance_id": { "type": "string" },
+        "party_id": { "type": "string" },
+        "event_class": { "type": "string" },
+        "event_id": { "type": "string" },
+        "resource_hash": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "mode": { "type": "string", "enum": ["individual", "voting"] },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "index": { "type": "integer" },
+              "text": { "type": "string" },
+              "enabled": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    },
+    "event_choice_request": {
+      "description": "Chooser → RoomHost: request approval before local buttonEffect side effects.",
+      "properties": {
+        "event_instance_id": { "type": "string" },
+        "party_id": { "type": "string" },
+        "request_id": { "type": "string" },
+        "ui_step": { "type": "string" },
+        "option_index": { "type": "integer" },
+        "selected_cards": { "type": "array", "items": { "type": "string" } },
+        "resource_hash": { "type": "string" }
+      }
+    },
+    "event_choice_approved": {
+      "description": "RoomHost → chooser (or party for voting): approved request may continue local execution.",
+      "properties": {
+        "event_instance_id": { "type": "string" },
+        "party_id": { "type": "string" },
+        "request_id": { "type": "string" },
+        "ui_step": { "type": "string" },
+        "option_index": { "type": "integer" }
+      }
+    },
+    "event_choice_rejected": {
+      "description": "RoomHost → chooser: request rejected (bad member/option/step/hash/duplicate).",
+      "properties": {
+        "event_instance_id": { "type": "string" },
+        "party_id": { "type": "string" },
+        "request_id": { "type": "string" },
+        "ui_step": { "type": "string" },
+        "reason": { "type": "string" }
+      }
+    },
+    "event_player_result": {
+      "description": "Chooser/NIH → RoomHost → party: personal outcome after an approved choice.",
+      "properties": {
+        "event_instance_id": { "type": "string" },
+        "party_id": { "type": "string" },
+        "request_id": { "type": "string" },
+        "player_id": { "type": "string" },
+        "effects": { "type": "array", "items": { "$ref": "#/definitions/EffectDescription" } }
+      }
+    },
+
     "reference_register": {
       "description": "Peer → Broadcast: announce available references",
       "extends": "GameMessage",
@@ -349,14 +628,14 @@
       }
     },
     "stage_host_election": {
-      "description": "Broadcast: initiate stage host election with candidates",
+      "description": "Deprecated legacy room-wide StageHost election. Use party-scoped map_host_vote instead.",
       "extends": "GameMessage",
       "properties": {
         "candidates": { "type": "array", "items": { "type": "string" } }
       }
     },
     "stage_host_result": {
-      "description": "Broadcast: stage host election result",
+      "description": "Deprecated legacy room-wide StageHost result. Use map_host_result instead.",
       "extends": "GameMessage",
       "properties": {
         "host_id": { "type": "string" }

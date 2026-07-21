@@ -5,6 +5,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.util.List;
+import java.util.Arrays;
 
 import static org.junit.Assert.*;
 
@@ -82,5 +83,51 @@ public class ComponentAttachmentRegistryTest {
         assertNull(ComponentAttachmentRegistry.registerApplyPower("", "a", "monster:M", 1));
         assertNull(ComponentAttachmentRegistry.registerApplyPower("Vulnerable", "a", "", 1));
         assertNull(ComponentAttachmentRegistry.register(null));
+    }
+
+    @Test
+    public void replaceSnapshotAtomicallyReplacesStaleAttachments() {
+        ComponentAttachment stale = ComponentAttachmentRegistry.registerApplyPower(
+            "Weak", "player-a", "monster:old", 1);
+        ComponentAttachment first = ComponentAttachment.ofPower(
+            "first", "Vulnerable", "player-a", "monster:new", 2);
+        ComponentAttachment second = ComponentAttachment.ofPower(
+            "second", "Frail", "player-b", "player:player-b", 3);
+
+        assertTrue(ComponentAttachmentRegistry.replaceSnapshot(Arrays.asList(first, second)));
+        assertNull(ComponentAttachmentRegistry.get(stale.instanceId));
+        assertEquals(2, ComponentAttachmentRegistry.size());
+        assertEquals(2, ComponentAttachmentRegistry.get("first").amount);
+        assertEquals("player-b", ComponentAttachmentRegistry.get("second").logicOwnerId);
+
+        assertTrue(ComponentAttachmentRegistry.replaceSnapshot(Arrays.asList(first, second)));
+        assertEquals(2, ComponentAttachmentRegistry.size());
+    }
+
+    @Test
+    public void rejectMalformedSnapshotWithoutReplacingCurrentAttachments() {
+        ComponentAttachment existing = ComponentAttachmentRegistry.registerApplyPower(
+            "Weak", "player-a", "monster:M", 1);
+        ComponentAttachment malformed = new ComponentAttachment(
+            "bad", "", null, "player-b", "monster:N", 2, "");
+
+        assertFalse(ComponentAttachmentRegistry.replaceSnapshot(Arrays.asList(malformed)));
+        assertEquals(1, ComponentAttachmentRegistry.size());
+        assertNotNull(ComponentAttachmentRegistry.get(existing.instanceId));
+    }
+
+    @Test
+    public void removePowerOnlyRemovesAttachmentsOnTheSpecifiedHost() {
+        ComponentAttachment onMonster = ComponentAttachmentRegistry.registerApplyPower(
+            "Weak", "player-a", "monster:M", 1);
+        ComponentAttachment onPlayer = ComponentAttachmentRegistry.registerApplyPower(
+            "Weak", "player-a", "player:player-a", 1);
+        ComponentAttachment otherPower = ComponentAttachmentRegistry.registerApplyPower(
+            "Vulnerable", "player-a", "monster:M", 2);
+
+        assertEquals(1, ComponentAttachmentRegistry.removePower("Weak", "monster:M"));
+        assertNull(ComponentAttachmentRegistry.get(onMonster.instanceId));
+        assertNotNull(ComponentAttachmentRegistry.get(onPlayer.instanceId));
+        assertNotNull(ComponentAttachmentRegistry.get(otherPower.instanceId));
     }
 }

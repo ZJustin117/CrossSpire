@@ -35,8 +35,8 @@ public class RemoteRenderer implements PostRenderSubscriber, PostUpdateSubscribe
         if (AbstractDungeon.player == null) return;
 
         int idx = 0;
-        int total = RemotePlayerRegistry.count();
-        for (RemotePlayerState rp : RemotePlayerRegistry.all()) {
+        int total = RemotePlayerRegistry.visibleCountToLocalParty();
+        for (RemotePlayerState rp : RemotePlayerRegistry.visibleToLocalParty()) {
             RemoteCharacterResource chr = rp.getCharacterResource();
             if (chr == null) {
                 RemoteCharacterResource loaded = RemoteResourceManager.getCharacter(rp.playerId);
@@ -78,7 +78,7 @@ public class RemoteRenderer implements PostRenderSubscriber, PostUpdateSubscribe
     }
 
     private void render(SpriteBatch sb) {
-        int count = RemotePlayerRegistry.count();
+        int count = RemotePlayerRegistry.visibleCountToLocalParty();
         if (count == 0) return;
 
         float y = PANEL_Y_TOP;
@@ -86,7 +86,7 @@ public class RemoteRenderer implements PostRenderSubscriber, PostUpdateSubscribe
             "Remote (" + count + ")", PANEL_X, y, Color.YELLOW);
         y -= LINE_HEIGHT;
 
-        for (RemotePlayerState rp : RemotePlayerRegistry.all()) {
+        for (RemotePlayerState rp : RemotePlayerRegistry.visibleToLocalParty()) {
             RemoteCharacterResource chr = rp.getCharacterResource();
             RemotePlayer remotePlayer = rp.getPlayerInstance();
 

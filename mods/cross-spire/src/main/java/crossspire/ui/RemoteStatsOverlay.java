@@ -23,7 +23,7 @@ public class RemoteStatsOverlay {
 
     public static void renderStatic(SpriteBatch sb, Texture whitePixel) {
         if (com.megacrit.cardcrawl.helpers.FontHelper.tipBodyFont == null) return;
-        int count = RemotePlayerRegistry.count();
+        int count = RemotePlayerRegistry.visibleCountToLocalParty();
         if (count == 0) return;
 
         float panelX = Settings.WIDTH - 160.0F * Settings.xScale;
@@ -38,7 +38,7 @@ public class RemoteStatsOverlay {
             "Remote", panelX, y, Color.YELLOW);
         y -= lineH;
 
-        for (RemotePlayerState rp : RemotePlayerRegistry.all()) {
+        for (RemotePlayerState rp : RemotePlayerRegistry.visibleToLocalParty()) {
             y = drawPlayerRow(sb, whitePixel, rp, panelX, y, hpBarW, hpBarH, lineH, iconH);
         }
     }

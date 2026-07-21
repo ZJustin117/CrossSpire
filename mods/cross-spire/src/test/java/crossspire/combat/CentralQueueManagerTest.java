@@ -127,4 +127,34 @@ public class CentralQueueManagerTest {
         mgr.onQueueSubmit(pkt);
         assertEquals("duplicate should be ignored", 1, mgr.size());
     }
+
+    @Test
+    public void shouldKeepPartyQueuesIndependent() {
+        CentralQueueManager mgr = new CentralQueueManager();
+        Protocol.QueueSubmitMessage p0 = packet("P0", "Strike_R", "alice", 1);
+        Protocol.QueueSubmitMessage p1 = packet("P1", "Bash", "bob", 1);
+
+        mgr.onQueueSubmit(p0);
+        mgr.onQueueSubmit(p1);
+
+        assertEquals(1, mgr.size("P0"));
+        assertEquals(1, mgr.size("P1"));
+        assertEquals("Strike_R", mgr.getEntries("P0")[0].cardId);
+        assertEquals("Bash", mgr.getEntries("P1")[0].cardId);
+        mgr.markDone("P0", p0.packetId);
+        assertEquals(0, mgr.size("P0"));
+        assertEquals(1, mgr.size("P1"));
+    }
+
+    private static Protocol.QueueSubmitMessage packet(String partyId, String cardId, String player, int seq) {
+        Protocol.QueueSubmitMessage pkt = new Protocol.QueueSubmitMessage();
+        pkt.partyId = partyId;
+        pkt.cardId = cardId;
+        pkt.ownerId = player;
+        pkt.senderId = player;
+        pkt.source = player;
+        pkt.seq = seq;
+        pkt.timestamp = seq;
+        return pkt;
+    }
 }

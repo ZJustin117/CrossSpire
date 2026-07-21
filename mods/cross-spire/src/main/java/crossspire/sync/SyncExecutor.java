@@ -212,6 +212,47 @@ public class SyncExecutor {
         });
     }
 
+    /**
+     * NodeInstanceHost opens a party node instance after allocate.
+     * Diagnostic path uses a fixed Cultist encounter; full RNG generation is later.
+     */
+    public static void openNodeInstanceAsHost(Protocol.NodeInstanceInfo info,
+                                              Protocol.NodeGenerationResult result) {
+        if (info == null || result == null) return;
+        final String encounter = result.encounter != null && !result.encounter.isEmpty()
+            ? result.encounter : "Cultist";
+        BaseMod.logger.info("SyncExecutor openNodeInstanceAsHost party=" + info.partyId
+            + " node=" + info.nodeId + " encounter=" + encounter);
+        Gdx.app.postRunnable(new Runnable() {
+            @Override public void run() {
+                EventSuppression.suppressEvents(new Runnable() {
+                    @Override public void run() {
+                        enterRemoteCombat(encounter);
+                    }
+                });
+            }
+        });
+    }
+
+    /** Party members apply RoomHost node_instance_opened without re-running generation. */
+    public static void openNodeInstanceAsMember(Protocol.NodeInstanceInfo info,
+                                                Protocol.NodeGenerationResult result) {
+        if (info == null || result == null) return;
+        final String encounter = result.encounter != null && !result.encounter.isEmpty()
+            ? result.encounter : "Cultist";
+        BaseMod.logger.info("SyncExecutor openNodeInstanceAsMember party=" + info.partyId
+            + " node=" + info.nodeId + " encounter=" + encounter);
+        Gdx.app.postRunnable(new Runnable() {
+            @Override public void run() {
+                EventSuppression.suppressEvents(new Runnable() {
+                    @Override public void run() {
+                        enterRemoteCombat(encounter);
+                    }
+                });
+            }
+        });
+    }
+
     public void handleFullSnapshot(String rawMessage) {
         JsonObject snap = Protocol.GSON.fromJson(rawMessage, JsonObject.class);
         String source = snap.has("source") ? snap.get("source").getAsString() : "";

@@ -1,6 +1,14 @@
 package crossspire.network;
 
 import com.google.gson.Gson;
+import crossspire.event.EventApprovalCoordinator;
+import crossspire.map.MapRegistry;
+import crossspire.map.MapRegistrationCoordinator;
+import crossspire.map.NodeEntryCoordinator;
+import crossspire.map.NodeInstanceRegistry;
+import crossspire.map.NodeOpenCoordinator;
+import crossspire.map.PartyHostElectionTracker;
+import crossspire.map.PartyRoomPinTracker;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -11,6 +19,16 @@ import java.util.concurrent.CopyOnWriteArrayList;
 public class RoomHost {
 
     private final String hostPlayerId;
+    private final MapRegistry mapRegistry = new MapRegistry();
+    private final NodeInstanceRegistry nodeInstanceRegistry = new NodeInstanceRegistry();
+    private final PartyHostElectionTracker partyHostElectionTracker = new PartyHostElectionTracker();
+    private final MapRegistrationCoordinator mapRegistrationCoordinator =
+        new MapRegistrationCoordinator(mapRegistry, partyHostElectionTracker);
+    private final PartyRoomPinTracker partyRoomPinTracker = new PartyRoomPinTracker();
+    private final NodeEntryCoordinator nodeEntryCoordinator =
+        new NodeEntryCoordinator(mapRegistry, nodeInstanceRegistry);
+    private final NodeOpenCoordinator nodeOpenCoordinator = new NodeOpenCoordinator();
+    private final EventApprovalCoordinator eventApprovalCoordinator = new EventApprovalCoordinator();
     private final List<String> playerIds = new CopyOnWriteArrayList<String>();
     private final Map<String, Integer> playerPins = new HashMap<String, Integer>();
     private final Map<String, String> stageVotes = new HashMap<String, String>();
@@ -24,6 +42,39 @@ public class RoomHost {
 
     public String getHostPlayerId() {
         return hostPlayerId;
+    }
+
+    /** RoomHost retains directory state; gameplay execution belongs to elected party roles. */
+    public MapRegistry getMapRegistry() {
+        return mapRegistry;
+    }
+
+    public NodeInstanceRegistry getNodeInstanceRegistry() {
+        return nodeInstanceRegistry;
+    }
+
+    public PartyHostElectionTracker getPartyHostElectionTracker() {
+        return partyHostElectionTracker;
+    }
+
+    public MapRegistrationCoordinator getMapRegistrationCoordinator() {
+        return mapRegistrationCoordinator;
+    }
+
+    public PartyRoomPinTracker getPartyRoomPinTracker() {
+        return partyRoomPinTracker;
+    }
+
+    public NodeEntryCoordinator getNodeEntryCoordinator() {
+        return nodeEntryCoordinator;
+    }
+
+    public NodeOpenCoordinator getNodeOpenCoordinator() {
+        return nodeOpenCoordinator;
+    }
+
+    public EventApprovalCoordinator getEventApprovalCoordinator() {
+        return eventApprovalCoordinator;
     }
 
     public List<String> getPlayerIds() {

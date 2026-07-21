@@ -2,6 +2,9 @@ package crossspire.combat;
 
 import crossspire.CrossSpireMod;
 import crossspire.network.Protocol;
+import crossspire.party.PartyManager;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -9,8 +12,11 @@ import java.util.List;
 
 public class CentralQueueManager {
 
-    private final List<Protocol.QueueSubmitMessage> queue = Collections.synchronizedList(new ArrayList<Protocol.QueueSubmitMessage>());
-    private boolean processing = false;
+    private static final class QueueState {
+        final List<Protocol.QueueSubmitMessage> queue = Collections.synchronizedList(new ArrayList<Protocol.QueueSubmitMessage>());
+        boolean processing;
+    }
+    private final Map<String, QueueState> queues = new HashMap<String, QueueState>();
 
     private static final Comparator<Protocol.QueueSubmitMessage> ORDER = new Comparator<Protocol.QueueSubmitMessage>() {
         @Override
@@ -21,107 +27,123 @@ public class CentralQueueManager {
     };
 
     public void onQueueSubmit(Protocol.QueueSubmitMessage pkt) {
-        if (!CombatTurnOrchestrator.allowsQueueSubmitCurrent()) {
+        String partyId = partyId(pkt.partyId);
+        pkt.partyId = partyId;
+        if (!CombatPhase.allowsQueueSubmit(CombatPhaseCoordinator.getCurrentPhase(partyId))) {
             CSLog.log("CentralQueueManager reject submit in phase="
-                + CombatPhaseCoordinator.getCurrentPhase() + " card=" + pkt.cardId);
+                + CombatPhaseCoordinator.getCurrentPhase(partyId) + " card=" + pkt.cardId);
             return;
         }
+        QueueState state = stateFor(partyId);
         String dedupKey = pkt.senderId + "/" + pkt.seq;
         pkt.packetId = dedupKey;
         boolean becameNonEmpty;
-        synchronized (queue) {
-            for (Protocol.QueueSubmitMessage existing : queue) {
+        synchronized (state.queue) {
+            for (Protocol.QueueSubmitMessage existing : state.queue) {
                 if (existing.packetId != null && existing.packetId.equals(dedupKey)) return;
             }
-            becameNonEmpty = queue.isEmpty();
-            queue.add(pkt);
-            Collections.sort(queue, ORDER);
+            becameNonEmpty = state.queue.isEmpty();
+            state.queue.add(pkt);
+            Collections.sort(state.queue, ORDER);
         }
-        CSLog.log("CentralQueueManager added: " + pkt.cardId + " size=" + queue.size());
+        CSLog.log("CentralQueueManager added party=" + partyId + ": " + pkt.cardId + " size=" + state.queue.size());
         if (becameNonEmpty) {
-            CombatPhaseCoordinator.broadcast(CombatPhase.RESOLVING_QUEUE);
+            CombatPhaseCoordinator.broadcast(partyId, CombatPhase.RESOLVING_QUEUE);
         }
-        broadcastUpdate();
-        if (!processing) processNext();
+        broadcastUpdate(partyId);
+        if (!state.processing) processNext(partyId);
     }
 
     public Protocol.QueueSubmitMessage dequeue() {
-        synchronized (queue) {
-            if (queue.isEmpty()) return null;
-            return queue.remove(0);
-        }
+        return dequeue(PartyManager.DEFAULT_PARTY_ID);
+    }
+    public Protocol.QueueSubmitMessage dequeue(String partyId) {
+        QueueState state = stateFor(partyId);
+        synchronized (state.queue) { if (state.queue.isEmpty()) return null; return state.queue.remove(0); }
     }
 
     public int size() {
-        synchronized (queue) {
-            return queue.size();
-        }
+        return size(PartyManager.DEFAULT_PARTY_ID);
+    }
+    public int size(String partyId) {
+        QueueState state = stateFor(partyId);
+        synchronized (state.queue) { return state.queue.size(); }
     }
 
     public Protocol.QueueEntry[] getEntries() {
-        synchronized (queue) {
-            Protocol.QueueEntry[] entries = new Protocol.QueueEntry[queue.size()];
-            for (int i = 0; i < queue.size(); i++) {
-                entries[i] = toEntry(queue.get(i), i == 0 && processing ? "executing" : "pending");
+        return getEntries(PartyManager.DEFAULT_PARTY_ID);
+    }
+    public Protocol.QueueEntry[] getEntries(String partyId) {
+        QueueState state = stateFor(partyId);
+        synchronized (state.queue) {
+            Protocol.QueueEntry[] entries = new Protocol.QueueEntry[state.queue.size()];
+            for (int i = 0; i < state.queue.size(); i++) {
+                entries[i] = toEntry(state.queue.get(i), i == 0 && state.processing ? "executing" : "pending");
             }
             return entries;
         }
     }
 
     public void setExecuting(String cardId) {
-        broadcastUpdate();
+        broadcastUpdate(PartyManager.DEFAULT_PARTY_ID);
     }
 
     public void markDone(String packetId) {
+        markDone(PartyManager.DEFAULT_PARTY_ID, packetId);
+    }
+    public void markDone(String partyId, String packetId) {
+        QueueState state = stateFor(partyId);
         boolean wasEmpty;
-        synchronized (queue) {
-            for (int i = 0; i < queue.size(); i++) {
-                if (packetId.equals(queue.get(i).packetId)) {
-                    queue.remove(i);
+        synchronized (state.queue) {
+            for (int i = 0; i < state.queue.size(); i++) {
+                if (packetId.equals(state.queue.get(i).packetId)) {
+                    state.queue.remove(i);
                     break;
                 }
             }
-            wasEmpty = queue.isEmpty();
+            wasEmpty = state.queue.isEmpty();
         }
-        broadcastUpdate();
+        broadcastUpdate(partyId);
         if (wasEmpty) {
-            broadcastQueueEmpty();
+            broadcastQueueEmpty(partyId);
         } else {
-            processNext();
+            processNext(partyId);
         }
     }
 
-    private void processNext() {
+    private void processNext(String partyId) {
+        QueueState state = stateFor(partyId);
         Protocol.QueueSubmitMessage head;
-        synchronized (queue) {
-            if (queue.isEmpty()) { processing = false; return; }
-            processing = true;
-            head = queue.get(0);
+        synchronized (state.queue) {
+            if (state.queue.isEmpty()) { state.processing = false; return; }
+            state.processing = true;
+            head = state.queue.get(0);
         }
 
         CSLog.log("CentralQueueManager process: " + head.cardId + " owner=" + head.ownerId);
 
         if (head.ownerId != null && head.ownerId.equals(CrossSpireMod.playerId)) {
-            handleOwnItem(head);
+            handleOwnItem(partyId, head);
         } else {
-            sendInvoke(head);
+            sendInvoke(partyId, head);
         }
     }
 
-    private void handleOwnItem(Protocol.QueueSubmitMessage head) {
+    private void handleOwnItem(String partyId, Protocol.QueueSubmitMessage head) {
         CSLog.log("CentralQueueManager own item: " + head.cardId + " target=" + head.gameTarget);
         crossspire.sync.LocalCapturePatches.pushSuppress();
         crossspire.reference.LocalReference<Object> ref = new crossspire.reference.LocalReference<Object>(head.cardId, CrossSpireMod.playerId);
         ref.dereference(head.gameTarget);
 
-        if (head.packetId != null) markDone(head.packetId);
+        if (head.packetId != null) markDone(partyId, head.packetId);
     }
 
-    private void sendInvoke(Protocol.QueueSubmitMessage head) {
+    private void sendInvoke(String partyId, Protocol.QueueSubmitMessage head) {
         Protocol.InvokeMessage invoke = new Protocol.InvokeMessage();
         invoke.source = CrossSpireMod.playerId;
         invoke.target = head.ownerId;
         invoke.seq = CrossSpireMod.nextSeq();
+        invoke.partyId = partyId;
         invoke.refId = "card:" + head.cardId + "@" + head.ownerId;
         invoke.trigger = "play_card";
         invoke.args = head.gameTarget;
@@ -141,19 +163,18 @@ public class CentralQueueManager {
         complete.executorId = complete.source;
         complete.seq = CrossSpireMod.nextSeq();
         complete.type = "combat_result";
+        complete.partyId = partyId(result.partyId);
         complete.packetId = result.refId;
         complete.effects = result.effects;
         complete.operationSequence = result.operationSequence;
 
-        if (CrossSpireMod.isConnected()) {
-            CrossSpireMod.send(Protocol.GSON.toJson(complete));
-        }
-
         String cardId = result.refId.contains("@") ? result.refId.split(":")[1].split("@")[0] : "unknown";
-        synchronized (queue) {
-            for (Protocol.QueueSubmitMessage q : queue) {
+        String partyId = partyId(result.partyId);
+        QueueState state = stateFor(partyId);
+        synchronized (state.queue) {
+            for (Protocol.QueueSubmitMessage q : state.queue) {
                 if (q.ownerId.equals(result.source) && q.cardId.equals(cardId)) {
-                    markDone(q.packetId);
+                    markDone(partyId, q.packetId);
                     return;
                 }
             }
@@ -161,31 +182,34 @@ public class CentralQueueManager {
     }
 
     public void onCombatResultReplayed(String sourceCardId) {
-        processing = false;
-        processNext();
+        QueueState state = stateFor(PartyManager.DEFAULT_PARTY_ID);
+        state.processing = false;
+        processNext(PartyManager.DEFAULT_PARTY_ID);
     }
 
-    private void broadcastUpdate() {
+    private void broadcastUpdate(String partyId) {
         if (!CrossSpireMod.isConnected()) return;
 
         Protocol.QueueUpdateMessage update = new Protocol.QueueUpdateMessage();
         update.source = CrossSpireMod.playerId;
         update.seq = CrossSpireMod.nextSeq();
-        update.entries = getEntries();
-        CrossSpireMod.send(Protocol.GSON.toJson(update));
+        update.partyId = partyId(partyId);
+        update.entries = getEntries(partyId);
+        CrossSpireMod.sendToParty(partyId(partyId), Protocol.GSON.toJson(update));
     }
 
-    private void broadcastQueueEmpty() {
-        processing = false;
+    private void broadcastQueueEmpty(String partyId) {
+        stateFor(partyId).processing = false;
         // Explicit phase (T5.4); clients also keep legacy queue_empty for compatibility.
-        CombatPhaseCoordinator.broadcast(CombatPhase.QUEUE_EMPTY);
+        CombatPhaseCoordinator.broadcast(partyId, CombatPhase.QUEUE_EMPTY);
 
         if (!CrossSpireMod.isConnected()) return;
 
         Protocol.QueueEmptyMessage empty = new Protocol.QueueEmptyMessage();
         empty.source = CrossSpireMod.playerId;
         empty.seq = CrossSpireMod.nextSeq();
-        CrossSpireMod.send(Protocol.GSON.toJson(empty));
+        empty.partyId = partyId(partyId);
+        CrossSpireMod.sendToParty(partyId(partyId), Protocol.GSON.toJson(empty));
 
         CSLog.log("CentralQueueManager queue_empty broadcast");
     }
@@ -199,6 +223,19 @@ public class CentralQueueManager {
         entry.target = pkt.gameTarget;
         entry.status = status;
         return entry;
+    }
+
+    private QueueState stateFor(String partyId) {
+        String effective = partyId(partyId);
+        synchronized (queues) {
+            QueueState state = queues.get(effective);
+            if (state == null) { state = new QueueState(); queues.put(effective, state); }
+            return state;
+        }
+    }
+
+    private static String partyId(String partyId) {
+        return partyId == null || partyId.isEmpty() ? PartyManager.DEFAULT_PARTY_ID : partyId;
     }
 
     static final class CSLog {

@@ -15,15 +15,28 @@ import com.megacrit.cardcrawl.ui.buttons.GridSelectConfirmButton;
 import crossspire.combat.EventCapture;
 import crossspire.combat.EventSyncPatches;
 import crossspire.CrossSpireMod;
+import crossspire.event.EventApprovalCoordinator;
+import crossspire.event.EventChoiceSender;
+import crossspire.map.MapDefinition;
+import crossspire.map.MapHostVoteSender;
+import crossspire.map.MapNode;
+import crossspire.map.MapRegisterSender;
+import crossspire.map.NodeInstanceHostVoteSender;
 import crossspire.network.EventMessageSender;
 import crossspire.network.Protocol;
 import crossspire.network.RoomPinSender;
 import crossspire.network.StarConnectionManager;
+import crossspire.network.StandardPacket;
 import crossspire.network.StageVoteSender;
 import crossspire.remote.RemotePlayerRegistry;
 import crossspire.sync.FullSnapshotSender;
 import crossspire.remote.RemotePlayerState;
 import crossspire.sync.QueueSubmitBuilder;
+import crossspire.party.PartyState;
+import crossspire.party.PartyCoordinator;
+import crossspire.party.PartyManager;
+import java.util.Arrays;
+import java.util.UUID;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 
@@ -57,6 +70,13 @@ public class CrossSpireCommand extends ConsoleCommand {
         else if ("gamestate".equals(sub)) { cmdGameState(); }
         else if ("confirm".equals(sub)) { cmdConfirm(); }
         else if ("phase".equals(sub)) { cmdPhase(tokens, depth); }
+        else if ("party".equals(sub)) { cmdParty(tokens, depth); }
+        else if ("maphost".equals(sub)) { cmdMapHostVote(tokens, depth); }
+        else if ("mapreg".equals(sub)) { cmdMapRegister(tokens, depth); }
+        else if ("nodehost".equals(sub)) { cmdNodeInstanceHostVote(tokens, depth); }
+        else if ("eventopen".equals(sub)) { cmdEventOpen(tokens, depth); }
+        else if ("eventchoice".equals(sub)) { cmdEventChoice(tokens, depth); }
+        else if ("eventresult".equals(sub)) { cmdEventResult(); }
         else { errorMsg(); }
     }
 
@@ -116,6 +136,94 @@ public class CrossSpireCommand extends ConsoleCommand {
         DevConsole.log("Combat phase: " + crossspire.combat.CombatPhaseCoordinator.getCurrentPhase());
     }
 
+    private void cmdParty(String[] tokens, int depth) {
+        if (tokens.length > depth + 1 && !"status".equalsIgnoreCase(tokens[depth + 1])) {
+            DevConsole.log("Usage: crossspire party status");
+            return;
+        }
+        if (CrossSpireMod.partyManager == null) {
+            DevConsole.log("Party directory unavailable");
+            return;
+        }
+        DevConsole.log("=== CrossSpire Parties ===");
+        BaseMod.logger.info("=== CrossSpire Parties ===");
+        for (PartyState party : CrossSpireMod.partyManager.snapshot()) {
+            String line = "party=" + party.partyId + " leader=" + party.leaderId
+                + " members=" + party.memberIds
+                + " phase=" + party.phaseStatus
+                + " mapId=" + party.mapInstanceId
+                + " pos=" + party.mapPosition
+                + " nodeHost=" + party.nodeInstanceHostId
+                + " rev=" + party.partyRevision;
+            DevConsole.log(line);
+            BaseMod.logger.info("CrossSpire party status " + line);
+        }
+    }
+
+    private static String localPartyId() {
+        if (CrossSpireMod.partyManager == null) return PartyManager.DEFAULT_PARTY_ID;
+        String partyId = CrossSpireMod.partyManager.getPartyIdForPlayer(CrossSpireMod.playerId);
+        return partyId != null ? partyId : PartyManager.DEFAULT_PARTY_ID;
+    }
+
+    private void cmdMapHostVote(String[] tokens, int depth) {
+        if (tokens.length < depth + 2) {
+            DevConsole.log("Usage: crossspire maphost <candidate_player_id>");
+            return;
+        }
+        String candidate = tokens[depth + 1];
+        String partyId = localPartyId();
+        StandardPacket vote = MapHostVoteSender.buildVote(partyId, candidate);
+        String raw = StandardPacket.toJson(vote);
+        if (CrossSpireMod.isRoomHost() && CrossSpireMod.messageRouter != null) {
+            CrossSpireMod.messageRouter.route(raw);
+        } else {
+            CrossSpireMod.send(raw);
+        }
+        DevConsole.log("MapHost vote party=" + partyId + " candidate=" + candidate);
+        BaseMod.logger.info("CrossSpire maphost vote party=" + partyId + " candidate=" + candidate);
+    }
+
+    private void cmdMapRegister(String[] tokens, int depth) {
+        String partyId = localPartyId();
+        String mapId = tokens.length > depth + 1 ? tokens[depth + 1] : "M1";
+        String start = tokens.length > depth + 2 ? tokens[depth + 2] : "start";
+        String next = tokens.length > depth + 3 ? tokens[depth + 3] : "node1";
+        MapDefinition map = new MapDefinition(mapId, "EXORDIUM", 1, "console", start,
+            Arrays.asList(
+                new MapNode(start, Arrays.asList(next)),
+                new MapNode(next, Arrays.<String>asList())));
+        StandardPacket register = MapRegisterSender.buildRegister(
+            partyId, CrossSpireMod.playerId, UUID.randomUUID().toString().substring(0, 8), map);
+        String raw = StandardPacket.toJson(register);
+        if (CrossSpireMod.isRoomHost() && CrossSpireMod.messageRouter != null) {
+            CrossSpireMod.messageRouter.route(raw);
+        } else {
+            CrossSpireMod.send(raw);
+        }
+        DevConsole.log("Map register party=" + partyId + " map=" + mapId
+            + " start=" + start + "->" + next);
+        BaseMod.logger.info("CrossSpire mapreg party=" + partyId + " map=" + mapId);
+    }
+
+    private void cmdNodeInstanceHostVote(String[] tokens, int depth) {
+        if (tokens.length < depth + 2) {
+            DevConsole.log("Usage: crossspire nodehost <candidate_player_id>");
+            return;
+        }
+        String candidate = tokens[depth + 1];
+        String partyId = localPartyId();
+        StandardPacket vote = NodeInstanceHostVoteSender.buildVote(partyId, candidate);
+        String raw = StandardPacket.toJson(vote);
+        if (CrossSpireMod.isRoomHost() && CrossSpireMod.messageRouter != null) {
+            CrossSpireMod.messageRouter.route(raw);
+        } else {
+            CrossSpireMod.send(raw);
+        }
+        DevConsole.log("NodeInstanceHost vote party=" + partyId + " candidate=" + candidate);
+        BaseMod.logger.info("CrossSpire nodehost vote party=" + partyId + " candidate=" + candidate);
+    }
+
     private void cmdPhase(String[] tokens, int depth) {
         if (tokens.length <= depth + 1) {
             DevConsole.log("Combat phase: " + crossspire.combat.CombatPhaseCoordinator.getCurrentPhase());
@@ -127,11 +235,12 @@ public class CrossSpireCommand extends ConsoleCommand {
             DevConsole.log("Invalid phase: " + phase);
             return;
         }
-        if (CrossSpireMod.isRoomHost()) {
-            crossspire.combat.CombatPhaseCoordinator.broadcast(phase);
-            DevConsole.log("Broadcast combat_phase=" + phase);
+        String partyId = localPartyId();
+        if (PartyCoordinator.isLeader(CrossSpireMod.partyManager, partyId, CrossSpireMod.playerId)) {
+            crossspire.combat.CombatPhaseCoordinator.broadcast(partyId, phase);
+            DevConsole.log("Broadcast combat_phase=" + phase + " party=" + partyId);
         } else {
-            DevConsole.log("Only room host can set combat phase (current="
+            DevConsole.log("Only party leader can set combat phase (current="
                 + crossspire.combat.CombatPhaseCoordinator.getCurrentPhase() + ")");
         }
     }
@@ -148,10 +257,10 @@ public class CrossSpireCommand extends ConsoleCommand {
 
     private void cmdLobby() {
         DevConsole.log("=== Lobby ===");
-        int rc = RemotePlayerRegistry.count();
+        int rc = RemotePlayerRegistry.visibleCountToLocalParty();
         DevConsole.log("Remote players: " + rc);
         if (rc > 0) {
-            for (RemotePlayerState rp : RemotePlayerRegistry.all()) {
+            for (RemotePlayerState rp : RemotePlayerRegistry.visibleToLocalParty()) {
                 String cls = rp.characterClass != null && !rp.characterClass.isEmpty() ? rp.characterClass : "?";
                 DevConsole.log("  " + rp.playerId.substring(0, 8) + " " + cls + " HP:" + rp.hp + "/" + rp.maxHp + " B:" + rp.block);
                 if (rp.powers != null && rp.powers.length > 0) {
@@ -280,14 +389,14 @@ public class CrossSpireCommand extends ConsoleCommand {
 
         Protocol.QueueSubmitMessage pkt = QueueSubmitBuilder.build(cardId, targetId);
 
-        if (CrossSpireMod.isRoomHost()) {
-            CrossSpireMod.centralQueueManager.onQueueSubmit(pkt);
-            DevConsole.log("Queue submit (host): " + cardId + " → " + targetId);
-            BaseMod.logger.info("CrossSpire cmdPlay HOST: submit " + cardId + "→" + targetId + " queueSize=" + CrossSpireMod.centralQueueManager.size());
+        String queueSubmit = Protocol.GSON.toJson(pkt);
+        if (CrossSpireMod.isRoomHost() && CrossSpireMod.messageRouter != null) {
+            // A host has no loopback socket; use the same authorization/routing handler directly.
+            CrossSpireMod.messageRouter.route(queueSubmit);
         } else {
-            CrossSpireMod.send((String) Protocol.GSON.toJson(pkt));
-            DevConsole.log("Queue submit (client): " + cardId + " → " + targetId);
+            CrossSpireMod.send(queueSubmit);
         }
+        DevConsole.log("Queue submit: " + cardId + " → " + targetId);
     }
 
     private void cmdRoomPin(String[] tokens, int depth) {
@@ -302,16 +411,16 @@ public class CrossSpireCommand extends ConsoleCommand {
             DevConsole.log("Invalid room index: " + tokens[depth + 1]);
             return;
         }
-        String msg = RoomPinSender.buildRoomPin(CrossSpireMod.playerId, roomIndex);
-        if (CrossSpireMod.isRoomHost()) {
-            if (CrossSpireMod.messageRouter != null) {
-                CrossSpireMod.messageRouter.handleRoomPin(msg);
-            }
+        String partyId = localPartyId();
+        String msg = RoomPinSender.buildRoomPin(CrossSpireMod.playerId, partyId, roomIndex);
+        if (CrossSpireMod.isRoomHost() && CrossSpireMod.messageRouter != null) {
+            CrossSpireMod.messageRouter.handleRoomPin(msg);
         } else {
-            CrossSpireMod.send((String) msg);
+            CrossSpireMod.send(msg);
         }
-        BaseMod.logger.info("CrossSpire roomPin: " + roomIndex + " host=" + CrossSpireMod.isRoomHost());
-        DevConsole.log("Room pin: " + roomIndex);
+        BaseMod.logger.info("CrossSpire roomPin party=" + partyId + " room=" + roomIndex
+            + " host=" + CrossSpireMod.isRoomHost());
+        DevConsole.log("Room pin party=" + partyId + " index=" + roomIndex);
     }
 
     private void cmdSnapshot() {
@@ -441,8 +550,75 @@ public class CrossSpireCommand extends ConsoleCommand {
     }
 
     private static String lastEventClass = "";
+    private static String approvalEventInstanceId = "";
+    private static String approvalEventHash = "";
+    private static String approvalRequestId = "";
 
     public static void setLastEventClass(String cls) { lastEventClass = cls; }
+
+    private void cmdEventOpen(String[] tokens, int depth) {
+        String partyId = localPartyId();
+        String eventId = tokens.length > depth + 1 ? tokens[depth + 1] : "BigFish";
+        Protocol.EventInterfacePayload iface = new Protocol.EventInterfacePayload();
+        iface.eventInstanceId = "evt:" + partyId + ":" + UUID.randomUUID().toString().substring(0, 8);
+        iface.partyId = partyId;
+        iface.eventId = eventId;
+        iface.eventClass = "diagnostic." + eventId;
+        iface.resourceHash = "diagnostic-" + eventId;
+        iface.name = eventId;
+        iface.description = "T7.4 diagnostic event";
+        iface.mode = EventApprovalCoordinator.MODE_INDIVIDUAL;
+        Protocol.EventOptionInfo option = new Protocol.EventOptionInfo();
+        option.index = 0;
+        option.text = "Choose";
+        option.enabled = true;
+        iface.options = new Protocol.EventOptionInfo[] {option};
+        approvalEventInstanceId = iface.eventInstanceId;
+        approvalEventHash = iface.resourceHash;
+        StandardPacket packet = EventChoiceSender.interfacePacket(iface);
+        String raw = StandardPacket.toJson(packet);
+        if (CrossSpireMod.isRoomHost()) CrossSpireMod.messageRouter.route(raw);
+        else CrossSpireMod.send(raw);
+        BaseMod.logger.info("CrossSpire eventopen party=" + partyId + " event=" + iface.eventInstanceId);
+    }
+
+    private void cmdEventChoice(String[] tokens, int depth) {
+        if (tokens.length < depth + 2 || approvalEventInstanceId.isEmpty()) {
+            DevConsole.log("Usage: crossspire eventchoice <option>; run eventopen first");
+            return;
+        }
+        Protocol.EventChoiceRequestPayload request = new Protocol.EventChoiceRequestPayload();
+        request.eventInstanceId = approvalEventInstanceId;
+        request.partyId = localPartyId();
+        request.requestId = "req:" + UUID.randomUUID().toString().substring(0, 8);
+        request.uiStep = "buttonEffect";
+        request.optionIndex = Integer.parseInt(tokens[depth + 1]);
+        request.resourceHash = approvalEventHash;
+        approvalRequestId = request.requestId;
+        StandardPacket packet = EventChoiceSender.requestPacket(request);
+        String raw = StandardPacket.toJson(packet);
+        if (CrossSpireMod.isRoomHost()) CrossSpireMod.messageRouter.route(raw);
+        else CrossSpireMod.send(raw);
+        BaseMod.logger.info("CrossSpire eventchoice request=" + approvalRequestId);
+    }
+
+    private void cmdEventResult() {
+        if (approvalEventInstanceId.isEmpty() || approvalRequestId.isEmpty()) {
+            DevConsole.log("Run eventopen then eventchoice first");
+            return;
+        }
+        Protocol.EventPlayerResultPayload result = new Protocol.EventPlayerResultPayload();
+        result.eventInstanceId = approvalEventInstanceId;
+        result.partyId = localPartyId();
+        result.requestId = approvalRequestId;
+        result.playerId = CrossSpireMod.playerId;
+        result.effects = new Protocol.EffectDescription[0];
+        StandardPacket packet = EventChoiceSender.resultPacket(result);
+        String raw = StandardPacket.toJson(packet);
+        if (CrossSpireMod.isRoomHost()) CrossSpireMod.messageRouter.route(raw);
+        else CrossSpireMod.send(raw);
+        BaseMod.logger.info("CrossSpire eventresult request=" + approvalRequestId);
+    }
 
     private void cmdEventSelect(String[] tokens, int depth) {
         if (tokens.length < depth + 2) {

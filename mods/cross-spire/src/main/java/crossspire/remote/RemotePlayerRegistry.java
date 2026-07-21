@@ -5,6 +5,8 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import basemod.BaseMod;
+import crossspire.CrossSpireMod;
+import crossspire.party.PartyVisibility;
 
 public class RemotePlayerRegistry {
 
@@ -32,6 +34,22 @@ public class RemotePlayerRegistry {
 
     public static Collection<RemotePlayerState> all() {
         return new ArrayList<RemotePlayerState>(players.values());
+    }
+
+    /** Gameplay projections visible to the local player's current party only. */
+    public static Collection<RemotePlayerState> visibleToLocalParty() {
+        Collection<String> visibleIds = PartyVisibility.visibleRemotePlayerIds(
+            CrossSpireMod.partyManager, CrossSpireMod.playerId, players.keySet());
+        Collection<RemotePlayerState> visible = new ArrayList<RemotePlayerState>();
+        for (String playerId : visibleIds) {
+            RemotePlayerState state = players.get(playerId);
+            if (state != null) visible.add(state);
+        }
+        return visible;
+    }
+
+    public static int visibleCountToLocalParty() {
+        return visibleToLocalParty().size();
     }
 
     public static void clear() {

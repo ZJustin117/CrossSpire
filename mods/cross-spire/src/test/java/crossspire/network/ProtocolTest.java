@@ -106,6 +106,49 @@ public class ProtocolTest {
     }
 
     @Test
+    public void shouldSerializePartySnapshotPayloadWithSnakeCaseFields() {
+        Protocol.PartyInfo party = new Protocol.PartyInfo();
+        party.partyId = "P0";
+        party.leaderId = "alice";
+        party.memberIds = new String[] {"alice", "bob"};
+        party.mapPosition = "node-4";
+        Protocol.PartySnapshotPayload payload = new Protocol.PartySnapshotPayload();
+        payload.parties = new Protocol.PartyInfo[] {party};
+
+        String json = Protocol.GSON.toJson(payload);
+        Protocol.PartySnapshotPayload parsed = Protocol.GSON.fromJson(json, Protocol.PartySnapshotPayload.class);
+
+        assertTrue(json.contains("party_id"));
+        assertTrue(json.contains("leader_id"));
+        assertTrue(json.contains("member_ids"));
+        assertTrue(json.contains("map_position"));
+        assertEquals("P0", parsed.parties[0].partyId);
+        assertEquals("alice", parsed.parties[0].leaderId);
+        assertEquals("bob", parsed.parties[0].memberIds[1]);
+        assertEquals("node-4", parsed.parties[0].mapPosition);
+    }
+
+    @Test
+    public void shouldSerializePartyJoinDecisionPayload() {
+        Protocol.PartyJoinDecisionPayload payload = new Protocol.PartyJoinDecisionPayload();
+        payload.partyId = "P0";
+        payload.requestId = "join-1";
+        payload.playerId = "charlie";
+        payload.reason = "full";
+
+        String json = Protocol.GSON.toJson(payload);
+        Protocol.PartyJoinDecisionPayload parsed = Protocol.GSON.fromJson(json,
+            Protocol.PartyJoinDecisionPayload.class);
+
+        assertTrue(json.contains("request_id"));
+        assertTrue(json.contains("player_id"));
+        assertEquals("P0", parsed.partyId);
+        assertEquals("join-1", parsed.requestId);
+        assertEquals("charlie", parsed.playerId);
+        assertEquals("full", parsed.reason);
+    }
+
+    @Test
     public void shouldSerializeAndDeserializeEventResultMessage() {
         Protocol.EventResultMessage msg = new Protocol.EventResultMessage();
         msg.source = "host-001";

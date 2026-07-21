@@ -9,15 +9,17 @@ import com.megacrit.cardcrawl.dungeons.AbstractDungeon;
 import com.megacrit.cardcrawl.monsters.AbstractMonster;
 import com.megacrit.cardcrawl.rooms.MonsterRoom;
 import crossspire.CrossSpireMod;
+import crossspire.combat.ComponentAttachmentRegistry;
 
 public class CombatSyncPatches {
 
     public static boolean suppressBroadcast = false;
 
-    @SpirePatch(clz = MonsterRoom.class, method = "onPlayerEntry")
+    @SpirePatch(clz = MonsterRoom.class, method = "onPlayerEntry", paramtypez = {})
     public static class OnMonsterRoomEntry {
         @SpirePostfixPatch
         public static void Postfix(MonsterRoom __instance) {
+            ComponentAttachmentRegistry.clear();
             if (suppressBroadcast) {
                 suppressBroadcast = false;
                 RenderSafetyPatches.remoteCombatActive = true;

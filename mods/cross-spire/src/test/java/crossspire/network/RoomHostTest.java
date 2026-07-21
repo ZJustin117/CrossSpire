@@ -1,6 +1,10 @@
 package crossspire.network;
 
 import java.util.List;
+import java.util.Arrays;
+import crossspire.map.MapDefinition;
+import crossspire.map.MapNode;
+import crossspire.party.PartyManager;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
@@ -16,6 +20,30 @@ public class RoomHostTest {
     public void playerIdIsAsAssigned() {
         RoomHost host = new RoomHost("host-123");
         assertEquals("host-123", host.getHostPlayerId());
+    }
+
+    @Test
+    public void roomHostOwnsMapAndNodeInstanceDirectories() {
+        RoomHost host = new RoomHost("host-123");
+        MapDefinition map = new MapDefinition("M1", "EXORDIUM", 1, "digest", "a",
+            Arrays.asList(new MapNode("a", Arrays.asList("b")),
+                new MapNode("b", Arrays.<String>asList())));
+
+        assertSame(map, host.getMapRegistry().register("alice", map));
+        assertNotNull(host.getNodeInstanceRegistry().allocate(map, "P0", "a", "b", 1, "alice"));
+    }
+
+    @Test
+    public void roomHostOwnsPartyScopedHostElectionTracker() {
+        RoomHost host = new RoomHost("host-123");
+        PartyManager parties = new PartyManager();
+        parties.initializeDefaultParty(Arrays.asList("alice", "bob"), "");
+
+        assertTrue(host.getPartyHostElectionTracker().castMapHostVote(
+            parties.getParty("P0"), "alice", "bob"));
+        assertTrue(host.getPartyHostElectionTracker().castMapHostVote(
+            parties.getParty("P0"), "bob", "bob"));
+        assertEquals("bob", host.getPartyHostElectionTracker().mapHostConsensus(parties.getParty("P0")));
     }
 
     @Test

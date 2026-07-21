@@ -1,6 +1,6 @@
 # CrossSpire 控制台命令
 
-CrossSpire 通过 BaseMod 的 `ConsoleCommand` API 注册了 `crossspire` 命名空间，共 21 个主子命令，另有 `connect` 作为 `join` 的别名。命令可以直接在 BaseMod console 输入，也可以由 SlayTheAmethyst Harness 调用 BaseMod console。
+CrossSpire 通过 BaseMod 的 `ConsoleCommand` API 注册 `crossspire` 命名空间，另有 `connect` 作为 `join` 的别名。命令可以直接在 BaseMod console 输入，也可以由 SlayTheAmethyst Harness 调用 BaseMod console。
 
 实现类：`crossspire.ui.CrossSpireCommand`
 
@@ -33,8 +33,15 @@ CrossSpire 通过 BaseMod 的 `ConsoleCommand` API 注册了 `crossspire` 命名
 | `crossspire ready [char]` | 标记本地玩家就绪，可选角色名 |
 | `crossspire start [char] [seed]` | 开始游戏，可选角色名和种子 |
 | `crossspire vote <player_id>` | 选举图主（stage host），全员一致即确认 |
-| `crossspire room <index>` | 标注下一个要进入的房间（用于地图导航共识） |
+| `crossspire room <index>` | 为本队标注下一房间（0-based 出边 index）；需 map 绑定；一致后分配 NodeInstance |
 | `crossspire snapshot` | 发送当前游戏状态快照 (`full_snapshot`) |
+| `crossspire party status` | 显示本地小队目录（T7.2a 诊断；leave/join 命令待后续 routing） |
+| `crossspire maphost <candidate_id>` | 为本队投 MapHost 票；全员一致后房主广播 `map_host_result` |
+| `crossspire mapreg [map_id] [start] [next]` | 获选 MapHost 登记一条最小不可变拓扑（诊断用）；成功后小队绑定地图 |
+| `crossspire nodehost <candidate_id>` | 为本队投 NodeInstanceHost 票（需已 map 绑定）；一致后写目录并广播 |
+| `crossspire eventopen [event_id]` | 诊断：注册并向本队广播 individual `event_interface` |
+| `crossspire eventchoice <option_index>` | 诊断：发送 individual `event_choice_request`，房主批准或拒绝 |
+| `crossspire eventresult` | 诊断：为最近批准的请求发送 `event_player_result` |
 
 ### 战斗
 

@@ -26,11 +26,28 @@ public final class ComponentAttachmentRegistry {
     }
 
     public static ComponentAttachment register(ComponentAttachment attachment) {
-        if (attachment == null || attachment.instanceId == null || attachment.instanceId.isEmpty()) {
+        if (!isValid(attachment)) {
             return null;
         }
         byInstance.put(attachment.instanceId, attachment);
         return attachment;
+    }
+
+    /**
+     * Replaces all in-combat attachment metadata after validating the complete
+     * incoming snapshot. Invalid input leaves the current registry untouched.
+     */
+    public static synchronized boolean replaceSnapshot(List<ComponentAttachment> attachments) {
+        if (attachments == null) return false;
+        Map<String, ComponentAttachment> replacement = new LinkedHashMap<>();
+        for (ComponentAttachment attachment : attachments) {
+            if (!isValid(attachment) || replacement.put(attachment.instanceId, attachment) != null) {
+                return false;
+            }
+        }
+        byInstance.clear();
+        byInstance.putAll(replacement);
+        return true;
     }
 
     /**
@@ -79,6 +96,23 @@ public final class ComponentAttachmentRegistry {
         return byInstance.remove(instanceId) != null;
     }
 
+    /** Removes all attachments for one power on one host entity. */
+    public static int removePower(String powerId, String hostEntityId) {
+        if (powerId == null || powerId.isEmpty() || hostEntityId == null || hostEntityId.isEmpty()) {
+            return 0;
+        }
+        int removed = 0;
+        for (Map.Entry<String, ComponentAttachment> entry : byInstance.entrySet()) {
+            ComponentAttachment attachment = entry.getValue();
+            if (powerId.equals(attachment.powerId)
+                && hostEntityId.equals(attachment.hostEntityId)
+                && byInstance.remove(entry.getKey(), attachment)) {
+                removed++;
+            }
+        }
+        return removed;
+    }
+
     public static List<ComponentAttachment> all() {
         return new ArrayList<>(byInstance.values());
     }
@@ -97,5 +131,12 @@ public final class ComponentAttachmentRegistry {
     /** Snapshot for tests / diagnostics. */
     public static Map<String, ComponentAttachment> snapshot() {
         return new LinkedHashMap<>(byInstance);
+    }
+
+    private static boolean isValid(ComponentAttachment attachment) {
+        return attachment != null
+            && attachment.instanceId != null && !attachment.instanceId.isEmpty()
+            && attachment.powerId != null && !attachment.powerId.isEmpty()
+            && attachment.hostEntityId != null && !attachment.hostEntityId.isEmpty();
     }
 }

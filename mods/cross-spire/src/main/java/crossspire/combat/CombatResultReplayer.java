@@ -308,8 +308,13 @@ public class CombatResultReplayer {
                 }
                 case "remove_power": {
                     String powerId = eff.has("power_id") ? eff.get("power_id").getAsString() : "";
-                    if (!powerId.isEmpty() && AbstractDungeon.player != null)
-                        AbstractDungeon.player.powers.removeIf(p -> powerId.equals(p.ID));
+                    if (!powerId.isEmpty()) {
+                        ComponentAttachmentRegistry.removePower(
+                            powerId, ComponentAttachmentRegistry.hostEntityIdForTarget(target));
+                        if ("self".equals(target) && AbstractDungeon.player != null) {
+                            AbstractDungeon.player.powers.removeIf(p -> powerId.equals(p.ID));
+                        }
+                    }
                     break;
                 }
                 case "draw_card":
@@ -451,4 +456,3 @@ public class CombatResultReplayer {
         }
     }
 }
-

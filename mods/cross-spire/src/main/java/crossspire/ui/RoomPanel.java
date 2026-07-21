@@ -99,11 +99,11 @@ public class RoomPanel {
             "Play", canPlay ? BTN_GREEN : BTN_GREY);
         y -= btnH + 6;
 
-        int rc = RemotePlayerRegistry.count();
+        int rc = RemotePlayerRegistry.visibleCountToLocalParty();
         FontHelper.renderFontLeftTopAligned(sb, FontHelper.tipBodyFont,
             "Remote (" + rc + ")", panelX + 6, y, CYAN_C);
         y -= lineH;
-        for (RemotePlayerState rp : RemotePlayerRegistry.all()) {
+        for (RemotePlayerState rp : RemotePlayerRegistry.visibleToLocalParty()) {
             String cls = rp.characterClass != null && !rp.characterClass.isEmpty()
                 ? rp.characterClass : "?";
             FontHelper.renderFontLeftTopAligned(sb, FontHelper.tipBodyFont,

@@ -100,6 +100,41 @@
 - [x] T6.5 双机 E2E：`pre_monster`→`monster`→`post`→`player` + T5.5 Bash 回归（2026-07-19）
 - [ ] T6.3 增强：phase 边界显式 fire owner-only 原版 power（引擎自发为主；可选）
 
+## P7 小队化冒险推进与批准式事件（计划）
+
+> 角色边界：RoomHost = 星型网络路由 + 图主/队长目录；StageHost = 阶段地图与房间内容权威；PartyLeader = 本队成员、队列、阶段和地图共识。初始全员属于默认小队；队长恒为成员 ID 字典序最小者。
+
+- [x] T7.0a 战斗权威：非图主联机节点抑制 `MonsterGroup.applyPreTurnLogic`；远端 `combat_phase` 要求房主来源、合法转换和唯一 transaction（JUnit 144/144，Android E2E 未取得子任务摘要）
+- [x] T7.0b attachment 生命周期基础：原子 `replaceSnapshot`、`remove_power` 同目标清理、进入新 MonsterRoom 时清空陈旧 metadata（聚焦 JUnit 9/9）
+- [x] T7.0c monster-turn transaction gate：仅接受当前图主/当前 transaction 的 completion result，零伤害仍完成回合，拒绝重复/旧回合 result（JUnit 153/153；Android 双机 E2E 两轮闭环通过，2026-07-20）
+  - D1 host + D2 join（room size=2）→ Cultist；双端连续两轮均完成 `pre_monster_turn` → `monster_turn` → `post_monster_turn` → `player_turn`
+  - 第一轮图主 `damage=0` 仍正确完成阶段；D2 收到与 D1 末阶段一致的 `player_turn` transaction
+  - D2 有两条非阻塞 `StarConnectionManager route error: null` 日志；未影响 host/join 或两轮阶段闭环，后续单独诊断
+- [x] T7.1 Party 状态与协议基础：schema/DTO、纯 `PartyState`/`PartyManager`、默认 P0、成员最小 ID 队长、leave/join 请求/批准/拒绝/掉线重选（JUnit 159/159；router/命令 wiring 留给 T7.2）
+- [x] T7.2a Party snapshot 路由：房主按房间成员建立/广播默认 P0；客户端仅接受房主来源并原子应用目录；`crossspire party status` 诊断（JUnit 159/159；Android 双机 P0 snapshot 通过，2026-07-20）
+- [ ] T7.2b 将 queue/end-turn/combat_phase/room_pin/可见性按 `party_id` 隔离；RoomHost 不再管理玩法队列
+  - 已落地（2026-07-20）：`party_id` 已贯穿 queue submit/update/empty、invoke/result、combat result/phase 与 player end-turn；`CentralQueueManager`、phase transaction 和 end-turn ready 集合均按小队独立，跨队 queue/combat result/UI 更新被拒绝或忽略。
+  - 已落地（2026-07-21）：成员的 `queue_submit` / `player_end_turn` 经 RoomHost 定向给 `party.leader_id`；仅队长可调度队列、聚合 end-turn、发送 queue update/empty 与 combat phase。队长的玩法输出由 RoomHost 校验成员资格后仅中继到本队；host 与 leader 分离时不再回退为房主执行。
+  - 目录变更不再重置既有拆分：新连接只加入 P0，断连后更新 party snapshot。
+  - 已落地（2026-07-21）：`PartyVisibility` 将战斗角色渲染、远程状态 overlay、RoomPanel、控制台状态与怪物目标计数限制为本地小队成员；跨队状态可保留在缓存中但不得进入玩法 UI 或渲染。
+  - 保留后续：`room_pin`/地图共识依赖 T7.3 房间 instance/地图目录，尚不能声称 T7.2b 完成。
+- [ ] T7.3 图主地图 snapshot、房间目录、按小队 normal navigation/room consensus
+  - 已落地（2026-07-21）：schema-first `MapNode` / `MapDefinition` / `NodeInstanceInfo` DTO；RoomHost 持有纯 `MapRegistry` 与 `NodeInstanceRegistry`。MapDefinition 拓扑不可变，注册只接受首次或等价重传；节点实例以 `(map_instance_id, party_id, node_id, visit_id)` 幂等分配并校验相邻边。
+  - 已落地（2026-07-21）：`PartyHostElectionTracker` 按 `party_id` 分别聚合 MapHost 与 NodeInstanceHost 全员一致投票，拒绝跨队投票人和候选人，允许改票。
+  - 已落地（2026-07-21）：`map_host_vote` / `map_host_result` 与 `map_register` / `map_registered` 标准包路由；仅本队一致获选的 MapHost 可登记不可变地图；控制台 `maphost` / `mapreg` 诊断入口。
+  - 已落地（2026-07-21）：`PartyState` map binding（phase/map_instance/start/revision）；`map_register` 成功后 bind + party_snapshot；`node_instance_host_vote`/`result` 路由与 `crossspire nodehost`；NIH 仅在已绑定地图的小队可选举。
+  - 已落地（2026-07-21）：小队 `room_pin`（index→outgoing `node_id`）、队长 pin 聚合、`room_consensus`→RoomHost `NodeEntryCoordinator.allocate`→`node_instance_allocate` 定向 NIH；`party.enterNode` 更新 pos/active instance。
+  - 已落地（2026-07-21）：NIH 处理 allocate（host loopback）→ 诊断用 Cultist 生成 → `node_generation_commit`；RoomHost `NodeOpenCoordinator` 一次性授权后 `node_instance_opened` 本队同步并进入战斗。
+  - 验证（2026-07-21）：Android D1/D2 完成 map host → map register/bind → node host → `room 0` → allocate → generation commit → node opened；两端最终目录为 `active_node`、`pos=node1`。
+  - 保留后续：真实地图 RNG/问号解析、`node_generation_commit` 完整 generation_result、非战斗房间类型。
+- [ ] T7.4 事件批准协议：`event_choice_request` → `approved/rejected` → 本地原生执行 → `event_player_result`
+  - 已落地（2026-07-21）：schema/DTO/StandardPacket 路由与 `EventApprovalCoordinator`。individual 请求检查 event/party/member/hash/可用选项/request ID；有效请求只批准一次，结果也只接受一次；voting 明确延后 T7.5。
+  - 已落地（2026-07-21）：`eventopen` / `eventchoice` / `eventresult` 诊断命令，RoomHost 自身选择走本地回环；成员结果按本队 relay。
+  - 验证（2026-07-21）：Android D1 host + D2 join；D1 `eventopen` → registered、`eventchoice` → approved、`eventresult` → player_result；D2 收到 interface 与 player-result relay。
+  - 保留后续：hash 匹配时原生 `buttonEffect` 前门控及恢复、hash 不匹配时 RemoteEventDisplay/NIH fallback、个人状态差量写入与 T7.5 voting 聚合。
+- [ ] T7.5 事件内房间 instance、同选项成员路径、按小队 voting；跨小队相遇只记录
+- [ ] T7.6 schema-aligned full snapshot（parties + attachments）及 Android 双机/desktop smoke 验证
+
 ## 归档 ✅
 
 - A1-A6 全部完成

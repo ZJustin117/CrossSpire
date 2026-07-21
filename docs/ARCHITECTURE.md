@@ -9,11 +9,11 @@
 3. [核心思想：引用模型与双角色投影](#核心思想引用模型与双角色投影)
 4. [引用系统](#引用系统)
 5. [就近原则](#就近原则)
-6. [图主权威模型](#图主权威模型)
-    - [房间标注与共识](#房间标注与共识)
-7. [房主中央队列：战斗流程](#房主中央队列战斗流程)
+6. [地图实例、节点实例与小队](#地图实例节点实例与小队)
+    - [小队地图标注与共识](#小队地图标注与共识)
+7. [小队中央队列：战斗流程](#小队中央队列战斗流程)
 8. [Buff/Power 所有权与自发触发](#buffpower-所有权与自发触发)
-9. [房主战斗阶段同步](#房主战斗阶段同步)
+9. [小队战斗阶段同步](#小队战斗阶段同步)
 10. [怪物回合](#怪物回合)
 11. [事件处理](#事件处理)
 12. [所有者交互选择](#所有者交互选择)
@@ -72,14 +72,17 @@ Desktop 继续以标准 ModTheSpire + BaseMod API 为兼容目标，可以使用
 | 引用退化 | Reference Degradation | 远程引用 → 本地引用。当本地获得对象完整定义（下载完成、内容校验通过）后降级为本地执行 |
 | 引用转移 | Reference Migration | 改变远程引用的指向源（如原所有者掉线后切换到备份源），用于处理空引用 |
 | 内容校验 | Content Validation | 同名类/方法不等同于相同类/方法。通过内容哈希比对判定两个实体是否真正一致。对同 Mod 不同版本隔离有关键意义 |
-| 房主 | Room Host | **网络路由角色**。维护到所有客户端的连接（星型拓扑，O(n) 连接）。所有客户端间消息经房主转发。房主维护中央待打出队列并负责调度。房主**不执行游戏逻辑**（除非房主本人恰好是该逻辑的所有者） |
-| 图主 | Stage Host | **游戏逻辑角色**。当前阶段（Act + Floor）地图/事件/怪物的**强所有者**。其他人只能对此建立远程引用（不允许本地引用）。由所有成员投票选定。图主可以就是房主，但两类角色可分离；房主负责把消息路由到位，图主负责在自己的机器上执行地图/怪物逻辑 |
+| 房主 | Room Host | **网络路由和目录角色**。维护到所有客户端的星型连接（O(n)）；记录成员存活、每个 `party_id` 的队长、MapRegistry 和 NodeInstanceRegistry；路由所有跨客户端消息。房主不生成地图或节点内容，也不执行游戏逻辑（除非本人恰好是对象所有者） |
+| 图主 | Map Host | **一次性地图生成者**。仅在小队的阶段过渡中生成并注册一张不可变 `MapDefinition`；注册成功后不管理该地图的节点、怪物、事件或战斗。每张 `MapInstance` 恰有一个 MapHost |
+| 节点实例主 | Node Instance Host | **小队节点内容权威**。每个小队在活动阶段恰有一个，负责该小队所有 `NodeInstance` 的房间解析、怪物、事件、商店、宝箱、篝火及节点内核心状态；可与队长或 MapHost 是同一玩家，但身份独立 |
+| 小队 | Party | 同一地图阶段中共享可见性、战斗队列、战斗阶段和地图标注的玩法域。每队独立处于阶段过渡、地图选择或活动节点；成员可显式离队或申请加入其他小队。跨小队相遇本期不实现 |
+| 队长 | Party Leader | 小队玩法协调角色，固定为当前成员 ID 字典序最小者。管理本队中央队列、end-turn 聚合、combat phase 与地图标注共识；所有消息仍经房主路由。队长不因身份本身取得地图或节点内容权威 |
 | 诱导重放 | Induced Replay | 非发送者收到 `combat_result` 时的本地处理：**(1) AUTHORITATIVE_APPLY** — `suppressEvents` 写入 effects 数值/VFX；**(2) LOCAL_OWNER_ONLY** — 仅触发 `logic_owner_id == self` 的 buff/遗物/组件。禁止无门控全量 `useCard`/BaseMod hook 重算。非所有者投影无逻辑效果 |
-| 逻辑所有者 | Logic Owner | Buff/Power 的执行权归属。**施加者优先**；施加者掉线后回退到 content-hash 可执行者，再回退宿主权威（怪物→图主，玩家自身→该玩家） |
+| 逻辑所有者 | Logic Owner | Buff/Power 的执行权归属。**施加者优先**；施加者掉线后回退到 content-hash 可执行者，再回退宿主权威（怪物→NodeInstanceHost，玩家自身→该玩家） |
 | 组件附着 | ComponentAttachment | 挂在 `player:<id>` 或 `monster:<instance_id>` 上的 buff/power 实例元数据：`instance_id`、`resource_id/hash`、`logic_owner_id`、`amount` |
-| 怪物 mutation | Monster Mutation | 非图主对怪物核心状态的修改只能发 `monster_mutation_proposal`；图主校验 revision 后 `monster_mutation_commit` 广播。图主是怪物 HP/死亡/生成的唯一写入者 |
-| 战斗阶段 | Combat Phase | 由**房主**广播的对齐信号（现有 `queue_empty` / 聚合 `player_end_turn`；计划 `combat_phase`）。客户端跟本地引擎进入对应阶段；**不**由房主/图主远程点名触发他人 buff |
-| 标准包 | Standard Packet | 本 Mod 中所有引用（卡牌/遗物/怪物/事件/玩家/素材）的网络传输统一封装。固定头部 `{packet_id, source, seq, timestamp, ref_id, owner_id, resource_hash?, operation}` + `operation` 特定的 `payload`。标准包经房主路由，引用系统据此完成解引用、诱导重放、状态同步等所有操作。控制消息（心跳、加入/离开、投票等）不属于标准包，保持独立格式 |
+| 怪物 mutation | Monster Mutation | 非节点实例主对怪物核心状态的修改只能发 `monster_mutation_proposal`；当前 `node_instance_host_id` 校验 revision 后 `monster_mutation_commit` 广播。节点实例主是本队活动节点怪物 HP/死亡/生成的唯一写入者 |
+| 战斗阶段 | Combat Phase | 由**队长**按 `party_id` 广播的对齐信号（`queue_empty` / 聚合 `player_end_turn` / `combat_phase`）。本队客户端跟本地引擎进入对应阶段；**不**由队长/图主远程点名触发他人 buff |
+| 标准包 | Standard Packet | 本 Mod 中所有引用（卡牌/遗物/怪物/事件/玩家/素材）的网络传输统一封装。固定头部 `{packet_id, source, seq, timestamp, ref_id, owner_id, resource_hash?, operation}` + `operation` 特定的 `payload`。玩法范围包必须带 `party_id`；标准包经房主路由，引用系统据此完成解引用、诱导重放、状态同步等所有操作。控制消息（心跳、加入/离开、投票等）不属于标准包，保持独立格式 |
 
 ### 操作关系
 
@@ -296,185 +299,205 @@ relicRef.triggerOn("onPlayerDamaged"); // 玩家受伤时触发
 - A 打出 B 的远程卡牌 → 解引用 → 调用 B → B 本地钩子触发（B 的 Mod 正常运作）
 - 引用的所有者就是执行者：计算永远发生在所有者的机器上
 
-## 图主权威模型
+## 地图实例、节点实例与小队
 
-图主按阶段投票选定，仅掌管三类对象：**地图、事件、怪物**。图主**不等于**房主——房主负责路由，图主负责游戏逻辑。
+阶段不再有一个承担全部内容的 `StageHost`。每个小队在进入下一 Act 前先进入不属于任何地图或节点的 `STAGE_TRANSITION`；该小队完成组队、选图和角色选举后才进入地图。MapHost、NodeInstanceHost、队长和房主是独立角色。
 
 ### 角色分离
 
 ```
 ┌─────────────────────────────────────────┐
-│              房主 (网络路由)              │
+│           房主 (网络路由/目录)            │
 │  • 维护到所有客户端的星型连接              │
 │  • 转发所有 invoke / state_sync 消息      │
-│  • 管理中央待打出队列                      │
+│  • 保存地图和节点实例目录                    │
 │  • 心跳检测、掉线处理                      │
 │  • 不执行游戏逻辑（除非自己是所有者）        │
 ├─────────────────────────────────────────┤
-│              图主 (游戏逻辑)              │
-│  • 地图生成、房间类型决定                  │
-│  • 怪物初始状态、AI、意图                  │
-│  • 事件类型与选项                          │
+│          MapHost (一次性地图生成)          │
+│  • 生成并登记不可变 MapDefinition          │
+│  • 登记完成后不管理任何节点内容              │
 │  • 可就是房主，但不是必须                   │
+├─────────────────────────────────────────┤
+│     NodeInstanceHost (本队节点内容权威)     │
+│  • 生成本队 NodeInstance 与节点内一切内容    │
+│  • 怪物/事件/商店/宝箱/篝火/核心状态          │
+│  • 每个活动小队恰有一个                      │
+├─────────────────────────────────────────┤
+│            队长 (小队玩法协调)             │
+│  • 本队中央队列、end-turn 聚合、战斗阶段      │
+│  • 本队地图标注与共识                        │
+│  • 固定为成员 ID 字典序最小者                │
+│  • 不因队长身份决定地图/房间内容              │
 └─────────────────────────────────────────┘
 ```
 
-### 图主职责
+### 小队生命周期与隔离
 
 ```
-1. 地图权威
-   • 用图主本地 RNG 生成当前阶段地图 → 经房主转发给所有人
-   • 进入房间时决定房间类型和内容
-     - 战斗 → 图主统一怪物配置
-     - 事件 → 图主决定具体事件
+Room 创建/成员加入
+  → 默认小队 P0 包含所有在线成员
+  → leader(P0) = sort(member_ids)[0]
 
-2. 怪物权威
-   • 怪物初始状态由图主提供
-   • 怪物 AI/意图/行为由图主解引用（图主=怪物所有者，始终本地执行）
-   • 结果经房主转发给全员
-   • 其他人对怪物只能建立远程引用 → 渲染走 fallback 或操作重放
+crossspire party leave
+  → 当前成员离开 P0，创建仅含自己的新小队 Px
+  → 两队均重新计算 leader；成员保留当前地图节点
+  → 房主广播 party_snapshot
 
-3. 事件权威
-    • 图主决定事件选项（未来可扩展投票）
+crossspire party join <party_id>
+  → 房主将 party_join_request 路由给目标队长
+  → 队长 approve/reject
+  → approve 后房主广播 party_snapshot，并重算相关队长
 ```
 
-### 图主选举
+`party_id` 是玩法隔离键，不是新的网络拓扑：所有包仍经房主的星型连接。以下状态必须按 `party_id` 独立存储和路由：
 
-图主按阶段确定，所有人必须达成共识。与房间标注机制对称，使用普通 JSON（非标准包）经房主路由。
+- 中央队列、queue update/empty、end-turn 聚合和 combat phase
+- 地图标注与 room consensus
+- 事件 interface、choice request/approval、投票和玩家结果
+- 同队在线角色可见性、战斗渲染和状态投影
+
+图主只生成和登记地图，不维护房间内容。房主保存 MapRegistry 与 NodeInstanceRegistry；小队可绑定同一张地图，但本期不实现不同小队在同一节点相遇、合并或共享战斗。
+
+### 阶段过渡与地图目录
+
+
+`STAGE_TRANSITION` 按小队独立存在，不属于任何 `MapInstance` 或 `NodeInstance`。它允许本队组队、创建或加入地图、选举主机和确认地图快照；不得执行房间生成、事件、战斗或遗物的入房逻辑。其他小队可以继续其活动地图或节点，不被阻塞。
+
+```
+MAP_COMPLETED
+  → STAGE_TRANSITION
+  → 创建新图: 本队选 MapHost → map_register → MapRegistry
+  │  或加入既有图: map_join_request → MapRegistry
+  → 本队选 NodeInstanceHost
+  → 全员确认地图快照
+  → MAP_ACTIVE
+  → 地图标注 / NodeInstance
+```
+
+每张 `MapInstance` 恰有一个 `map_host_id`，但 MapHost 只负责生成和登记；房主的 MapRegistry 保存地图定义，使 MapHost 在登记后掉线也不影响其他小队加入。加入既有地图的小队不重新选 MapHost，而是为本队选出自己的唯一 NodeInstanceHost。
+
+`MapDefinition` 是不可变的，至少包含稳定 `node_id`、坐标、边、基础节点类别和图标、燃烧精英标记、`boss_descriptor`、地图规则版本和生成摘要。Boss descriptor 的 ID/hash 决定 Boss 生成；图标资源只用于显示。定义不含怪物实例、问号最终结果、事件、商店库存、宝箱奖励或篝火选项。
+
+MapHost 生成的只是地图骨架：普通/精英/商店/篝火/宝箱/Boss 的基础节点类别、路径和图标在此固定；`?` 保持问号节点，直到首次进入时解析。佛珠手链、小宝箱等影响问号结果的遗物只在节点实例生成时生效，绝不在地图或过渡阶段提前消耗。
+
+### 小队范围的主机选举
+
+MapHost 投票只发生在创建新地图的小队，NodeInstanceHost 投票发生在每个完成选图的小队。房主按 `party_id` 聚合全员一致投票；无超时和默认选择。两种角色可以同人，但选票、结果和目录字段必须独立。
 
 #### 选举消息
 
 ```
-stage_vote        C→房主      {"type":"stage_vote","source":"<id>","candidate":"<target_id>"}
-stage_votes       房主→全员   {"type":"stage_votes","source":"<host>","votes":{"a":"bob","b":"bob"}}
-stage_host_result  房主→全员  {"type":"stage_host_result","source":"<host>","host_id":"<id>"}
+map_host_vote                  C→房主→本队  {"type":"map_host_vote","party_id":"<id>","candidate_id":"<id>"}
+map_host_result                房主→本队    {"type":"map_host_result","party_id":"<id>","map_host_id":"<id>"}
+node_instance_host_vote        C→房主→本队  {"type":"node_instance_host_vote","party_id":"<id>","candidate_id":"<id>"}
+node_instance_host_result      房主→本队    {"type":"node_instance_host_result","party_id":"<id>","node_instance_host_id":"<id>"}
 ```
 
 #### 选举流程
 
 ```
-1. 房主发起投票 → 广播 stage_votes {votes: {}}
-2. 每个玩家 crossspire vote <player_id> → stage_vote 到房主
-3. 房主聚合 → 广播 stage_votes
-4. 全部在线玩家投给同一 candidate → 房主广播 stage_host_result
-5. 全员 local: stageHost.setStageHost(result.host_id)
-   新图主开始执行阶段职责
+1. 创建新地图的小队在 STAGE_TRANSITION 内投 MapHost
+2. 房主按 party_id 聚合并广播 map_host_votes
+3. 本队全员投同一 candidate → 房主广播 map_host_result
+4. MapHost 生成并登记地图；加入既有地图的小队跳过此步
+5. 本队投 NodeInstanceHost，房主聚合后广播 node_instance_host_result
+6. 全员确认地图快照 → 房主广播 stage_transition_complete
 ```
 
 #### 共识条件
 
-与房间标注相同——全员一致制。房主维护投票表 `Map<playerId, candidateId>`，每次收 stage_vote 后检测是否所有在线玩家投同一候选。无超时、不走默认选择。
+与房间标注相同，但投票范围是目标小队。房主维护按角色和 `party_id` 分组的投票表，每次 vote 后检测该小队所有在线成员是否投同一候选。无超时、不走默认选择。
 
-#### 掉线重选
+#### 掉线与恢复
 
-**图主掉线**（心跳超时）:
-- 房主广播 `player_left`
-- 房主发起新一轮投票：广播 `stage_votes {votes: {}}`
-- 在线玩家重新 `crossspire vote <id>`
-- 选出新图主 → 新图主接管阶段职责
-
-**图主重连**:
-- 图主发送 `hello` 重连房主
-- 房主返回 `room_info` + `full_snapshot`
-- 若当前无活跃图主（投票未完成）→ 恢复原图主身份
-- 若已有新图主（投票已出结果）→ 作为普通客户端加入
-
-**普通客户端掉线**（非图主）:
-- 不影响图主身份
-- 当前投票中移除此玩家的票 → 可能导致共识重新检测（若原先因该玩家而达不成共识则可能立即达成）
+- MapHost 在 `map_register` 成功后没有运行时接管职责；其掉线不影响已登记地图。
+- NodeInstanceHost 在活动节点掉线时，房主暂停该小队节点流程，进行本队重选和快照恢复；MapHost 不成为后备节点主。
+- 队长掉线只按成员 ID 重选队长；不得隐式改变 `node_instance_host_id`。
+- 房主掉线时，新房主从成员、小队、MapRegistry 和活动节点快照重建目录和路由。
 
 #### 与房主角色的关系
 
-- **房主**：仅做投票聚合与共识检测，不执行游戏逻辑
-- **图主–房主同体**：消息仍在本地路由，无网络往返
-- **图主≠房主**：`stage_host_result` 经房主广播全员
+房主仅聚合本队投票、维护目录并路由消息；MapHost 或 NodeInstanceHost 与房主同体时可以在本地完成相应步骤，但房主不因此取得内容执行权。
 
-#### 命令入口
+### 节点实例与强所有权
 
-`crossspire vote <player_id>` — 标注选举的图主，重复标注即覆盖。
-
-### 强所有权
-
-图主持有的对象**只允许远程引用**，其他玩家不允许建立本地引用：
+房主为经过路径校验的进入请求分配 `NodeInstance`。同一张地图的不同小队进入同一 `node_id` 时，也必须使用不同实例：
 
 ```
-其他玩家想渲染图主的怪物:
-  → 建立远程引用指向图主
-  → 本地卡池有该怪物? → 用本地引擎操作重放 + suppressEvents
-  → 本地卡池无该怪物? → 用 fallback 数值渲染
+NodeInstanceKey = (map_instance_id, party_id, node_id, visit_id)
 ```
 
-### 房主/图主掉线
+NodeInstanceHost 是本队节点内怪物、事件、商店、宝箱、篝火、问号解析和核心状态的强所有者。地图图形可以共享，但位置、已访问节点、生成遗物状态和战斗状态按小队隔离；本期不实现相遇、合并或共享战斗。
 
-- **普通客户端掉线**：房主检测心跳超时 → 广播 player_left → 移除待打出队列中该客户端的项
-- **图主掉线**（由图主持有的对象全部变空引用）：
-  - 自动保存进度，等待图主重连
-  - 可尝试投票选新图主，引用转移到新图主（暂不实现）
-- **房主掉线**：检测心跳超时 → 投票选新房主 → 新房主拉取所有在线角色完整状态快照 → 重建中央队列和网络路由
+影响房间生成的遗物只在节点实例生成时生效。NodeInstanceHost 使用只读、版本化的生成上下文和声明式修正器，不能临时迁移或挂载远端 `AbstractRelic`。未知 Mod 遗物由真实所有者受控解析；Tiny Chest 等修正器计数变更必须与 `node_generation_commit` 原子提交。
 
-### 房间标注与共识
+### 小队地图标注与共识
 
-当队伍进入一个新的阶段（楼层），所有玩家需要通过标注机制协调"进入哪个房间"。这是一个非战斗的协调流程，消息以普通 JSON（非标准包）经房主路由。
+小队进入可选择的地图节点时，仅该小队成员通过标注机制协调"进入哪个房间"。这是一个非战斗的协调流程；控制消息经房主路由，聚合和共识由队长执行。
 
 #### 协议消息
 
 ```
-room_pin       C→房主       {"type":"room_pin","source":"<playerId>","room":<index>}
-room_pins      房主→全员    {"type":"room_pins","source":"<hostId>","pins":{"alice":1,"bob":1}}
-room_consensus 房主→图主    {"type":"room_consensus","source":"<hostId>","room":<index>}
+room_pin       C→房主→队长       {"type":"room_pin","source":"<playerId>","party_id":"<id>","room":<index>}
+room_pins      队长→房主→本队    {"type":"room_pins","source":"<leaderId>","party_id":"<id>","pins":{"alice":1,"bob":1}}
+room_consensus 队长→房主          {"type":"room_consensus","source":"<leaderId>","party_id":"<id>","map_instance_id":"<id>","node_id":"<id>"}
 ```
 
 **字段说明**:
-- `room`: 整数 index（0-based），对应当前地板可选房间列表中的第 N 个
-- `pins`: `Map<playerId, roomIndex>`，房主维护的全体标注快照
+- `room`: 现有命令使用的整数 index（0-based）；发送前必须解析为稳定 `node_id`
+- `party_id`: 标注所属小队；非成员和过期队长的标注必须拒绝
+- `pins`: `Map<playerId, roomIndex>`，队长维护的本队标注快照
 
 #### 流程
 
 ```
 1. 玩家标注
-   玩家A → 房主: room_pin {room: 1}
-   房主 记录 {A: 1} → 广播 room_pins 给全员
+   玩家A → 房主 → 队长: room_pin {party_id: P, room: 1}
+   队长记录 {A: 1} → 房主 → P: room_pins
 
-   玩家B → 房主: room_pin {room: 1}
-   房主 记录 {A: 1, B: 1} → 广播 room_pins
+   玩家B → 房主 → 队长: room_pin {party_id: P, room: 1}
+   队长记录 {A: 1, B: 1} → 房主 → P: room_pins
 
 2. 共识检测
-   房主每次收 pin 后检查: 是否所有在线玩家标记了同一个 room?
-   若全员一致 → 房主 → 图主: room_consensus {room: 1}
+   队长每次收 pin 后检查: 是否所有在线小队成员标记了同一个 room?
+    若全队一致 → 队长 → 房主: room_consensus {party_id: P, map_instance_id: M, node_id: N}
 
-3. 图主执行
-   图主收到 room_consensus → 在自己的地图上导航到该房间
-   进入房间后走现有 stage_sync/room_enter 流程同步全体
+3. 房主分配，节点实例主执行
+   房主校验 P 的地图绑定、当前位置和相邻节点 → 创建或返回幂等 NodeInstance
+   房主 → P 的 NodeInstanceHost: node_instance_allocate
+   节点实例主生成内容并仅向 P 同步 node_instance 和内容
 ```
 
 #### 再标注
 
-同一玩家重复发送 `room_pin` 即覆盖旧标注。房主广播的 `room_pins` 中包含全体最新标注。若玩家间标注多次仍未达共识，无超时——不走自动选择，等待全员一致。
+同一玩家重复发送 `room_pin` 即覆盖旧标注。队长经房主广播的 `room_pins` 中包含本队最新标注。若小队成员多次标注仍未达共识，无超时——不走自动选择，等待本队一致。
 
-#### 与图主/房主角色的关系
+#### 与 MapHost/房主/队长角色的关系
 
-- **房主**：仅做聚合与检测，不执行游戏逻辑
-- **图主**：收到 `room_consensus` 后在本地执行房间进入，然后通过已有 `stage_sync/room_enter` 同步全体
-- **图主就是房主时**：消息仍在房主本地路由，无网络往返
+- **队长**：聚合本队标注与检测共识，不执行节点内容逻辑
+- **房主**：校验路径、分配/恢复 NodeInstance，并路由到本队节点实例主
+- **节点实例主**：收到 `node_instance_allocate` 后在本地执行节点生成，并向该小队同步内容
+- **MapHost**：不接收 `room_consensus`，也不参与节点进入
 
 #### 命令入口
 
 `crossspire room <index>` — 标注下一个房间，重复标注即覆盖。该命令构造 `room_pin` 发往房主。
 
-## 房主中央队列：战斗流程
+## 小队中央队列：战斗流程
 
 ### 核心设计
 
-房主维护唯一中央队列，负责调度所有卡牌执行：
+每个小队队长维护该小队唯一中央队列；房主只在成员、队长和图主之间路由：
 
 ```
-1. 客户端提交卡牌 → 发 queue_submit 到房主
-2. 房主收到 → 根据 timestamp + sender_id 排序插入中央队列
-3. 房主广播 queue_update（当前队列快照）→ 全员更新 UI
-4. 房主从队列头部取出一项：
-   a. 发 invoke 到卡牌所有者（如果所有者=房主自己，直接本地执行）
+1. 小队成员提交卡牌 → 发 queue_submit 到房主 → 本队队长
+2. 队长收到 → 根据 timestamp + sender_id 排序插入本队中央队列
+3. 队长经房主向本队广播 queue_update（当前队列快照）
+4. 队长从队列头部取出一项：
+   a. 经房主发 invoke 到卡牌所有者（如果所有者=队长自己，直接本地执行）
    b. 等待所有者回传 invoke_result
-   c. 将执行结果广播给全员（combat_result）
+   c. 经房主将执行结果广播给本队（combat_result）
    d. 重复直到队列为空
 5. 队列清空后才允许结束回合
 ```
@@ -486,12 +509,14 @@ room_consensus 房主→图主    {"type":"room_consensus","source":"<hostId>","
 ```typescript
 // operation = "queue_submit" 的 payload
 interface QueueSubmitPayload {
+  party_id: string;
   card_id: string;
   target: string;          // 游戏内目标 "monster_0" | "player_b" | "self"
 }
 
 // operation = "queue_update" 的 payload
 interface QueueUpdatePayload {
+  party_id: string;
   entries: QueueEntry[];   // 完整队列快照
 }
 
@@ -510,36 +535,36 @@ interface QueueEntry {
 ### 调度流程
 
 ```
-房主中央队列调度:
+小队中央队列调度:
 
-  队列: [Strike_R(A), Defend_G(B), Bash_R(host)]
+   P 队列: [Strike_R(A), Defend_G(B), Bash_R(leader)]
 
   1. 取出 Strike_R(A):
-     owner_id = A，不是房主
-     → 房主 → A: invoke(Strike_R)
+      owner_id = A，不是队长
+      → 队长 → 房主 → A: invoke(Strike_R)
      → A 本地执行，触发钩子
-     → A → 房主: invoke_result(effects)
-     → 房主 → 全员: combat_result(effects)
+      → A → 房主 → 队长: invoke_result(effects)
+      → 队长 → 房主 → P: combat_result(effects)
 
   2. 取出 Defend_G(B):
-     owner_id = B，不是房主
-     → 房主 → B: invoke(Defend_G)
+      owner_id = B，不是队长
+      → 队长 → 房主 → B: invoke(Defend_G)
      → B 本地执行，触发钩子
-     → B → 房主: invoke_result(effects)
-     → 房主 → 全员: combat_result(effects)
+      → B → 房主 → 队长: invoke_result(effects)
+      → 队长 → 房主 → P: combat_result(effects)
 
-  3. 取出 Bash_R(host):
-     owner_id = host == 房主自己
-     → 房主本地执行，触发钩子
-     → 房主 → 全员: combat_result(effects)
+   3. 取出 Bash_R(leader):
+      owner_id = leader == 队长自己
+      → 队长本地执行，触发钩子
+      → 队长 → 房主 → P: combat_result(effects)
 ```
 
 ### 诱导重放（local-owner-only）
 
-房主广播 `combat_result` 后，接收方按 `executor_id`（原始 REAL 执行者，**不得**被房主改写成房主 ID）分流：
+队长经房主向本队广播 `combat_result` 后，接收方按 `executor_id`（原始 REAL 执行者，**不得**被改写为队长或房主 ID）分流：
 
 ```
-房主 → 全员: combat_result {
+队长 → 房主 → P: combat_result {
   executor_id: A,
   operation_sequence: [...],
   effects: [...]   // apply_power 含 logic_owner_id
@@ -560,28 +585,28 @@ interface QueueEntry {
        → 仅执行 logic_owner_id == self 的遗物/buff/注册组件
        → 禁止无门控全量 useCard / publishOnCardUse 让所有本地 patch 再算一遍
        → 若本地被动改自己的玩家状态 → 本地权威写 + 广播
-       → 若本地被动改怪物 → monster_mutation_proposal → 图主（经房主）
-       → 新 effects 带 origin_owner_id + hop_count，提交房主队列尾部
+        → 若本地被动改怪物 → monster_mutation_proposal → NodeInstanceHost（经房主）
+        → 新 effects 带 origin_owner_id + hop_count，提交本队队长队列尾部
 ```
 
 **关键禁令**：
-- 不存在“图主/房主扫描 attachment 再远程 invoke 灾厄所有者”
+- 不存在“NodeInstanceHost/房主扫描 attachment 再远程 invoke 灾厄所有者”
 - 不存在“有兼容定义的节点都可跑该 buff”
 - 非 `logic_owner_id` 节点上同名 power：**无效果、不可被触发**
 - commit/权威 apply 的写入不得再次被捕获为 proposal
 
-诱导重放产出的**本地所有者**新效果进入房主中央队列尾部，保证顺序；怪物核心变更必须等图主 commit。
+诱导重放产出的**本地所有者**新效果进入本队队长中央队列尾部，保证顺序；怪物核心变更必须等 NodeInstanceHost commit。
 
 ### 玩家视角
 
-1. **提交卡牌**：卡牌从手牌悬浮至队列区域 → 发 `queue_submit` 到房主 → 等待
+1. **提交卡牌**：卡牌从手牌悬浮至队列区域 → 经房主发 `queue_submit` 到本队队长 → 等待
 2. **继续操作**：卡牌已离手，可继续打牌加入队列
-3. **等待执行**：房主逐个调度队列中的项，处理到自己的项时播放动画
-4. **回合结束**：队列全部清空后房主广播 `queue_empty`，所有人可结束回合
+3. **等待执行**：队长逐个调度队列中的项，处理到自己的项时播放动画
+4. **回合结束**：队列全部清空后队长经房主向本队广播 `queue_empty`，本队成员可结束回合
 
 ### 队列可视化
 
-房主广播 `queue_update`，每个人显示相同队列 UI：
+队长经房主向本队广播 `queue_update`，本队成员显示相同队列 UI：
 - 队列项按顺序排列，显示提交者、卡牌名、状态（等待中/执行中/已完成）
 - 执行中的项高亮
 - 自己的项排队时可以看自己在第几个
@@ -593,7 +618,7 @@ interface QueueEntry {
 | 规则 | 定义 |
 |------|------|
 | 默认 | `logic_owner_id = 施加者`（`apply_power` 时写入） |
-| 掉线回退 | content-hash 可本地执行者 → 宿主权威（怪物 host→图主；玩家 host→该玩家） |
+| 掉线回退 | content-hash 可本地执行者 → 宿主权威（怪物 host→NodeInstanceHost；玩家 host→该玩家） |
 | 投影 | 非 logic_owner 节点可渲染层数/图标；**回调 no-op，不可被触发** |
 | 执行 | 房主阶段/combat 事实对齐后，**仅 logic_owner 在本地阶段自发执行** |
 
@@ -621,7 +646,7 @@ ComponentAttachment {
 仅 logic_owner_id == self 的 attachment 在本地 hook 中自发执行
         ↓
   改自己 → 玩家权威写入 + player_state / effects
-  改怪物 → monster_mutation_proposal → 图主 commit → 全员 AUTHORITATIVE_APPLY
+   改怪物 → monster_mutation_proposal → NodeInstanceHost commit → 全员 AUTHORITATIVE_APPLY
 ```
 
 ### 灾厄示例
@@ -641,49 +666,49 @@ ComponentAttachment {
 - 本地 owner-only 被动是跨 Mod 兼容的正确路径：只要求施加者安装定义
 - hop_count / origin_owner_id 防止 induced 副作用环
 
-## 房主战斗阶段同步
+## 小队战斗阶段同步
 
-**房主**是战斗阶段对齐的唯一协调者（图主不负责点名 buff）。
+**队长**是其小队战斗阶段对齐的唯一协调者（图主不负责点名 buff，房主只路由）。
 
 | 信号 | 谁发 | 本地后果 |
 |------|------|----------|
-| `combat_result` | 房主广播 | AUTHORITATIVE_APPLY + local-owner-only 被动 |
-| `queue_empty` | 房主 | 允许结束回合；阶段门控 |
-| `player_end_turn` 聚合 | 玩家→房主，房主协调 | 对齐进入怪物回合侧本地阶段 |
-| `combat_phase` | 房主 | 显式枚举：`player_turn` / `resolving_queue` / `queue_empty` / `pre_monster_turn` / `monster_turn` / `post_monster_turn`（P6 已接线） |
+| `combat_result` | 队长→房主→本队 | AUTHORITATIVE_APPLY + local-owner-only 被动 |
+| `queue_empty` | 队长→房主→本队 | 允许结束回合；阶段门控 |
+| `player_end_turn` 聚合 | 玩家→房主→队长，队长协调 | 对齐进入怪物回合侧本地阶段 |
+| `combat_phase` | 队长→房主→本队 | 显式枚举：`player_turn` / `resolving_queue` / `queue_empty` / `pre_monster_turn` / `monster_turn` / `post_monster_turn` |
 
-客户端在收到房主阶段信号后**跟本地引擎**推进；buff 在本地时机自发，不由房主远程 invoke。
+客户端在收到本队队长阶段信号后**跟本地引擎**推进；buff 在本地时机自发，不由队长或图主远程 invoke。所有这类包必须带 `party_id`。
 
 ## 怪物回合
 
-怪物**核心状态**（HP/格挡/死亡/生成/AI 意图与 `takeTurn`）由图主持有。附着在怪物上的 **buff 逻辑**仍归施加者（见上一节）。
+怪物**核心状态**（HP/格挡/死亡/生成/AI 意图与 `takeTurn`）由当前 NodeInstanceHost 持有。附着在怪物上的 **buff 逻辑**仍归施加者（见上一节）。
 
 回合分三个阶段：
 
 ### 阶段一：意图确定（回合开始时，玩家回合之前）
 
 ```
-1. 图主用本地 RNG 确定所有未死亡怪物的意图
-2. 图主 → 房主: monster_intent（全部怪物意图快照）
-3. 房主广播全员 → 渲染意图图标（禁止客户端 createIntent 重算 AI）
+1. NodeInstanceHost 用本地 RNG 确定所有未死亡怪物的意图
+2. NodeInstanceHost → 房主: monster_intent（全部怪物意图快照）
+3. 房主仅向该 party_id 广播 → 渲染意图图标（禁止客户端 createIntent 重算 AI）
 4. 玩家据此规划出牌、评估威胁
 ```
 
 ### 阶段二：玩家回合
 
-玩家提交卡牌到房主中央队列，房主调度执行（参见"房主中央队列"章节）。期间 local-owner buff 可响应 `combat_result` 事实。
+玩家提交卡牌到本队队长中央队列，队长调度执行（参见"小队中央队列"章节）。期间 local-owner buff 可响应本队 `combat_result` 事实。
 
 ### 阶段三：怪物动作执行（玩家回合结束后）
 
 ```
-1. 房主阶段对齐后，图主遍历未死亡怪物，本地执行 takeTurn / AI
-2. 收集图主侧权威效果 → 图主 → 房主: combat_result
-3. 房主转发 → 全员 AUTHORITATIVE_APPLY（suppressEvents 写数值）
-4. 若意图变更 → 图主经房主广播 monster_intent
+1. 房主阶段对齐后，NodeInstanceHost 遍历未死亡怪物，本地执行 takeTurn / AI
+2. 收集节点实例主侧权威效果 → NodeInstanceHost → 房主: combat_result
+3. 房主仅向该 party_id 转发 → AUTHORITATIVE_APPLY（suppressEvents 写数值）
+4. 若意图变更 → NodeInstanceHost 经房主广播 monster_intent
 5. 各端 local-owner buff 若在该阶段有自发逻辑 → 各自执行；改怪物走 mutation
 ```
 
-怪物 **AI 动作**由图主本地执行。图主和房主分离时消息经房主转发一次。
+怪物 **AI 动作**由 NodeInstanceHost 本地执行。节点实例主和房主分离时消息经房主转发一次。
 
 ### 实现：HP 增量法（绕过 takeTurn 抽象方法限制）
 
@@ -696,14 +721,14 @@ AfterMonsterTurns: 差值 → combat_result(damage/gain_block 等)
 
 ### 怪物状态 mutation（提案/提交）
 
-非图主不得直接把本地怪物投影上的修改当作最终状态广播。
+非 NodeInstanceHost 不得直接把本地怪物投影上的修改当作最终状态广播。
 
 ```
 logic_owner 本地执行 buff/卡牌副作用
   → 捕获对 monster_instance_id 的语义修改 + 可选 before/after
   → monster_mutation_proposal { base_revision, effects, transaction_id }
-  → 房主路由 → 图主
-  → 图主 CAS revision → apply → 死亡/分裂等生命周期
+   → 房主路由 → NodeInstanceHost
+   → NodeInstanceHost CAS revision → apply → 死亡/分裂等生命周期
   → monster_mutation_commit { commit_revision, state }
   → 房主广播 → 全员投影覆盖
 ```
@@ -714,160 +739,72 @@ logic_owner 本地执行 buff/卡牌副作用
 
 ## 事件处理
 
-事件遵循**就近原则**。每个玩家在本地运行事件实例，通过沙盒模式隔离 game-state 修改，将事件执行结果以 `event_transcript` 传回图主重播。这与战斗的 REAL/INDUCED 模式遥相呼应：图主重播 = REAL，D2 沙盒 = 本地预览。
+事件遵循**批准后的就近执行**。本地存在同一事件类且 `resource_hash` 匹配的玩家直接运行原生事件 UI；选择在 `buttonEffect` 产生副作用前被拦截，只有房主批准后，选择者才继续本地执行。此路径不使用 sandbox 或 transcript。
 
-### 核心思想：就近实例化 + 沙盒 + 转录回放
-
-```
-Stage Host (图主)                         Player B (非图主)
-┌──────────────────────────┐            ┌──────────────────────────┐
-│ BigFish 实例 (REAL)       │            │ BigFish 实例 (Sandbox)    │
-│ ⚡ buttonEffect → 产出    │◄───────────│ 🛡 suppress + snapshot   │
-│ ⚡ 广播 event_result      │ transcript │ 🔄 局部 restore          │
-│ ⚡ 同步全员 effects       │            │ 📡 选牌／按钮／转轮         │
-└──────────────────────────┘            └──────────────────────────┘
-```
-
-**关键原则**:
-- **就近实例化** — D2 本地通过 `Class.forName(event_class)` 创建同名事件实例，可兼容原版特殊事件（Gremlin Wheel 转轮、Match Game 对对碰、Skull 头部）及 Mod 事件
-- **沙盒执行** — D2 的事件运行在 snapshot/suppressEvents 包裹中，所有 game-state 副作用被抑制，仅捕获 UI 交互过程
-- **转录回播** — D2 产生 `event_transcript`（包含每个 `buttonEffect` 步骤、选牌结果、特殊 UI 决策），发送到图主，图主逐步骤重播以产出最终效果
-- **Fallback** — 若 D2 无该事件类（如 Mod 事件未安装），降级到 `RemoteEventDisplay` + `event_select` 模式
-
-### 分层架构
-
-#### Layer 1: 事件接口广播
+### 事件职责和执行路径
 
 ```
-Stage host 进入事件 → EventSyncPatches.OnEnterRoom:
-  → 广播 event_interface {
-       event_class: "com.megacrit.cardcrawl.events.exordium.BigFish",
-       options: ["[Leave]", "Fight", "Banana", "Donut"],
-       description: "...",
-       body: "...",
-       mode: "independent" | "voting"
-     }
+NodeInstanceHost: 生成 event_instance_id、事件内容和 resource_hash；决定本队节点内的共享后果
+房主: 路由并校验/批准选择；按 party_id 聚合 voting 选择；记录每位玩家结果
+本地匹配选择者: 原生渲染 UI → 请求批准 → 获批后本地 buttonEffect → 上报个人结果
+本地不匹配选择者: RemoteEventDisplay → 请求批准 → 图主执行并定向应用个人结果
+队长: 只管理本队投票、队列和阶段，不重写节点实例主的事件内容权威
 ```
 
-D2 收到 → `Class.forName(event_class)` → 实例化 → `event.onEnterRoom()` → 原生 UI 渲染。
+### event_interface 与内容校验
 
-#### Layer 2: 沙盒执行 (D2 非图主)
+NodeInstanceHost 进入事件节点时向所在小队广播：
 
-```java
-@SpirePatch(clz = AbstractEvent.class, method = "buttonEffect", paramtypez = {int.class})
-public static class Sandbox {
-    @SpirePrefixPatch
-    public static SpireReturn<Void> Prefix(AbstractEvent __instance, int buttonPressed) {
-        if (isStageHost()) return SpireReturn.Continue();  // REAL 模式
-
-        EventStateSnapshot snap = takeSnapshot();
-        EventSuppression.suppressEvents(() -> {
-            EffectCapture.startCapture();
-            __instance.buttonEffect(buttonPressed);         // ← 原生执行
-            Protocol.EffectDescription[] effects = EffectCapture.stopCapture();
-            List<String> selectedCards = drainSelectedCards();
-            appendTranscript("buttonEffect", buttonPressed, selectedCards, effects);
-        });
-        restoreSnapshot(snap);                              // 撤销游戏状态
-        return SpireReturn.Return(null);
-    }
+```
+event_interface {
+  event_instance_id, party_id,
+  event_class, event_id, resource_hash,
+  name, description, options[], mode,
+  image_ref?, phase_key?
 }
 ```
 
-沙盒支持所有原生事件 UI 类型：
+接收端用 `Class.forName(event_class)` 定位本地定义，并比较 `resource_hash`。两者都匹配才调用 `onEnterRoom()` 并原生渲染事件。否则显示 `RemoteEventDisplay`；fallback 仍参与相同的批准协议，不尝试在不匹配内容上 sandbox 试跑。
 
-| UI 类型 | 沙盒行为 |
-|---------|---------|
-| 标准选项按钮 | `buttonEffect(index)` → 选项步骤记入 transcript |
-| GridCardSelectScreen（选牌） | `open()` → D2 选牌 → `confirm` → 卡片 ID 记入 transcript |
-| Gremlin Wheel（转轮） | 转轮切屏 + 随机 → `wheelResult` 记入 transcript |
-| Gremlin Match Game（对对碰） | 完整 mini-game → 最终 `cardReward` 记入 transcript |
-| Knowing Skull 多步骤 | 每步 `buttonEffect` 分别记录 |
-| 触发战斗选项 | `enterCombat()` → transcript 含 `event.enterCombat` 步骤 |
-| Mod 自定义事件 UI | D2 有同一 Mod → 即时兼容 |
+### 原生选择请求与批准
 
-#### Layer 3: event_transcript 协议
-
-取代 `event_select` + `interact_request/response` 三个独立消息，统一为一步：
-
-```json
-// D2 → host → stage host
-{
-  "type": "event_transcript",
-  "source": "D2",
-  "seq": 15,
-  "event_id": "LivingWall",
-  "actions": [
-    {"type": "buttonEffect", "index": 0},
-    {"type": "cardSelect",      "cards": ["Strike_R"]},
-    {"type": "confirm"}
-  ]
-}
-```
-
-单个 `buttonEffect` step 可触发子步骤（`cardSelect`、`wheelResult` 等），全部由 MTS Postfix 自动捕获拼接。
-
-#### Layer 4: 图主重播
+`AbstractEvent.buttonEffect(int)` 与后续原生选牌/确认 UI 的 patch 在副作用前拦截操作。每一步都有稳定的 `request_id` 和 `ui_step`，使重复包、过期批准和并发选择可被拒绝或幂等处理。
 
 ```
-stage host 收到 event_transcript:
-  for each action:
-    switch action.type:
-      case "buttonEffect":
-        event.buttonEffect(action.index)
-        → 若触发 GridCardSelectScreen.open():
-            inject action.affiliated card IDs into selectedCards
-            event.confirmButton.hb.clicked = true
-        → 若触发 wheel/match:
-            inject action.result into event state
-            continue flow
-      case "enterCombat":
-        CombatSyncPatches 自动广播 room_enter
-
-  重播完成后:
-    → EventSyncPatches.OnOpenMap → 广播 event_result
-    → 或 effects 走 player_state / combat_result 现有管道同步
+1. 匹配客户端选择按钮、卡牌或目标
+2. patch 暂停本地事件流程，发送 event_choice_request 给房主
+3. 房主校验 event_instance_id、party_id、成员资格、事件 hash、选项、UI step 和 request_id
+4. 非 voting：每位玩家的有效选择独立批准
+   voting：队长/房主按 party_id 聚合；小队全员一致才批准
+5. 收到 event_choice_approved 的匹配客户端恢复原生流程并执行 buttonEffect
+6. 客户端发送 event_player_result（个人状态差量、完成状态和可选共享后果）
+7. 房主记录结果，并向本小队广播该玩家 player_state/差量投影
 ```
 
-#### Layer 5: Fallback（旧版兼容）
+普通个人收益（HP、金币、牌、遗物、药水）由获批选择者本地执行。个人结果不要求同小队玩家做出同样选择；其他成员只收到该玩家的状态投影。
+
+### 共享世界后果与事件内房间
+
+MapHost 只拥有不可变地图定义；NodeInstanceHost 是本队房间内容和怪物核心状态的唯一权威。`event_player_result` 不能直接改变这些共享对象：
+
+- 事件内战斗或特殊房间由 NodeInstanceHost 创建稳定 `instance_id`。选择相同产生房间选项的成员进入同一小队路径；队长管理该路径的队列和阶段，NodeInstanceHost 生成/确认内容。
+- 直接离开事件去地图上其他节点不是个人事件结果。成员必须先 `party leave`，保留当前节点；新单人小队或已加入的小队再做本队地图共识。
+- 跨小队相遇、合并和共享战斗是显式未来工作，不由 event approval 隐式触发。
+
+### Fallback 执行
+
+无本地匹配定义的成员在 `RemoteEventDisplay` 选择后仍发送 `event_choice_request`。获批后，NodeInstanceHost 代表该玩家执行/解析该选项，产生的个人结果定向应用到该玩家，并经房主同步其状态差量。这样 fallback 不要求选择者拥有 Mod 事件实现。
+
+### 事件消息
 
 ```
-if (Class.forName(event_class) throws ClassNotFoundException):
-    // 降级到 RemoteEventDisplay（自定义 UI）
-    RemoteEventDisplay.show(name, desc, options)
-    D2 点击 → event_select → host → stage host → buttonEffect
-    effects → broadcast → D2 apply
+event_interface        NodeInstanceHost→房主→本队
+event_choice_request   选择者→房主
+event_choice_approved  房主→选择者（voting 批准可广播本队）
+event_choice_rejected  房主→选择者
+event_votes             队长→房主→本队（仅 voting）
+event_player_result     选择者/图主→房主→本队
 ```
-
-### 集体选择事件 (Voting Mode)
-
-部分事件需要队伍决策（如"是否进入战斗"）。`event_interface.mode = "voting"` 时：
-
-```
-D2 沙盒执行 → transcript 记录选项
-host 收到 transcript → 聚合（类似 room_pin）：
-  → 全员一致 → dispatch 图主重播
-  → 未一致 → 广播 event_votes 快照，等待改票
-```
-
-这复用了 `RoomHost.castVote / checkStageVoteConsensus()` 基础设施。
-
-### 与战斗 REAL/INDUCED 的对比
-
-| | 战斗卡片 | 事件 |
-|---|---------|------|
-| 所有者 | 卡牌所有者 = 执行者 | 图主 = 最终执行者 |
-| 非所有者做什么 | AUTHORITATIVE_APPLY + LOCAL_OWNER_ONLY（非 owner buff 无效果） | 沙盒执行（snapshot/restore + 捕获 transcript） |
-| 传输内容 | `combat_result { effects, operation_sequence }` | `event_transcript { actions[] }` |
-| 结果同步 | effects 直接生效 | 图主重播 → effects 走现有管道 |
-
-### 协议消息（非标准包）
-
-```
-event_interface   stageHost→全员  {"type":"event_interface","event_class":"...","options":[...],"mode":"independent"}
-event_transcript  C→host→stageHost  {"type":"event_transcript","source":"...","event_id":"...","actions":[...]}
-event_votes        host→全员       {"type":"event_votes","source":"...","votes":{"alice":0,"bob":1}}  (仅 voting 模式)
-
 
 ## 所有者交互选择
 
@@ -880,7 +817,7 @@ event_votes        host→全员       {"type":"event_votes","source":"...","vot
 | 卡牌效果要求选牌 | "选择手牌中一张牌丢弃"、"选择牌堆中一张牌加入手牌" | 卡牌所有者 |
 | 遗物效果要求选择 | "选择一张攻击牌升级"、"选择一种药水丢弃" | 遗物所有者（通常也是卡牌所有者所在机器） |
 | 药水效果要求选择 | "选择一张卡牌消耗" | 药水所有者 |
-| 事件要求选牌 | "选择一张卡牌移除" | 图主 |
+| 事件要求选牌 | "选择一张卡牌移除" | NodeInstanceHost |
 
 ### 交互选择流程
 
@@ -996,7 +933,7 @@ B 的卡牌事实触发 A 的本地遗物（logic_owner = A）:
 4. 非 A 节点同名投影无效果、不可触发
 ```
 
-**已否决**：图主 INDUCED 全量 useCard 以“自动”跑怪物 power；非所有者有定义即本地执行。
+**已否决**：NodeInstanceHost INDUCED 全量 useCard 以“自动”跑怪物 power；非所有者有定义即本地执行。
 
 ### Fallback 效果类型
 
@@ -1051,7 +988,7 @@ public class CrossSpireMod {
 | 非发送者 AUTHORITATIVE_APPLY | 否（suppressEvents） | 数值已由 executor 计算 |
 | 非发送者 LOCAL_OWNER_ONLY（logic_owner==self） | 是（仅这些组件） | 施加者/所有者自发执行 |
 | 非发送者上他人 buff 投影 | 否 | 无效果、不可触发 |
-| 图主收到他人 combat_result | 否全量 hook；图主自有 logic_owner 组件可跑 | 禁止 INDUCED 自动跑全部怪物 power |
+| NodeInstanceHost 收到他人 combat_result | 否全量 hook；节点实例主自有 logic_owner 组件可跑 | 禁止 INDUCED 自动跑全部怪物 power |
 | commit 覆盖怪物投影 | 否（suppressEvents） | 不得再捕获为 proposal |
 
 由于 BaseMod 没有 gold change hook，金币同步需要通过自定义 `@SpirePatch` 直接拦截 `AbstractPlayer.gainGold()` / `loseGold()` 方法。
@@ -1265,7 +1202,7 @@ RemotePlayer extends AbstractPlayer:
 
 在线角色持有的引用：
 - 对自己远端角色的远程引用（状态写入路径，经房主路由）
-- 对图主怪物/事件的远程引用（渲染用）
+- 对 NodeInstanceHost 怪物/事件的远程引用（渲染用）
 - 对自身遗物/能力的远程引用（被动效果触发用）
 
 ## RNG 同步策略
@@ -1279,14 +1216,15 @@ RemotePlayer extends AbstractPlayer:
 
 RNG 归属 = 执行者:
 
-  地图生成   → 图主本地 RNG → 广播
-  怪物意图   → 图主本地 RNG → 广播
-  怪物 AI/伤害 → 图主本地 RNG → 广播 combat_result
+   地图生成   → MapHost 本地 RNG → 登记不可变 MapDefinition
+   问号/房间生成 → NodeInstanceHost 本地 RNG + 生成修正器 → node_generation_commit
+   怪物意图   → NodeInstanceHost 本地 RNG → 本队广播
+   怪物 AI/伤害 → NodeInstanceHost 本地 RNG → 本队广播 combat_result
   在线角色抽牌 → 远端所有者本地 RNG → 推送
   卡牌效果   → 卡牌所有者本地 RNG → 广播
   随机遗物 (Dead Branch) → 本地 RNG → 结果同步
 
-图主的 RNG 结果通过 stage_sync / combat_result 广播给全员。
+MapHost 的地图结果经 MapRegistry 提供；NodeInstanceHost 的 RNG 结果只向本队通过 node-instance 消息 / combat_result 广播。
 本地决策 RNG 结果通过 player_state / combat_result 同步给全员。
 不同玩家的 RNG 互不干扰。
 ```
@@ -1301,7 +1239,7 @@ RNG 归属 = 执行者:
 | 确定性 | 要求全局确定 | 不要求—结果就是广播数据 |
 | 实现复杂度 | 需保证所有端点卡组/状态全同 | 简单——各有各的 RNG |
 
-独立本地 RNG 天然与所有权模型一致，且对 Mod 差异极度鲁棒。图主的地图同步、怪物同步已经通过广播覆盖了所有非本地决策。
+独立本地 RNG 天然与所有权模型一致，且对 Mod 差异极度鲁棒。MapHost 的地图登记和 NodeInstanceHost 的本队同步覆盖了所有非本地决策。
 
 ## 网络拓扑
 
@@ -1387,6 +1325,11 @@ interface StandardPacket {
 
 // operation 枚举
 type PacketOperation =
+  // 阶段过渡 / 地图与节点目录
+  | "stage_transition_open" | "map_host_vote" | "map_host_result"
+  | "map_register" | "map_registered" | "map_join_request" | "map_joined"
+  | "node_instance_host_vote" | "node_instance_host_result" | "stage_transition_complete"
+  | "node_instance_allocate" | "node_generation_commit" | "node_instance_opened"
   // 队列
   | "queue_submit" | "queue_update" | "queue_empty"
   // 引用/调用
@@ -1394,7 +1337,11 @@ type PacketOperation =
   // 战斗/状态
   | "combat_result" | "monster_intent" | "player_state" | "full_snapshot"
   // 事件
-  | "event_interface" | "event_transcript" | "event_result"
+   | "event_interface" | "event_choice_request" | "event_choice_approved"
+   | "event_choice_rejected" | "event_player_result" | "event_result" | "event_votes"
+   // 小队
+   | "party_snapshot" | "party_leave_request" | "party_join_request"
+   | "party_join_approved" | "party_join_rejected" | "party_leader_changed"
   // 素材
   | "resource_registry" | "resource_request" | "resource_response" | "animation_sync";
 ```
@@ -1407,12 +1354,12 @@ type PacketOperation =
 
 ```
 operation: "queue_submit"
-  payload: { card_id: string, target: string }
-  说明: 客户端提交卡牌到房主中央队列
+  payload: { party_id: string, card_id: string, target: string }
+  说明: 小队成员经房主提交卡牌到本队队长中央队列
 
 operation: "queue_update"
-  payload: { entries: QueueEntry[] }
-  说明: 房主广播当前队列快照
+  payload: { party_id: string, entries: QueueEntry[] }
+  说明: 队长经房主向本队广播当前队列快照
 
 interface QueueEntry {
   packet_id: string;      // 从源头标准包提取
@@ -1424,8 +1371,36 @@ interface QueueEntry {
 }
 
 operation: "queue_empty"
-  payload: {}
-  说明: 队列清空，可结束回合
+  payload: { party_id: string }
+  说明: 本队队列清空，本队成员可结束回合
+```
+
+#### 阶段过渡、地图与节点实例操作
+
+```
+stage_transition_open
+  payload: { party_id, act_id, party_revision }
+  说明: 房主为完成当前地图的小队打开独立过渡；过渡不属于地图或节点实例。
+
+map_host_vote | node_instance_host_vote
+  payload: { party_id, candidate_id, party_revision }
+  说明: 房主只在目标小队内聚合一致投票。MapHost 仅在创建新地图时选；每个绑定地图的小队都选唯一 NodeInstanceHost。
+
+map_register
+  payload: { party_id, map_host_id, request_id, map: MapDefinition }
+  说明: MapHost 向房主登记一次不可变地图。登记成功后 MapHost 不承担节点内容职责。
+
+map_join_request
+  payload: { party_id, map_instance_id, request_id, party_revision }
+  说明: 小队绑定同阶段已登记地图；本队随后仍必须选自己的 NodeInstanceHost。
+
+node_instance_allocate
+  payload: { node_instance: NodeInstanceInfo, request_id }
+  说明: 房主校验路径后路由给本队节点实例主。键为 (map_instance_id, party_id, node_id, visit_id)，不同小队不得共用。
+
+node_generation_commit
+  payload: { node_instance_id, generation_revision, generation_result, modifier_state_delta }
+  说明: 节点实例主原子提交问号解析/房间内容与生成遗物状态变化；重试不能再次消耗 RNG 或修正器计数。
 ```
 
 #### 引用/调用操作
@@ -1467,25 +1442,27 @@ operation: "combat_result"
     operation_sequence: OperationStep[];
     card_id?: string;
     monster_id?: string;
-    executor_id: string;           // 原始 REAL 执行者，房主不得改写
+    turn_transaction_id?: string; // monster_turn 完成时必须匹配当前 monster_turn phase
+    executor_id: string;           // 原始 REAL 执行者，队长/房主不得改写
   }
-  说明: 房主→全员。接收方 AUTHORITATIVE_APPLY + LOCAL_OWNER_ONLY，禁止全量 hook 重算
+  说明: 队长→房主→本队。`monster_id=monster_turn` 仅接受当前 NodeInstanceHost、当前 phase transaction 且未处理过的完成结果；接收方 AUTHORITATIVE_APPLY + LOCAL_OWNER_ONLY，禁止全量 hook 重算
 
-operation: "combat_phase"   // 计划
+operation: "combat_phase"
   payload: {
+    party_id: string;
     phase: "player_turn" | "resolving_queue" | "queue_empty"
          | "pre_monster_turn" | "monster_turn" | "post_monster_turn";
     transaction_id?: string;
   }
-  说明: 房主→全员阶段对齐；客户端跟本地引擎；不远程点名 buff
+  说明: 队长→房主→本队阶段对齐；客户端跟本地引擎；不远程点名 buff
 
 operation: "monster_mutation_proposal"   // 计划
   payload: MonsterMutationProposal
-  说明: Peer→图主（经房主）：非图主对怪物核心状态的提案
+  说明: Peer→当前 NodeInstanceHost（经房主）：非节点实例主对怪物核心状态的提案
 
 operation: "monster_mutation_commit"   // 计划
   payload: MonsterMutationCommit
-  说明: 图主→全员（经房主）：权威怪物状态
+  说明: NodeInstanceHost→本队（经房主）：权威怪物状态
 
 operation: "monster_mutation_reject"   // 计划
   payload: { transaction_id, monster_instance_id, reason, commit_revision? }
@@ -1495,7 +1472,7 @@ operation: "monster_intent"
   payload: {
     monsters: { monster_id: string, intent: string }[];
   }
-  说明: 图主意图快照经房主广播；客户端禁止 createIntent 重算
+  说明: NodeInstanceHost 意图快照经房主仅向本队广播；客户端禁止 createIntent 重算
 
 operation: "player_state"
   payload: {
@@ -1511,41 +1488,98 @@ operation: "player_state"
 operation: "full_snapshot"
   payload: {
     players: Record<string, PlayerState>;
-    monsters: Record<string, MonsterState>;
-    floor: number; act: number;
+    maps: MapDefinition[];
+    parties: {
+      party_id: string; leader_id: string; member_ids: string[];
+      phase_status: "stage_transition" | "map_active" | "active_node" | "map_completed";
+      act_id: string; map_instance_id?: string; map_position?: string;
+      node_instance_host_id?: string; active_node_instance_id?: string; party_revision: number;
+    }[];
+    active_node_instances: NodeInstanceSnapshot[];
   }
-  说明: 完整阶段状态快照（房主启动/迁移时）；应含 attachment 列表（计划）
+  说明: 房主目录快照（房主启动/迁移时）；MapDefinition 来自 MapRegistry，活动节点快照来自各自 NodeInstanceHost；应含 attachment 列表（计划）
 ```
+
+#### 小队操作
+
+```
+operation: "party_snapshot"
+  payload: {
+    parties: PartyInfo[];
+  }
+  说明: 房主的小队玩法目录快照；包含小队过渡、地图绑定和节点实例主，不含跨小队可见性或队列内容。
+
+operation: "party_leave_request"
+  payload: { party_id: string; }
+  说明: 成员请求离开当前小队；成功后创建单人小队并保留当前地图节点。
+
+operation: "party_join_request"
+  payload: { party_id: string; request_id: string; }
+  说明: 房主路由给目标队长，队长用 party_join_approved/rejected 回应。
+
+operation: "party_join_approved" | "party_join_rejected"
+  payload: { party_id: string; request_id: string; player_id: string; reason?: string; }
+
+operation: "party_leader_changed"
+  payload: { party_id: string; leader_id: string; }
+  说明: 成员变化或队长掉线后，按成员 ID 字典序确定新队长。
+```
+
+所有玩法范围的标准包 (`queue_*`, `invoke*`, `combat_result`, `combat_phase`, `player_end_turn`, `player_state`, `room_*`, `event_*`) 在 payload 或固定扩展字段中携带 `party_id`。资源、心跳和纯房间控制消息不需要 `party_id`。
 
 #### 事件操作
 
 ```
 operation: "event_interface"
   payload: {
+    event_instance_id: string;
+    party_id: string;
     event_class: string;        // 全限定类名 "com.megacrit.cardcrawl.events.exordium.BigFish"
     event_id: string;           // 简短 ID "BigFish"
+    resource_hash: string;
     name: string;
     description: string;
     options: { index: number, text: string, enabled: boolean }[];
-    mode: "independent" | "voting";
+    mode: "individual" | "voting";
     image_ref?: string;         // 素材引用，走 resource_request 获取
     phase_key?: string;         // PhasedEvent 当前阶段
   }
-  说明: 图主广播事件接口。D2 通过 Class.forName 本地实例化。
+  说明: NodeInstanceHost 向所在小队广播事件接口。D2 仅在类和 hash 匹配时本地实例化。
 
-operation: "event_transcript"
+operation: "event_choice_request"
   payload: {
-    event_id: string;
-    actions: EventTranscriptAction[];
+    event_instance_id: string;
+    party_id: string;
+    request_id: string;
+    ui_step: string;
+    option_index: number;
+    selected_cards?: string[];
+    selected_targets?: string[];
+    resource_hash: string;
   }
-  EventTranscriptAction:
-    { type: "buttonEffect", index: number }
-    { type: "cardSelect",  cards: string[] }
-    { type: "confirm" }
-    { type: "wheelResult", result: string }
-    { type: "enterCombat" }
-  说明: D2 沙盒执行完成后，将所有交互步骤发送到图主重播。
-        替代 event_select + interact_request/response 三条消息。
+  说明: 原生 buttonEffect/选牌 UI 在副作用前请求房主批准。
+
+operation: "event_choice_approved" | "event_choice_rejected"
+  payload: {
+    event_instance_id: string;
+    party_id: string;
+    request_id: string;
+    ui_step: string;
+    reason?: string;
+  }
+  说明: individual 事件独立批准每个有效请求；voting 仅在本队达成一致后批准。
+
+operation: "event_player_result"
+  payload: {
+    event_instance_id: string;
+    party_id: string;
+    request_id: string;
+    player_id: string;
+    player_state?: PlayerState;
+    effects?: EffectDescription[];
+    shared_outcome?: { type: "event_room" | "leave_party"; instance_id?: string; option_index: number; };
+  }
+  说明: 匹配选择者本地执行后的个人结果，或 fallback 时图主定向执行的结果。
 
 operation: "event_result"
   payload: {
@@ -1553,7 +1587,7 @@ operation: "event_result"
     effects?: EffectDescription[];
     next_phase?: string;
   }
-  说明: 事件执行结果广播（图主→房主→全员）
+  说明: NodeInstanceHost 确定的本队节点共享事件结果；个人结果使用 event_player_result。
 ```
 
 #### 事件投票操作 (仅 voting 模式)
@@ -1561,10 +1595,11 @@ operation: "event_result"
 ```
 operation: "event_votes"
   payload: {
-    event_id: string;
-    votes: { [playerId]: transcript_action[] };
+    event_instance_id: string;
+    party_id: string;
+    votes: { [playerId]: { option_index: number, ui_step: string } };
   }
-  说明: 房主广播全体投票状态。所有玩家投票给同一 transcript → 房主发送 event_transcript 给图主。
+  说明: 队长按 party_id 广播投票状态。全队对同一合法请求一致后，房主批准该请求。
 ```
 
 #### 素材操作
@@ -1651,7 +1686,8 @@ CrossSpire/
             ├── EventSuppression.java            # 全局抑制开关
             ├── SuppressBaseModPatches.java      # @SpirePatch 拦截 BaseMod.publish*
             ├── network/
-            │   ├── RoomHostClient.java          # 房主连接管理（星型拓扑）
+            │   ├── StarConnectionManager.java   # 星型连接管理
+            │   ├── RoomHost.java                # 房主目录与路由职责
             │   ├── HeartbeatManager.java        # 心跳检测 + 掉线处理
             │   └── Protocol.java                # 消息 POJO + 序列化
             ├── reference/
@@ -1675,9 +1711,9 @@ CrossSpire/
             │   ├── RemotePlayer.java           # extends AbstractPlayer
             │   ├── RemotePlayerRegistry.java   # 在线角色注册表
             │   ├── RemoteRenderer.java         # 实现 RenderSubscriber
-            │   └── StageHost.java              # 图主：地图/事件/怪物权威 + 事件接口捕获
+            │   └── StageHost.java              # legacy 单一阶段权威；迁移为 MapHost 身份与按小队 NodeInstanceHost 授权
             ├── combat/
-            │   ├── CentralQueueManager.java    # 房主中央队列调度
+            │   ├── CentralQueueManager.java    # 小队中央队列调度（P7 目标）
             │   ├── LocalCapturePatches.java    # 捕获本地操作 → 提交到房主
             │   ├── CombatResultReplayer.java   # AUTHORITATIVE_APPLY + LOCAL_OWNER_ONLY
             │   ├── InteractionCapture.java     # 捕获 BaseMod 选择面板 → interact_request
@@ -1687,7 +1723,7 @@ CrossSpire/
             │   ├── CombatTurnOrchestrator.java # 已实现 (P6): 回合阶段状态机
             │   ├── MonsterTurnCapture.java     # 已实现 (P6): HP 增量纯逻辑
             │   ├── MonsterMutationCapture.java # planned (T5.3): 事务化怪物修改捕获
-            │   └── MonsterAuthorityCoordinator.java  # planned (T5.3): 图主 proposal→commit
+            │   └── MonsterAuthorityCoordinator.java  # planned (T5.3): NodeInstanceHost proposal→commit
             └── ui/
                 ├── LobbyScreen.java            # 加入房间界面
                 ├── ServerPicker.java           # IP:port:password 输入

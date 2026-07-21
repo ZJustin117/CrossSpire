@@ -70,9 +70,9 @@ CrossSpire 全部 MTS 注入点，按功能域分组。最后更新: 2026-07-19
 
 | 类型 | 数量 | 文件 |
 |------|------|------|
-| `@SpirePrefixPatch` | 15 | `SuppressBaseModPatches`(12), `RenderSafetyPatches`(2), `EndTurnSyncPatches`(1) |
+| `@SpirePrefixPatch` | 16 | `SuppressBaseModPatches`(12), `RenderSafetyPatches`(2), `EndTurnSyncPatches`(1), `MonsterTurnPatches`(1) |
 | `@SpirePostfixPatch` | 18 | `LocalCapturePatches`, `CombatSyncPatches`, `EndTurnSyncPatches`, `MonsterIntentBroadcastPatches`, `MonsterTurnPatches`, `GoldSyncPatches`, `EventSyncPatches`, `AnimationSyncPatches`, `PlayerStatePatches` |
-| **总计** | **33** | 11 文件 |
+| **总计** | **34** | 11 文件 |
 
 ## 变更记录
 
@@ -85,4 +85,7 @@ CrossSpire 全部 MTS 注入点，按功能域分组。最后更新: 2026-07-19
 - T5.2（无新 @SpirePatch）：`ComponentAttachmentRegistry` + `ApplyPowerEffects` + `PowerStub`/`PowerLogicGate` 回调 no-op；Replayer AUTHORITATIVE_APPLY 登记 attachment；Bash 启发式 `magic_number`→`apply_power`+`logic_owner_id`
 - T5.4（无新 @SpirePatch）：`CombatPhaseCoordinator` + 房主 `combat_phase` 广播；`RoomHost` end-turn 共识 → `pre_monster_turn`
 - P6/T6.2：`MonsterTurnPatches` — `MonsterGroup.applyPreTurnLogic` Prefix 采样玩家 HP/Block + Postfix 差值 `combat_result`；仅 stage host 且 `combat_phase=monster_turn`
+- P7/T7.0a：`MonsterTurnPatches.PreTurnLogic` Prefix 在联机非图主节点返回 `SpireReturn.Return(null)`，阻止本地怪物 AI 与图主权威结果叠加；`CombatPhaseCoordinator` 拒绝非房主、重复或非法的远端阶段 transaction
+- P7/T7.0b：`CombatSyncPatches.OnMonsterRoomEntry` 在进入新战斗前清空 `ComponentAttachmentRegistry`；`CombatResultReplayer.remove_power` 同步移除同目标实体的 attachment metadata
+- P7/T7.0c：`MonsterTurnPatches.PreTurnLogic` 仅在联机图主收到当前 `monster_turn` phase 时运行；结果携带 `turn_transaction_id`，接收端在重放前拒绝错误图主、重复或旧回合的 monster-turn result
 - P6/T6.1：无新 patch — `CombatTurnOrchestrator` + end_turn 后广播 `pre_monster_turn`→`monster_turn`

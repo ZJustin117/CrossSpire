@@ -83,4 +83,28 @@ public class CombatPhaseTest {
     public void packetOperationConstantMatchesType() {
         assertEquals("combat_phase", CombatPhaseCoordinator.OPERATION);
     }
+
+    @Test
+    public void partyPhasesKeepTransactionsAndTransitionsIndependent() {
+        CombatPhaseCoordinator.applyLocal("P0", CombatPhase.QUEUE_EMPTY, "p0-empty");
+        CombatPhaseCoordinator.applyLocal("P1", CombatPhase.RESOLVING_QUEUE, "p1-resolving");
+
+        assertEquals(CombatPhase.QUEUE_EMPTY, CombatPhaseCoordinator.getCurrentPhase("P0"));
+        assertEquals(CombatPhase.RESOLVING_QUEUE, CombatPhaseCoordinator.getCurrentPhase("P1"));
+        assertEquals("p0-empty", CombatPhaseCoordinator.getLastTransactionId("P0"));
+        assertEquals("p1-resolving", CombatPhaseCoordinator.getLastTransactionId("P1"));
+        assertTrue(CombatPhaseCoordinator.tryApplyRemote("P0", "leader-0", "leader-0",
+            CombatPhase.PRE_MONSTER_TURN, "p0-pre"));
+        assertFalse(CombatPhaseCoordinator.tryApplyRemote("P1", "leader-0", "leader-1",
+            CombatPhase.QUEUE_EMPTY, "p1-empty"));
+    }
+
+    @Test
+    public void partyPhaseMessageCarriesPartyIdAndLegacyDefaultsToP0() {
+        String json = CombatPhaseCoordinator.buildMessageJson(
+            "leader", 4, "P1", CombatPhase.QUEUE_EMPTY, "tx");
+        Protocol.CombatPhaseMessage parsed = Protocol.GSON.fromJson(json, Protocol.CombatPhaseMessage.class);
+        assertEquals("P1", parsed.partyId);
+        assertEquals("P0", CombatPhaseCoordinator.normalizePartyId(null));
+    }
 }

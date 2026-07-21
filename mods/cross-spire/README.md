@@ -33,9 +33,10 @@ Android 设备推送：OpenCode `@android-deploy-jar`，或见 `docs/development
 |----|------|
 | `crossspire` | 入口 `@SpireInitializer` + `EventSuppression` |
 | `combat/` | `CentralQueueManager` 小队队长中央队列 + `CombatResultReplayer` 诱导重放 + `InteractionCapture` + Stub 对象 |
-| `network/` | `RoomHostClient` 星型拓扑 + `HeartbeatManager` + `Protocol` POJO |
+| `network/` | `StarConnectionManager` / `RoomHost` 星型拓扑 + `HeartbeatManager` + `Protocol` POJO |
 | `party/` | `PartyState` / `PartyManager` 小队目录、确定性队长选举与 `PartyCoordinator` 路由授权 |
-| `map/` | `MapRegistry` / `NodeInstanceRegistry` / `MapRegistrationCoordinator`：RoomHost 保存不可变地图拓扑、小队隔离节点实例，以及 MapHost 登记授权 |
+| `map/` | 地图目录、登记授权、MapHost/NIH 选举、小队 room pin、NodeEntry 分配与 node open 授权 |
+| `event/` | `EventApprovalCoordinator` 与 `EventChoiceSender`：RoomHost individual 事件批准、去重及本队结果 relay |
 | `reference/` | `Reference` 引用模型 (Local/Remote/Null) + `ContentValidator` + `ReferenceFactory` |
 | `remote/` | `RemotePlayer` / `RemotePlayerRegistry` / `RemoteRenderer` / `StageHost`；渲染投影由 `PartyVisibility` 限制为同队成员 |
 | `resource/` | 素材传递：`RemoteAssetCache` + `RemoteAssetServer` + `RemoteCharacterResource` |

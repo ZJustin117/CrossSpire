@@ -116,7 +116,9 @@ public final class Protocol {
     // OBSOLETED: use CombatResultPayload instead
     public static class CombatResultMessage extends GameMessage {
         public CombatResultMessage() { type = "combat_result"; }
+        @SerializedName("party_id") public String partyId;
         @SerializedName("monster_id") public String monsterId;
+        @SerializedName("turn_transaction_id") public String turnTransactionId;
         @SerializedName("card_id") public String cardId;
         @SerializedName("executor_id") public String executorId;
         public EffectDescription[] effects;
@@ -125,6 +127,7 @@ public final class Protocol {
 
     public static class QueueComplete extends GameMessage {
         public QueueComplete() { type = "queue_complete"; }
+        @SerializedName("party_id") public String partyId;
         @SerializedName("packet_id") public String packetId;
         @SerializedName("executor_id") public String executorId;
         public EffectDescription[] effects;
@@ -194,6 +197,7 @@ public final class Protocol {
 
     public static class InvokeMessage extends GameMessage {
         public InvokeMessage() { type = "invoke"; }
+        @SerializedName("party_id") public String partyId;
         @SerializedName("ref_id") public String refId;
         public String trigger;
         public String args;
@@ -201,6 +205,7 @@ public final class Protocol {
 
     public static class InvokeResultMessage extends GameMessage {
         public InvokeResultMessage() { type = "invoke_result"; }
+        @SerializedName("party_id") public String partyId;
         @SerializedName("ref_id") public String refId;
         public EffectDescription[] effects;
         @SerializedName("operation_sequence") public OperationStep[] operationSequence;
@@ -247,10 +252,12 @@ public final class Protocol {
 
     public static class PlayerEndTurnMessage extends GameMessage {
         public PlayerEndTurnMessage() { type = "player_end_turn"; }
+        @SerializedName("party_id") public String partyId;
     }
 
     public static class QueueSubmitMessage extends GameMessage {
         public QueueSubmitMessage() { type = "queue_submit"; }
+        @SerializedName("party_id") public String partyId;
         @SerializedName("packet_id") public String packetId;
         @SerializedName("sender_id") public String senderId;
         @SerializedName("owner_id") public String ownerId;
@@ -262,18 +269,196 @@ public final class Protocol {
 
     public static class QueueUpdateMessage extends GameMessage {
         public QueueUpdateMessage() { type = "queue_update"; }
+        @SerializedName("party_id") public String partyId;
         public QueueEntry[] entries;
     }
 
     public static class QueueEmptyMessage extends GameMessage {
         public QueueEmptyMessage() { type = "queue_empty"; }
+        @SerializedName("party_id") public String partyId;
     }
 
     /** Room host → all: explicit combat phase alignment (T5.4 / FR-2.8). */
     public static class CombatPhaseMessage extends GameMessage {
         public CombatPhaseMessage() { type = "combat_phase"; }
+        @SerializedName("party_id") public String partyId;
         public String phase;
         @SerializedName("transaction_id") public String transactionId;
+    }
+
+    public static class PartyInfo {
+        @SerializedName("party_id") public String partyId;
+        @SerializedName("leader_id") public String leaderId;
+        @SerializedName("member_ids") public String[] memberIds;
+        @SerializedName("phase_status") public String phaseStatus;
+        @SerializedName("act_id") public String actId;
+        @SerializedName("map_instance_id") public String mapInstanceId;
+        @SerializedName("map_position") public String mapPosition;
+        @SerializedName("node_instance_host_id") public String nodeInstanceHostId;
+        @SerializedName("active_node_instance_id") public String activeNodeInstanceId;
+        @SerializedName("party_revision") public int partyRevision;
+    }
+
+    public static class PartySnapshotPayload {
+        public PartyInfo[] parties;
+    }
+
+    public static class PartyLeaveRequestPayload {
+        @SerializedName("party_id") public String partyId;
+    }
+
+    public static class PartyJoinRequestPayload {
+        @SerializedName("party_id") public String partyId;
+        @SerializedName("request_id") public String requestId;
+    }
+
+    public static class PartyJoinDecisionPayload {
+        @SerializedName("party_id") public String partyId;
+        @SerializedName("request_id") public String requestId;
+        @SerializedName("player_id") public String playerId;
+        public String reason;
+    }
+
+    public static class PartyLeaderChangedPayload {
+        @SerializedName("party_id") public String partyId;
+        @SerializedName("leader_id") public String leaderId;
+    }
+
+    // -- map and node-instance directory payloads --
+
+    public static class MapNode {
+        @SerializedName("node_id") public String nodeId;
+        public int x;
+        public int y;
+        @SerializedName("room_type") public String roomType;
+        public String icon;
+        @SerializedName("burning_elite") public boolean burningElite;
+        @SerializedName("outgoing_node_ids") public String[] outgoingNodeIds;
+    }
+
+    public static class MapDefinition {
+        @SerializedName("map_instance_id") public String mapInstanceId;
+        @SerializedName("act_id") public String actId;
+        @SerializedName("map_revision") public int mapRevision;
+        @SerializedName("generation_digest") public String generationDigest;
+        @SerializedName("start_node_id") public String startNodeId;
+        @SerializedName("boss_descriptor") public Object bossDescriptor;
+        public MapNode[] nodes;
+    }
+
+    public static class NodeInstanceInfo {
+        @SerializedName("node_instance_id") public String nodeInstanceId;
+        @SerializedName("map_instance_id") public String mapInstanceId;
+        @SerializedName("party_id") public String partyId;
+        @SerializedName("node_id") public String nodeId;
+        @SerializedName("visit_id") public int visitId;
+        @SerializedName("node_instance_host_id") public String nodeInstanceHostId;
+        public String status;
+        @SerializedName("generation_revision") public int generationRevision;
+        @SerializedName("state_revision") public int stateRevision;
+    }
+
+    public static class MapHostVotePayload {
+        @SerializedName("party_id") public String partyId;
+        @SerializedName("candidate_id") public String candidateId;
+        @SerializedName("map_host_id") public String mapHostId;
+        @SerializedName("party_revision") public int partyRevision;
+    }
+
+    public static class NodeInstanceHostVotePayload {
+        @SerializedName("party_id") public String partyId;
+        @SerializedName("candidate_id") public String candidateId;
+        @SerializedName("node_instance_host_id") public String nodeInstanceHostId;
+        @SerializedName("party_revision") public int partyRevision;
+    }
+
+    public static class MapRegistrationPayload {
+        @SerializedName("party_id") public String partyId;
+        @SerializedName("map_host_id") public String mapHostId;
+        @SerializedName("request_id") public String requestId;
+        public MapDefinition map;
+    }
+
+    public static class MapRegisteredPayload {
+        @SerializedName("party_id") public String partyId;
+        @SerializedName("map_instance_id") public String mapInstanceId;
+        @SerializedName("start_node_id") public String startNodeId;
+        @SerializedName("map_revision") public int mapRevision;
+        @SerializedName("party_revision") public int partyRevision;
+    }
+
+    public static class NodeInstanceAllocatePayload {
+        @SerializedName("node_instance") public NodeInstanceInfo nodeInstance;
+        @SerializedName("request_id") public String requestId;
+    }
+
+    public static class NodeGenerationCommitPayload {
+        @SerializedName("node_instance_id") public String nodeInstanceId;
+        @SerializedName("party_id") public String partyId;
+        @SerializedName("map_instance_id") public String mapInstanceId;
+        @SerializedName("node_id") public String nodeId;
+        @SerializedName("generation_revision") public int generationRevision;
+        @SerializedName("generation_result") public NodeGenerationResult generationResult;
+    }
+
+    public static class NodeGenerationResult {
+        @SerializedName("room_type") public String roomType;
+        @SerializedName("encounter") public String encounter;
+        @SerializedName("node_id") public String nodeId;
+    }
+
+    public static class NodeInstanceOpenedPayload {
+        @SerializedName("node_instance") public NodeInstanceInfo nodeInstance;
+        @SerializedName("generation_result") public NodeGenerationResult generationResult;
+    }
+
+    // -- event approval (T7.4) --
+
+    public static class EventOptionInfo {
+        public int index;
+        public String text;
+        public boolean enabled;
+        /** Legacy field from older event_interface builders. */
+        public boolean disabled;
+    }
+
+    public static class EventInterfacePayload {
+        @SerializedName("event_instance_id") public String eventInstanceId;
+        @SerializedName("party_id") public String partyId;
+        @SerializedName("event_class") public String eventClass;
+        @SerializedName("event_id") public String eventId;
+        @SerializedName("resource_hash") public String resourceHash;
+        public String name;
+        public String description;
+        public String mode;
+        public EventOptionInfo[] options;
+    }
+
+    public static class EventChoiceRequestPayload {
+        @SerializedName("event_instance_id") public String eventInstanceId;
+        @SerializedName("party_id") public String partyId;
+        @SerializedName("request_id") public String requestId;
+        @SerializedName("ui_step") public String uiStep;
+        @SerializedName("option_index") public int optionIndex;
+        @SerializedName("selected_cards") public String[] selectedCards;
+        @SerializedName("resource_hash") public String resourceHash;
+    }
+
+    public static class EventChoiceDecisionPayload {
+        @SerializedName("event_instance_id") public String eventInstanceId;
+        @SerializedName("party_id") public String partyId;
+        @SerializedName("request_id") public String requestId;
+        @SerializedName("ui_step") public String uiStep;
+        @SerializedName("option_index") public int optionIndex;
+        public String reason;
+    }
+
+    public static class EventPlayerResultPayload {
+        @SerializedName("event_instance_id") public String eventInstanceId;
+        @SerializedName("party_id") public String partyId;
+        @SerializedName("request_id") public String requestId;
+        @SerializedName("player_id") public String playerId;
+        public EffectDescription[] effects;
     }
 
     private Protocol() {}

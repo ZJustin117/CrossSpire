@@ -9,6 +9,7 @@ import crossspire.sync.MessageRouter;
 import crossspire.sync.SyncExecutor;
 import crossspire.combat.CombatResultReplayer;
 import crossspire.combat.CentralQueueManager;
+import crossspire.combat.PartyEndTurnTracker;
 import crossspire.network.StarConnectionManager;
 import crossspire.network.Protocol;
 import crossspire.network.RoomHost;
@@ -21,6 +22,9 @@ import com.megacrit.cardcrawl.characters.AbstractPlayer;
 import crossspire.ui.CrossSpireCommand;
 import crossspire.ui.LobbyScreen;
 import crossspire.ui.ServerPicker;
+import crossspire.party.PartyManager;
+import crossspire.party.PartySnapshotSender;
+import crossspire.party.PartyState;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.UUID;
 import com.google.gson.JsonObject;
@@ -36,6 +40,8 @@ public class CrossSpireMod {
     public static RoomHost roomHost;
     public static LobbyState lobbyState;
     public static StageHost stageHost;
+    public static PartyManager partyManager;
+    public static PartyEndTurnTracker partyEndTurnTracker;
     public static CrossSpireHUD hud;
     public static String playerId = "";
     public static String hostId = "";
@@ -63,6 +69,8 @@ public class CrossSpireMod {
         connectionManager = null;
         lobbyState = new LobbyState();
         stageHost = new StageHost("");
+        partyManager = new PartyManager();
+        partyEndTurnTracker = new PartyEndTurnTracker();
         messageRouter = new MessageRouter(new SyncExecutor(), centralQueueManager, new CombatResultReplayer());
 
         lobbyScreen = new LobbyScreen();
@@ -90,6 +98,27 @@ public class CrossSpireMod {
         send(StandardPacket.toJson(pkt));
     }
 
+    /** Routes a gameplay message only to members of its party; clients always relay through RoomHost. */
+    public static void sendToParty(String partyId, String message) {
+        if (connectionManager == null) return;
+        if (!isRoomHost()) {
+            connectionManager.send("host", message);
+            return;
+        }
+        PartyState party = partyManager != null ? partyManager.getParty(partyId) : null;
+        if (party == null) return;
+        for (String memberId : party.memberIds) {
+            if (!memberId.equals(playerId)) connectionManager.send(memberId, message);
+        }
+    }
+
+    /** RoomHost-only point-to-point forwarding for a party coordinator or object owner. */
+    public static void sendToPlayer(String playerId, String message) {
+        if (connectionManager == null) return;
+        if (isRoomHost()) connectionManager.send(playerId, message);
+        else connectionManager.send("host", message);
+    }
+
     private static String extractTarget(String message) {
         try {
             JsonObject obj = new JsonParser().parse(message).getAsJsonObject();
@@ -113,10 +142,15 @@ public class CrossSpireMod {
         hostId = playerId;
         roomHost = new RoomHost(playerId);
         roomHost.addPlayer(playerId);
+        partyManager.initializeDefaultParty(roomHost.getPlayerIds(), "");
         HeartbeatManager.setOnPeerTimeoutListener(new HeartbeatManager.OnPeerTimeoutListener() {
             @Override
             public void onPeerTimeout(String peerId) {
                 if (roomHost != null) roomHost.onPeerTimeout(peerId);
+                if (partyManager != null) {
+                    partyManager.removePlayer(peerId);
+                    send(PartySnapshotSender.build());
+                }
             }
         });
         lobbyScreen.setStatus("Hosting on " + advertisedIp + ":" + port);
@@ -197,6 +231,7 @@ public class CrossSpireMod {
         BaseMod.logger.info("CrossSpire player connected: " + remotePlayerId.substring(0, 8));
         if (roomHost != null) {
             roomHost.addPlayer(remotePlayerId);
+            partyManager.addPlayerToDefaultParty(remotePlayerId);
             JsonObject joined = new JsonObject();
             joined.addProperty("type", "player_joined");
             joined.addProperty("playerId", remotePlayerId);
@@ -212,6 +247,8 @@ public class CrossSpireMod {
             roomState.addProperty("code", ServerPicker.roomCode);
             roomState.addProperty("host", hostId);
             send(roomState.toString());
+            // room_state establishes hostId before peers authorize party_snapshot.
+            send(PartySnapshotSender.build());
         }
     }
 }

@@ -89,4 +89,14 @@ public final class CombatTurnOrchestrator {
     public static boolean shouldStageHostRunMonsterAi() {
         return CombatPhase.MONSTER_TURN.equals(CombatPhaseCoordinator.getCurrentPhase());
     }
+
+    /** Non-stage-host clients must not locally execute authoritative monster AI. */
+    public static boolean shouldSuppressMonsterAi(boolean connected, boolean isStageHost) {
+        return connected && !isStageHost;
+    }
+
+    /** Connected games execute monster AI only on the stage host in monster_turn. */
+    public static boolean shouldAllowMonsterAi(boolean connected, boolean isStageHost, String phase) {
+        return !connected || (isStageHost && CombatPhase.MONSTER_TURN.equals(phase));
+    }
 }

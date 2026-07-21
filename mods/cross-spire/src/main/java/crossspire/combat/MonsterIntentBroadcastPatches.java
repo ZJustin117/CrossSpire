@@ -27,7 +27,7 @@ public class MonsterIntentBroadcastPatches {
             int hits = 1;
             String targetId = "self";
             if (__instance.getIntentBaseDmg() > 0 && AbstractDungeon.player != null) {
-                int playerCount = 1 + RemotePlayerRegistry.count();
+                int playerCount = 1 + RemotePlayerRegistry.visibleCountToLocalParty();
                 targetId = rng.nextInt(playerCount) == 0 ? "self" : "player_remote";
             }
 
