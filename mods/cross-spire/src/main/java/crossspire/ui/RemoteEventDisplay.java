@@ -8,8 +8,12 @@ import com.megacrit.cardcrawl.helpers.FontHelper;
 import com.megacrit.cardcrawl.helpers.input.InputHelper;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import basemod.BaseMod;
 import crossspire.CrossSpireMod;
-import crossspire.network.EventMessageSender;
+import crossspire.event.EventChoiceSender;
+import crossspire.event.FallbackEventChoiceSession;
+import crossspire.network.Protocol;
+import crossspire.network.StandardPacket;
 
 public class RemoteEventDisplay {
 
@@ -18,6 +22,7 @@ public class RemoteEventDisplay {
     private static String description = "";
     private static String[] optionTexts = new String[0];
     private static boolean[] optionDisabled = new boolean[0];
+    private static final FallbackEventChoiceSession SESSION = new FallbackEventChoiceSession();
 
     private static final Color BG = new Color(0.0F, 0.0F, 0.1F, 0.85F);
     private static final Color BTN_BG = new Color(0.2F, 0.3F, 0.4F, 0.85F);
@@ -40,8 +45,44 @@ public class RemoteEventDisplay {
         visible = true;
     }
 
+    /** Fallback UI for a party-scoped event_interface when local class/hash does not match. */
+    public static void show(Protocol.EventInterfacePayload iface) {
+        if (iface == null) return;
+        SESSION.open(iface);
+        String id = iface.eventId != null && !iface.eventId.isEmpty() ? iface.eventId
+            : (iface.name != null ? iface.name : "Event");
+        String desc = iface.description != null ? iface.description : "";
+        JsonArray options = new JsonArray();
+        if (iface.options != null) {
+            for (Protocol.EventOptionInfo opt : iface.options) {
+                if (opt == null) continue;
+                JsonObject row = new JsonObject();
+                row.addProperty("text", opt.text != null ? opt.text : ("Option " + opt.index));
+                row.addProperty("disabled", opt.disabled || !opt.enabled);
+                options.add(row);
+            }
+        }
+        show(id, desc, options);
+    }
+
     public static void hide() {
         visible = false;
+        SESSION.clear();
+    }
+
+    public static boolean onChoiceApproved(Protocol.EventChoiceDecisionPayload decision) {
+        if (!SESSION.approve(decision)) return false;
+        visible = false;
+        BaseMod.logger.info("RemoteEventDisplay fallback choice approved request="
+            + decision.requestId);
+        return true;
+    }
+
+    public static boolean onChoiceRejected(Protocol.EventChoiceDecisionPayload decision) {
+        if (!SESSION.reject(decision)) return false;
+        BaseMod.logger.info("RemoteEventDisplay fallback choice rejected request="
+            + decision.requestId + " reason=" + decision.reason);
+        return true;
     }
 
     public static boolean isVisible() {
@@ -107,11 +148,23 @@ public class RemoteEventDisplay {
             if (InputHelper.mX > panelX + 10F * scale && InputHelper.mX < panelX + 10F * scale + btnW
                 && InputHelper.mY < by && InputHelper.mY > by - btnH) {
                 if (optionDisabled[i]) return;
-                String msg = EventMessageSender.buildEventSelect(
-                    CrossSpireMod.playerId, i);
-                CrossSpireMod.send((String) msg);
-                hide();
+                submitFallbackChoice(i);
+                return;
             }
         }
+    }
+
+    private static void submitFallbackChoice(int optionIndex) {
+        Protocol.EventChoiceRequestPayload request = SESSION.choose(optionIndex);
+        if (request == null) return;
+        StandardPacket packet = EventChoiceSender.requestPacket(request);
+        String raw = StandardPacket.toJson(packet);
+        if (CrossSpireMod.isRoomHost() && CrossSpireMod.messageRouter != null) {
+            CrossSpireMod.messageRouter.route(raw);
+        } else {
+            CrossSpireMod.send(raw);
+        }
+        BaseMod.logger.info("RemoteEventDisplay fallback request event="
+            + request.eventInstanceId + " option=" + optionIndex);
     }
 }

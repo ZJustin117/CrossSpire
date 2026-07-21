@@ -37,7 +37,7 @@ CrossSpire 通过 BaseMod 的 `ConsoleCommand` API 注册 `crossspire` 命名空
 | `crossspire snapshot` | 发送当前游戏状态快照 (`full_snapshot`) |
 | `crossspire party status` | 显示本地小队目录（T7.2a 诊断；leave/join 命令待后续 routing） |
 | `crossspire maphost <candidate_id>` | 为本队投 MapHost 票；全员一致后房主广播 `map_host_result` |
-| `crossspire mapreg [map_id] [start] [next]` | 获选 MapHost 登记一条最小不可变拓扑（诊断用）；成功后小队绑定地图 |
+| `crossspire mapreg [map_id] [start] [next] [monster|event]` | 获选 MapHost 登记最小不可变拓扑（诊断用）；末参可选 `event` 使 next 为事件节点 |
 | `crossspire nodehost <candidate_id>` | 为本队投 NodeInstanceHost 票（需已 map 绑定）；一致后写目录并广播 |
 | `crossspire eventopen [event_id]` | 诊断：注册并向本队广播 individual `event_interface` |
 | `crossspire eventchoice <option_index>` | 诊断：发送 individual `event_choice_request`，房主批准或拒绝 |

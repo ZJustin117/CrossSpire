@@ -49,6 +49,8 @@ Android 设备推送：OpenCode `@android-deploy-jar`，或见 `docs/development
 | `MonsterTurnPatches.PreTurnLogic` | Only the stage host may execute `MonsterGroup.applyPreTurnLogic()` while connected; other clients wait for authoritative `combat_result`. | Remote clients previously ran local monster AI as well as applying the stage-host result, allowing double damage and divergent combat state. |
 | `CombatSyncPatches.OnMonsterRoomEntry` | Clears in-combat `ComponentAttachment` metadata before a new monster room begins. | Buff ownership metadata from a completed combat could survive into a later room and gate the wrong projected power. |
 | `MonsterTurnPatches.PreTurnLogic` | Runs connected monster AI only on the stage host during the active `monster_turn` transaction. | A delayed, duplicated, or non-stage-host monster completion could otherwise replay effects or advance a later turn. |
+| `NativeEventApprovalPatches.ButtonEffectDispatch` | Gates a bound, hash-matched native event's shared `AbstractEvent.update()` button dispatch until its `event_choice_request` receives the matching approval. | A local event option could previously execute its side effects before RoomHost validation, or execute again after duplicate/late approval packets. |
+| `EventSyncPatches.OnEnterRoom` | Skips legacy event_interface broadcast while a P7 party event node is opened natively (`suppressBroadcast`). | Opening a party-scoped event would otherwise emit the old JSON interface and bypass StandardPacket approval binding. |
 
 ## 文档
 

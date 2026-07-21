@@ -31,6 +31,7 @@ public final class NodeInstanceOpenedSender {
         opened.mapInstanceId = instance.mapInstanceId;
         opened.partyId = instance.partyId;
         opened.nodeId = instance.nodeId;
+        opened.roomType = instance.roomType;
         opened.visitId = instance.visitId;
         opened.nodeInstanceHostId = instance.nodeInstanceHostId;
         opened.status = "active";

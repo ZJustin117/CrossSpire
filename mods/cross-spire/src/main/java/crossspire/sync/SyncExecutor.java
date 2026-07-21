@@ -9,12 +9,19 @@ import com.megacrit.cardcrawl.core.CardCrawlGame;
 import com.megacrit.cardcrawl.dungeons.AbstractDungeon;
 import com.megacrit.cardcrawl.helpers.MonsterHelper;
 import com.megacrit.cardcrawl.monsters.MonsterGroup;
+import com.megacrit.cardcrawl.events.AbstractEvent;
+import com.megacrit.cardcrawl.rooms.EventRoom;
 import com.megacrit.cardcrawl.rooms.MonsterRoom;
 import crossspire.CrossSpireMod;
 import crossspire.EventSuppression;
+import crossspire.combat.EventSyncPatches;
+import crossspire.event.NativeEventApprovalPatches;
+import crossspire.event.NativeEventOpenPlanner;
 import crossspire.network.Protocol;
+import crossspire.reference.ContentValidator;
 import crossspire.remote.RemotePlayerRegistry;
 import crossspire.remote.RemotePlayerState;
+import crossspire.ui.RemoteEventDisplay;
 
 public class SyncExecutor {
 
@@ -212,45 +219,128 @@ public class SyncExecutor {
         });
     }
 
-    /**
-     * NodeInstanceHost opens a party node instance after allocate.
-     * Diagnostic path uses a fixed Cultist encounter; full RNG generation is later.
-     */
+    /** Opens an authorized node instance without re-running generation. */
     public static void openNodeInstanceAsHost(Protocol.NodeInstanceInfo info,
-                                              Protocol.NodeGenerationResult result) {
-        if (info == null || result == null) return;
-        final String encounter = result.encounter != null && !result.encounter.isEmpty()
-            ? result.encounter : "Cultist";
-        BaseMod.logger.info("SyncExecutor openNodeInstanceAsHost party=" + info.partyId
-            + " node=" + info.nodeId + " encounter=" + encounter);
-        Gdx.app.postRunnable(new Runnable() {
-            @Override public void run() {
-                EventSuppression.suppressEvents(new Runnable() {
-                    @Override public void run() {
-                        enterRemoteCombat(encounter);
-                    }
-                });
-            }
-        });
+                                               Protocol.NodeGenerationResult result) {
+        openNodeInstance(info, result, true);
     }
 
     /** Party members apply RoomHost node_instance_opened without re-running generation. */
     public static void openNodeInstanceAsMember(Protocol.NodeInstanceInfo info,
                                                 Protocol.NodeGenerationResult result) {
+        openNodeInstance(info, result, false);
+    }
+
+    private static void openNodeInstance(Protocol.NodeInstanceInfo info,
+                                         Protocol.NodeGenerationResult result,
+                                         boolean asHost) {
         if (info == null || result == null) return;
-        final String encounter = result.encounter != null && !result.encounter.isEmpty()
-            ? result.encounter : "Cultist";
-        BaseMod.logger.info("SyncExecutor openNodeInstanceAsMember party=" + info.partyId
-            + " node=" + info.nodeId + " encounter=" + encounter);
-        Gdx.app.postRunnable(new Runnable() {
-            @Override public void run() {
-                EventSuppression.suppressEvents(new Runnable() {
-                    @Override public void run() {
-                        enterRemoteCombat(encounter);
-                    }
-                });
+        final String role = asHost ? "Host" : "Member";
+        if ("monster".equals(result.roomType)) {
+            final String encounter = result.encounter != null && !result.encounter.isEmpty()
+                ? result.encounter : "Cultist";
+            BaseMod.logger.info("SyncExecutor openNodeInstanceAs" + role + " party=" + info.partyId
+                + " node=" + info.nodeId + " encounter=" + encounter);
+            Gdx.app.postRunnable(new Runnable() {
+                @Override public void run() {
+                    EventSuppression.suppressEvents(new Runnable() {
+                        @Override public void run() {
+                            enterRemoteCombat(encounter);
+                        }
+                    });
+                }
+            });
+            return;
+        }
+        if ("event".equals(result.roomType)) {
+            final Protocol.EventInterfacePayload iface = result.eventInterface;
+            BaseMod.logger.info("SyncExecutor openNodeInstanceAs" + role + " party=" + info.partyId
+                + " node=" + info.nodeId + " event="
+                + (iface != null ? iface.eventInstanceId : "?"));
+            Gdx.app.postRunnable(new Runnable() {
+                @Override public void run() {
+                    EventSuppression.suppressEvents(new Runnable() {
+                        @Override public void run() {
+                            enterRemoteEvent(iface);
+                        }
+                    });
+                }
+            });
+        }
+    }
+
+    /**
+     * Opens a party event: native class/hash match binds approval gate; otherwise fallback UI.
+     * Does not execute NIH fallback resolution yet.
+     */
+    public static void enterRemoteEvent(Protocol.EventInterfacePayload iface) {
+        if (iface == null) return;
+        String localHash = ContentValidator.hashClass(iface.eventClass);
+        boolean classPresent = canLoadEventClass(iface.eventClass);
+        NativeEventOpenPlanner.Mode mode = NativeEventOpenPlanner.mode(iface, classPresent, localHash);
+        if (mode == NativeEventOpenPlanner.Mode.NATIVE) {
+            if (enterNativeEvent(iface)) {
+                BaseMod.logger.info("SyncExecutor native event opened: " + iface.eventInstanceId);
+                return;
             }
-        });
+        }
+        RemoteEventDisplay.show(iface);
+        BaseMod.logger.info("SyncExecutor fallback event display: " + iface.eventInstanceId
+            + " classPresent=" + classPresent);
+    }
+
+    private static boolean enterNativeEvent(Protocol.EventInterfacePayload iface) {
+        if (AbstractDungeon.getCurrMapNode() == null) {
+            BaseMod.logger.error("SyncExecutor enterRemoteEvent: no map node");
+            return false;
+        }
+        AbstractEvent event = instantiateEvent(iface.eventClass);
+        if (event == null) return false;
+        try {
+            EventRoom room = new EventRoom();
+            room.event = event;
+            AbstractDungeon.nextRoom = null;
+            AbstractDungeon.getCurrMapNode().room = room;
+            AbstractDungeon.screen = AbstractDungeon.CurrentScreen.NONE;
+            if (AbstractDungeon.effectList != null) AbstractDungeon.effectList.clear();
+            if (AbstractDungeon.topLevelEffects != null) AbstractDungeon.topLevelEffects.clear();
+            EventSyncPatches.suppressBroadcast = true;
+            try {
+                event.onEnterRoom();
+            } finally {
+                EventSyncPatches.suppressBroadcast = false;
+            }
+            AbstractDungeon.nextRoom = null;
+            RemoteEventDisplay.hide();
+            NativeEventApprovalPatches.bind(event, iface);
+            return true;
+        } catch (Exception e) {
+            BaseMod.logger.error("SyncExecutor enterNativeEvent: " + e.getClass().getSimpleName()
+                + ": " + e.getMessage());
+            return false;
+        }
+    }
+
+    private static AbstractEvent instantiateEvent(String eventClass) {
+        if (eventClass == null || eventClass.isEmpty()) return null;
+        try {
+            Class<?> cls = Class.forName(eventClass);
+            java.lang.reflect.Constructor<?> ctor = cls.getDeclaredConstructor();
+            ctor.setAccessible(true);
+            return (AbstractEvent) ctor.newInstance();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static boolean canLoadEventClass(String eventClass) {
+        if (eventClass == null || eventClass.isEmpty()) return false;
+        try {
+            Class.forName(eventClass);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     public void handleFullSnapshot(String rawMessage) {

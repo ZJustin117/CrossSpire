@@ -12,6 +12,7 @@ import crossspire.combat.EventSyncPatches;
 import crossspire.combat.MonsterTurnResultGate;
 import crossspire.event.EventApprovalCoordinator;
 import crossspire.event.EventChoiceSender;
+import crossspire.event.NativeEventApprovalPatches;
 import crossspire.map.MapDefinition;
 import crossspire.map.MapHostVoteSender;
 import crossspire.map.MapNavigation;
@@ -22,6 +23,7 @@ import crossspire.map.NodeInstance;
 import crossspire.map.NodeInstanceAllocateSender;
 import crossspire.map.NodeInstanceHostVoteSender;
 import crossspire.map.NodeInstanceOpenedSender;
+import crossspire.map.NodeGenerationPlanner;
 import crossspire.map.PartyRoomPinTracker;
 import crossspire.party.PartySnapshotCodec;
 import crossspire.party.PartySnapshotSender;
@@ -805,11 +807,14 @@ public class MessageRouter {
             BaseMod.logger.info("MessageRouter skip allocate not local NIH");
             return;
         }
-        Protocol.NodeGenerationResult generation =
-            NodeInstanceOpenedSender.defaultMonsterResult(info.nodeId);
+        Protocol.NodeGenerationResult generation = NodeGenerationPlanner.plan(
+            new crossspire.map.MapNode(info.nodeId, info.roomType, java.util.Collections.<String>emptyList()), info);
+        if (generation == null) {
+            BaseMod.logger.info("MessageRouter reject allocate unknown node generation=" + info.nodeId);
+            return;
+        }
         info.status = "generating";
         info.generationRevision = 1;
-        SyncExecutor.openNodeInstanceAsHost(info, generation);
         StandardPacket commit = NodeInstanceOpenedSender.buildCommit(info, generation, 1);
         String commitJson = StandardPacket.toJson(commit);
         if (CrossSpireMod.isRoomHost()) {
@@ -818,7 +823,7 @@ public class MessageRouter {
             CrossSpireMod.send(commitJson);
         }
         BaseMod.logger.info("MessageRouter node_generation_commit party=" + info.partyId
-            + " node=" + info.nodeId + " encounter=" + generation.encounter);
+            + " node=" + info.nodeId + " type=" + generation.roomType);
     }
 
     private void handleNodeGenerationCommit(StandardPacket pkt) {
@@ -831,14 +836,10 @@ public class MessageRouter {
         if (commit == null) return;
         String partyId = partyId(commit.partyId);
         PartyState party = CrossSpireMod.partyManager.getParty(partyId);
-        Protocol.NodeInstanceInfo allocated = new Protocol.NodeInstanceInfo();
-        allocated.nodeInstanceId = commit.nodeInstanceId;
-        allocated.mapInstanceId = commit.mapInstanceId;
-        allocated.partyId = partyId;
-        allocated.nodeId = commit.nodeId;
-        allocated.nodeInstanceHostId = party != null ? party.nodeInstanceHostId : "";
-        allocated.visitId = 1;
-        allocated.status = "allocated";
+        NodeInstance allocatedNode = CrossSpireMod.roomHost.getNodeInstanceRegistry()
+            .getByInstanceId(commit.nodeInstanceId);
+        if (allocatedNode == null) return;
+        Protocol.NodeInstanceInfo allocated = NodeInstanceAllocateSender.info(allocatedNode);
         if (!CrossSpireMod.roomHost.getNodeOpenCoordinator()
             .acceptCommit(party, pkt.source, allocated, commit)) {
             BaseMod.logger.info("MessageRouter reject node_generation_commit party=" + partyId);
@@ -849,14 +850,16 @@ public class MessageRouter {
         StandardPacket opened = NodeInstanceOpenedSender.buildOpened(
             allocated, commit.generationResult);
         CrossSpireMod.sendToParty(partyId, StandardPacket.toJson(opened));
-        // Host NIH already entered locally; non-NIH party members open via broadcast.
-        if (!pkt.source.equals(CrossSpireMod.playerId)) {
+        if (pkt.source.equals(CrossSpireMod.playerId)) {
+            SyncExecutor.openNodeInstanceAsHost(allocated, commit.generationResult);
+            publishEventInterface(allocated, commit.generationResult);
+        } else {
             SyncExecutor.openNodeInstanceAsMember(allocated, commit.generationResult);
         }
         BaseMod.logger.info("MessageRouter node_instance_opened party=" + partyId
             + " node=" + allocated.nodeId + " id=" + allocated.nodeInstanceId
-            + " encounter=" + (commit.generationResult != null
-                ? commit.generationResult.encounter : "?"));
+            + " type=" + (commit.generationResult != null
+                ? commit.generationResult.roomType : "?"));
     }
 
     private void handleNodeInstanceOpened(StandardPacket pkt) {
@@ -867,12 +870,29 @@ public class MessageRouter {
         Protocol.NodeInstanceInfo info = opened.nodeInstance;
         BaseMod.logger.info("MessageRouter node_instance_opened party=" + info.partyId
             + " node=" + info.nodeId + " id=" + info.nodeInstanceId);
-        // NIH already opened locally when sending commit; members apply now.
         if (CrossSpireMod.playerId != null
             && CrossSpireMod.playerId.equals(info.nodeInstanceHostId)) {
+            SyncExecutor.openNodeInstanceAsHost(info, opened.generationResult);
+            publishEventInterface(info, opened.generationResult);
             return;
         }
         SyncExecutor.openNodeInstanceAsMember(info, opened.generationResult);
+    }
+
+    private void publishEventInterface(Protocol.NodeInstanceInfo info,
+                                       Protocol.NodeGenerationResult generation) {
+        if (generation == null || !"event".equals(generation.roomType)
+            || generation.eventInterface == null) {
+            return;
+        }
+        StandardPacket iface = EventChoiceSender.interfacePacket(generation.eventInterface);
+        if (CrossSpireMod.isRoomHost()) {
+            handleEventInterfacePacket(iface);
+        } else {
+            CrossSpireMod.send(StandardPacket.toJson(iface));
+        }
+        BaseMod.logger.info("MessageRouter event_interface publish party=" + info.partyId
+            + " event=" + generation.eventInterface.eventInstanceId);
     }
 
     private void routeStandardPacket(String rawMessage) {
@@ -948,6 +968,7 @@ public class MessageRouter {
         if (iface == null) return;
         String partyId = partyId(iface.partyId);
         if (!CrossSpireMod.isRoomHost()) {
+            openOrBindPartyEvent(iface);
             BaseMod.logger.info("MessageRouter event_interface party=" + partyId
                 + " event=" + iface.eventInstanceId);
             return;
@@ -960,8 +981,22 @@ public class MessageRouter {
             return;
         }
         CrossSpireMod.sendToParty(partyId, StandardPacket.toJson(pkt));
+        openOrBindPartyEvent(iface);
         BaseMod.logger.info("MessageRouter event_interface registered party=" + partyId
             + " event=" + iface.eventInstanceId);
+    }
+
+    private static void openOrBindPartyEvent(Protocol.EventInterfacePayload iface) {
+        if (iface == null) return;
+        if (AbstractDungeon.getCurrRoom() != null
+            && AbstractDungeon.getCurrRoom().event != null
+            && NativeEventApprovalPatches.bindIfMatching(
+                AbstractDungeon.getCurrRoom().event, iface)) {
+            BaseMod.logger.info("MessageRouter bound native event approval event="
+                + iface.eventInstanceId);
+            return;
+        }
+        SyncExecutor.enterRemoteEvent(iface);
     }
 
     private void handleEventChoiceRequest(StandardPacket pkt) {
@@ -996,16 +1031,24 @@ public class MessageRouter {
     private void handleEventChoiceApproved(StandardPacket pkt) {
         Protocol.EventChoiceDecisionPayload decision = Protocol.GSON.fromJson(
             pkt.payload, Protocol.EventChoiceDecisionPayload.class);
-        if (decision != null) BaseMod.logger.info("MessageRouter event_choice_approved event="
-            + decision.eventInstanceId + " request=" + decision.requestId);
+        if (decision != null) {
+            NativeEventApprovalPatches.approved(decision);
+            RemoteEventDisplay.onChoiceApproved(decision);
+            BaseMod.logger.info("MessageRouter event_choice_approved event="
+                + decision.eventInstanceId + " request=" + decision.requestId);
+        }
     }
 
     private void handleEventChoiceRejected(StandardPacket pkt) {
         Protocol.EventChoiceDecisionPayload decision = Protocol.GSON.fromJson(
             pkt.payload, Protocol.EventChoiceDecisionPayload.class);
-        if (decision != null) BaseMod.logger.info("MessageRouter event_choice_rejected event="
-            + decision.eventInstanceId + " request=" + decision.requestId
-            + " reason=" + decision.reason);
+        if (decision != null) {
+            NativeEventApprovalPatches.rejected(decision);
+            RemoteEventDisplay.onChoiceRejected(decision);
+            BaseMod.logger.info("MessageRouter event_choice_rejected event="
+                + decision.eventInstanceId + " request=" + decision.requestId
+                + " reason=" + decision.reason);
+        }
     }
 
     private void handleEventPlayerResult(StandardPacket pkt) {

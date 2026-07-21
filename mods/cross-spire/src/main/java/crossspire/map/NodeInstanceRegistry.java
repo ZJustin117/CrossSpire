@@ -16,13 +16,21 @@ public final class NodeInstanceRegistry {
         NodeInstance existing = instancesByKey.get(key);
         if (existing != null) return existing;
         NodeInstance allocated = new NodeInstance("node:" + key, map.mapInstanceId, partyId,
-            nodeId, visitId, nodeInstanceHostId);
+            nodeId, map.getNode(nodeId).roomType, visitId, nodeInstanceHostId);
         instancesByKey.put(key, allocated);
         return allocated;
     }
 
     public synchronized NodeInstance get(String mapInstanceId, String partyId, String nodeId, int visitId) {
         return instancesByKey.get(key(mapInstanceId, partyId, nodeId, visitId));
+    }
+
+    public synchronized NodeInstance getByInstanceId(String nodeInstanceId) {
+        if (nodeInstanceId == null || nodeInstanceId.isEmpty()) return null;
+        for (NodeInstance instance : instancesByKey.values()) {
+            if (nodeInstanceId.equals(instance.nodeInstanceId)) return instance;
+        }
+        return null;
     }
 
     private static boolean isReachable(MapDefinition map, String fromNodeId, String nodeId) {

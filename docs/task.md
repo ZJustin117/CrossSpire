@@ -124,14 +124,18 @@
   - 已落地（2026-07-21）：`map_host_vote` / `map_host_result` 与 `map_register` / `map_registered` 标准包路由；仅本队一致获选的 MapHost 可登记不可变地图；控制台 `maphost` / `mapreg` 诊断入口。
   - 已落地（2026-07-21）：`PartyState` map binding（phase/map_instance/start/revision）；`map_register` 成功后 bind + party_snapshot；`node_instance_host_vote`/`result` 路由与 `crossspire nodehost`；NIH 仅在已绑定地图的小队可选举。
   - 已落地（2026-07-21）：小队 `room_pin`（index→outgoing `node_id`）、队长 pin 聚合、`room_consensus`→RoomHost `NodeEntryCoordinator.allocate`→`node_instance_allocate` 定向 NIH；`party.enterNode` 更新 pos/active instance。
-  - 已落地（2026-07-21）：NIH 处理 allocate（host loopback）→ 诊断用 Cultist 生成 → `node_generation_commit`；RoomHost `NodeOpenCoordinator` 一次性授权后 `node_instance_opened` 本队同步并进入战斗。
+  - 已落地（2026-07-21）：NIH 处理 allocate（host loopback）→ `node_generation_commit`；RoomHost `NodeOpenCoordinator` 一次性授权后 `node_instance_opened` 本队同步。`MapNode.room_type` 经 map register/allocate 保留，纯 `NodeGenerationPlanner` 为 `monster`/`event` 生成类型化结果；event 的已提交 `event_interface` 只在实例打开后由 NIH 经标准包发布（JUnit 全量通过）。
   - 验证（2026-07-21）：Android D1/D2 完成 map host → map register/bind → node host → `room 0` → allocate → generation commit → node opened；两端最终目录为 `active_node`、`pos=node1`。
-  - 保留后续：真实地图 RNG/问号解析、`node_generation_commit` 完整 generation_result、非战斗房间类型。
+  - 保留后续：真实地图 RNG/问号解析、商店/篝火/宝箱/精英/Boss 的完整 generation result 与实际游戏打开路径。
 - [ ] T7.4 事件批准协议：`event_choice_request` → `approved/rejected` → 本地原生执行 → `event_player_result`
   - 已落地（2026-07-21）：schema/DTO/StandardPacket 路由与 `EventApprovalCoordinator`。individual 请求检查 event/party/member/hash/可用选项/request ID；有效请求只批准一次，结果也只接受一次；voting 明确延后 T7.5。
   - 已落地（2026-07-21）：`eventopen` / `eventchoice` / `eventresult` 诊断命令，RoomHost 自身选择走本地回环；成员结果按本队 relay。
-  - 验证（2026-07-21）：Android D1 host + D2 join；D1 `eventopen` → registered、`eventchoice` → approved、`eventresult` → player_result；D2 收到 interface 与 player-result relay。
-  - 保留后续：hash 匹配时原生 `buttonEffect` 前门控及恢复、hash 不匹配时 RemoteEventDisplay/NIH fallback、个人状态差量写入与 T7.5 voting 聚合。
+  - 已落地（2026-07-21）：`NativeEventApprovalPatches` 在 `AbstractEvent.update()` 的共享 `buttonEffect(int)` 调用点前门控已绑定且 class/hash 匹配的原生事件。首次选择发送 `event_choice_request` 并冻结输入；只有 event/request/step/option 全匹配的批准放行一次，拒绝恢复输入且不产生副作用。
+  - 已落地（2026-07-21）：event 节点打开走 `SyncExecutor.enterRemoteEvent`：class/hash 匹配则本地实例化 `EventRoom` 并 bind gate；否则 `RemoteEventDisplay` fallback。打开期间抑制旧 `EventSyncPatches` interface 广播。
+  - 已落地（2026-07-21）：fallback UI 选择改为 `event_choice_request`（`FallbackEventChoiceSession`）；批准关闭 UI、拒绝可重选；NIH 代执行仍后续。`mapreg ... event` 诊断参数可生成 event 节点。
+  - 验证（2026-07-21）：Android D1/D2 room size=2；`eventopen`→registered/fallback UI（diagnostic class）、`eventchoice`→approved、`eventresult`→本队 relay。
+  - 验证（2026-07-21）：`mapreg … event` + `room 0` → generation `type=event`（非 Cultist）；双端 `native event opened` + D2 `bound native event approval`；JUnit 205/205。
+  - 保留后续：图像事件与选牌/目标 UI step，NIH fallback 代执行与个人状态差量，T7.5 voting。
 - [ ] T7.5 事件内房间 instance、同选项成员路径、按小队 voting；跨小队相遇只记录
 - [ ] T7.6 schema-aligned full snapshot（parties + attachments）及 Android 双机/desktop smoke 验证
 

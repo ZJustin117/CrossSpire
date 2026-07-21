@@ -180,11 +180,37 @@
         "map_instance_id": { "type": "string" },
         "party_id": { "type": "string" },
         "node_id": { "type": "string" },
+        "room_type": { "type": "string", "description": "Immutable map node category supplied with allocation." },
         "visit_id": { "type": "integer" },
         "node_instance_host_id": { "type": "string" },
         "status": { "type": "string", "enum": ["allocated", "generating", "active", "cleared", "abandoned"] },
         "generation_revision": { "type": "integer" },
         "state_revision": { "type": "integer" }
+      }
+    },
+    "NodeGenerationResult": {
+      "type": "object",
+      "description": "NodeInstanceHost's resolved content for one allocated node. Exactly one room-type-specific descriptor is required.",
+      "required": ["room_type", "node_id"],
+      "properties": {
+        "room_type": { "type": "string", "enum": ["monster", "event"] },
+        "encounter": { "type": "string", "description": "Required when room_type is monster." },
+        "node_id": { "type": "string" },
+        "event_interface": {
+          "type": "object",
+          "description": "Required when room_type is event; NodeInstanceHost publishes it after node_instance_opened.",
+          "properties": {
+            "event_instance_id": { "type": "string" },
+            "party_id": { "type": "string" },
+            "event_class": { "type": "string" },
+            "event_id": { "type": "string" },
+            "resource_hash": { "type": "string" },
+            "name": { "type": "string" },
+            "description": { "type": "string" },
+            "mode": { "type": "string", "enum": ["individual", "voting"] },
+            "options": { "type": "array" }
+          }
+        }
       }
     }
   },
@@ -469,7 +495,7 @@
       "properties": {
         "node_instance_id": { "type": "string" },
         "generation_revision": { "type": "integer" },
-        "generation_result": { "type": "object" },
+        "generation_result": { "$ref": "#/definitions/NodeGenerationResult" },
         "modifier_state_delta": { "type": "object" }
       }
     },
@@ -477,7 +503,7 @@
       "description": "RoomHost → party: node generation is committed and the party may enter the instance.",
       "properties": {
         "node_instance": { "$ref": "#/definitions/NodeInstanceInfo" },
-        "generation_result": { "type": "object" }
+        "generation_result": { "$ref": "#/definitions/NodeGenerationResult" }
       }
     },
     "monster_mutation_proposal": {

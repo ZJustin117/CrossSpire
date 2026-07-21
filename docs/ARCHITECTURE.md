@@ -430,6 +430,8 @@ NodeInstanceKey = (map_instance_id, party_id, node_id, visit_id)
 
 NodeInstanceHost 是本队节点内怪物、事件、商店、宝箱、篝火、问号解析和核心状态的强所有者。地图图形可以共享，但位置、已访问节点、生成遗物状态和战斗状态按小队隔离；本期不实现相遇、合并或共享战斗。
 
+首个非战斗节点切片只处理 `monster` 与 `event` 两种不可变 `MapNode.room_type`。NodeInstanceHost 为已分配实例生成类型化 `NodeGenerationResult`：`monster` 必须带 `encounter`，`event` 必须带完整 `event_interface`。RoomHost 仅校验该类型化提交并向本队打开实例；打开 event 实例后仅 NodeInstanceHost 经房主发布该已提交的 interface。此切片不解析 `?`、不生成商店/篝火/宝箱，也不提前消耗生成修正器。
+
 影响房间生成的遗物只在节点实例生成时生效。NodeInstanceHost 使用只读、版本化的生成上下文和声明式修正器，不能临时迁移或挂载远端 `AbstractRelic`。未知 Mod 遗物由真实所有者受控解析；Tiny Chest 等修正器计数变更必须与 `node_generation_commit` 原子提交。
 
 ### 小队地图标注与共识
@@ -769,6 +771,10 @@ event_interface {
 ### 原生选择请求与批准
 
 `AbstractEvent.buttonEffect(int)` 与后续原生选牌/确认 UI 的 patch 在副作用前拦截操作。每一步都有稳定的 `request_id` 和 `ui_step`，使重复包、过期批准和并发选择可被拒绝或幂等处理。
+
+原版事件的首个 gate 放在 `AbstractEvent.update()` 内对 `buttonEffect(int)` 的共享调用点：只有已绑定到已验证 `event_interface` 的本地事件实例会被拦截。首次调用冻结该 dialog 并发送 request；同一 `event_instance_id`、`request_id`、`ui_step` 和选项的批准只能放行一次；拒绝或不匹配批准不能执行副作用，拒绝后恢复输入。未绑定事件、单人和旧协议路径保持原生行为。
+
+event 节点打开时，匹配客户端用 `Class.forName(event_class)` 构造事件并进入 `EventRoom`，在 `onEnterRoom` 后绑定 approval gate；hash 或类不匹配则显示 `RemoteEventDisplay`，不尝试 sandbox。打开原生事件期间抑制旧 legacy `event_interface` 广播。图像事件、选牌/目标后的额外 UI step 与 fallback NIH 执行不属于该首个 gate。
 
 ```
 1. 匹配客户端选择按钮、卡牌或目标
@@ -1400,7 +1406,9 @@ node_instance_allocate
 
 node_generation_commit
   payload: { node_instance_id, generation_revision, generation_result, modifier_state_delta }
-  说明: 节点实例主原子提交问号解析/房间内容与生成遗物状态变化；重试不能再次消耗 RNG 或修正器计数。
+  generation_result: { room_type: "monster", encounter, node_id }
+                   | { room_type: "event", event_interface, node_id }
+  说明: 节点实例主原子提交问号解析/房间内容与生成遗物状态变化；重试不能再次消耗 RNG 或修正器计数。`event_interface` 只在 RoomHost 打开 event 实例后由 NodeInstanceHost 发布。
 ```
 
 #### 引用/调用操作

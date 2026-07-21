@@ -44,6 +44,7 @@ public final class MapRegisterSender {
             MapNode node = nodes.get(i);
             Protocol.MapNode n = new Protocol.MapNode();
             n.nodeId = node.nodeId;
+            n.roomType = node.roomType;
             n.outgoingNodeIds = node.outgoingNodeIds.toArray(new String[0]);
             dto.nodes[i] = n;
         }

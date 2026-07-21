@@ -189,10 +189,15 @@ public class CrossSpireCommand extends ConsoleCommand {
         String mapId = tokens.length > depth + 1 ? tokens[depth + 1] : "M1";
         String start = tokens.length > depth + 2 ? tokens[depth + 2] : "start";
         String next = tokens.length > depth + 3 ? tokens[depth + 3] : "node1";
+        String nextType = tokens.length > depth + 4 ? tokens[depth + 4] : "monster";
+        if (!"monster".equals(nextType) && !"event".equals(nextType)) {
+            DevConsole.log("Usage: crossspire mapreg [map_id] [start] [next] [monster|event]");
+            return;
+        }
         MapDefinition map = new MapDefinition(mapId, "EXORDIUM", 1, "console", start,
             Arrays.asList(
                 new MapNode(start, Arrays.asList(next)),
-                new MapNode(next, Arrays.<String>asList())));
+                new MapNode(next, nextType, Arrays.<String>asList())));
         StandardPacket register = MapRegisterSender.buildRegister(
             partyId, CrossSpireMod.playerId, UUID.randomUUID().toString().substring(0, 8), map);
         String raw = StandardPacket.toJson(register);
@@ -202,8 +207,9 @@ public class CrossSpireCommand extends ConsoleCommand {
             CrossSpireMod.send(raw);
         }
         DevConsole.log("Map register party=" + partyId + " map=" + mapId
-            + " start=" + start + "->" + next);
-        BaseMod.logger.info("CrossSpire mapreg party=" + partyId + " map=" + mapId);
+            + " start=" + start + "->" + next + " (" + nextType + ")");
+        BaseMod.logger.info("CrossSpire mapreg party=" + partyId + " map=" + mapId
+            + " nextType=" + nextType);
     }
 
     private void cmdNodeInstanceHostVote(String[] tokens, int depth) {

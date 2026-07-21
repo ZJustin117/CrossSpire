@@ -489,8 +489,8 @@ THEN  塔2 客户端实现相同的 StandardPacket 协议 + Reference<T> 抽象
 |----|------|---------|
 | FR-4.1 | 小队过渡：阶段开始前本队进入 STAGE_TRANSITION，完成组队、选图、MapHost/NodeInstanceHost 选择和地图确认 | US-4, US-4b |
 | FR-4.2 | 地图生成：MapHost 用本地 RNG 生成不可变 MapDefinition 并登记到房主 MapRegistry | US-4 |
-| FR-4.3 | 节点决定：NodeInstanceHost 确定战斗/事件/商店类型和内容；MapHost 登记后不处理节点 | US-4 |
-| FR-4.4 | 事件接口：NodeInstanceHost 按 party_id 广播带 event class/hash 的 event_interface；匹配端原生渲染，否则 fallback | US-4 |
+| FR-4.3 | 节点决定：NodeInstanceHost 按不可变 `MapNode.room_type` 生成节点内容，并在 `node_generation_commit` 原子提交类型化结果；首个 event 切片支持 `monster`/`event`，MapHost 登记后不处理节点 | US-4 |
+| FR-4.4 | 事件接口：已打开的 event 节点由 NodeInstanceHost 从已提交的 `generation_result.event_interface` 按 party_id 广播带 event class/hash 的 event_interface；匹配端原生渲染，否则 fallback | US-4 |
 | FR-4.5 | 事件选择：原生选择先 event_choice_request；获批后本地执行个人结果，fallback 由 NodeInstanceHost 定向执行 | US-4 |
 | FR-4.6 | 所有者交互选择：invoke 中触发的选择面板（选牌/选目标等）回传给调用方 UI | US-4, US-7 |
 | FR-4.7 | 命令标注：`crossspire room <index>` 为本队标注下一个房间，重复标注即覆盖 | US-4a |
@@ -498,7 +498,7 @@ THEN  塔2 客户端实现相同的 StandardPacket 协议 + Reference<T> 抽象
 | FR-4.9 | 小队主机选举：创建地图时选 MapHost；每个绑定地图的小队选 NodeInstanceHost；均为本队全员一致 | US-4b |
 | FR-4.10 | 主机恢复：MapHost 登记后掉线不影响地图；NodeInstanceHost 掉线暂停本队节点并重选/恢复 | US-4b, US-6 |
 | FR-4.11 | 小队管理：默认小队、显式 leave/join、成员最小 ID 队长、按小队隔离可见性/队列/阶段/标注 | US-4c | P7.4a 计划 |
-| FR-4.12 | 事件批准：原生选择先请求批准；个人结果本地执行并按玩家同步；voting 按小队共识 | US-4, US-7 | P7.4b 计划 |
+| FR-4.12 | 事件批准：event 节点打开后匹配端实例化原生事件并绑定；`buttonEffect` 前请求批准，匹配批准只恢复一次，拒绝恢复输入且不产生副作用；不匹配端 fallback UI；个人结果本地执行并按玩家同步；voting 按小队共识 | US-4, US-7 | P7.4a gate + native open；NIH fallback 执行/结果差量/voting 后续 |
 
 ### FR-5 素材系统
 

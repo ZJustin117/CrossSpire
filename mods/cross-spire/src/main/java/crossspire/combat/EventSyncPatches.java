@@ -13,10 +13,14 @@ import java.util.List;
 
 public class EventSyncPatches {
 
+    /** Suppress legacy event_interface broadcast while P7 opens a party-scoped event instance. */
+    public static boolean suppressBroadcast = false;
+
     @SpirePatch(clz = AbstractEvent.class, method = "onEnterRoom", paramtypez = {})
     public static class OnEnterRoom {
         @SpirePostfixPatch
         public static void postfix(AbstractEvent __instance) {
+            if (suppressBroadcast) return;
             if (CrossSpireMod.stageHost == null) return;
             if (!CrossSpireMod.stageHost.isStageHost() && !CrossSpireMod.isRoomHost()) return;
 

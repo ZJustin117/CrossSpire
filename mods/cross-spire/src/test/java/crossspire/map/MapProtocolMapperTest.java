@@ -19,6 +19,7 @@ public class MapProtocolMapperTest {
         assertEquals("M1", map.mapInstanceId);
         assertEquals("a", map.startNodeId);
         assertEquals(true, map.hasEdge("a", "b"));
+        assertEquals("event", map.getNode("b").roomType);
     }
 
     @Test
@@ -34,6 +35,7 @@ public class MapProtocolMapperTest {
         a.outgoingNodeIds = new String[] {"b"};
         Protocol.MapNode b = new Protocol.MapNode();
         b.nodeId = "b";
+        b.roomType = "event";
         b.outgoingNodeIds = new String[0];
         Protocol.MapDefinition payload = new Protocol.MapDefinition();
         payload.mapInstanceId = "M1";

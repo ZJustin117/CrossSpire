@@ -11,16 +11,7 @@ public final class NodeInstanceAllocateSender {
     private NodeInstanceAllocateSender() {}
 
     public static StandardPacket build(NodeInstance instance, String requestId) {
-        Protocol.NodeInstanceInfo info = new Protocol.NodeInstanceInfo();
-        info.nodeInstanceId = instance.nodeInstanceId;
-        info.mapInstanceId = instance.mapInstanceId;
-        info.partyId = instance.partyId;
-        info.nodeId = instance.nodeId;
-        info.visitId = instance.visitId;
-        info.nodeInstanceHostId = instance.nodeInstanceHostId;
-        info.status = "allocated";
-        info.generationRevision = 0;
-        info.stateRevision = 0;
+        Protocol.NodeInstanceInfo info = info(instance);
 
         Protocol.NodeInstanceAllocatePayload payload = new Protocol.NodeInstanceAllocatePayload();
         payload.nodeInstance = info;
@@ -36,5 +27,20 @@ public final class NodeInstanceAllocateSender {
         packet.operation = PacketOperation.NODE_INSTANCE_ALLOCATE;
         packet.payload = Protocol.GSON.toJsonTree(payload).getAsJsonObject();
         return packet;
+    }
+
+    public static Protocol.NodeInstanceInfo info(NodeInstance instance) {
+        Protocol.NodeInstanceInfo info = new Protocol.NodeInstanceInfo();
+        info.nodeInstanceId = instance.nodeInstanceId;
+        info.mapInstanceId = instance.mapInstanceId;
+        info.partyId = instance.partyId;
+        info.nodeId = instance.nodeId;
+        info.roomType = instance.roomType;
+        info.visitId = instance.visitId;
+        info.nodeInstanceHostId = instance.nodeInstanceHostId;
+        info.status = "allocated";
+        info.generationRevision = 0;
+        info.stateRevision = 0;
+        return info;
     }
 }

@@ -351,6 +351,7 @@ public final class Protocol {
         @SerializedName("map_instance_id") public String mapInstanceId;
         @SerializedName("party_id") public String partyId;
         @SerializedName("node_id") public String nodeId;
+        @SerializedName("room_type") public String roomType;
         @SerializedName("visit_id") public int visitId;
         @SerializedName("node_instance_host_id") public String nodeInstanceHostId;
         public String status;
@@ -405,6 +406,7 @@ public final class Protocol {
         @SerializedName("room_type") public String roomType;
         @SerializedName("encounter") public String encounter;
         @SerializedName("node_id") public String nodeId;
+        @SerializedName("event_interface") public EventInterfacePayload eventInterface;
     }
 
     public static class NodeInstanceOpenedPayload {

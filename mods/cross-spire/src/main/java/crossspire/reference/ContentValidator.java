@@ -33,6 +33,28 @@ public final class ContentValidator {
         return local.equals(remoteHash);
     }
 
+    /** Hashes a loadable class for event and other class-addressed content validation. */
+    public static String hashClass(String className) {
+        if (className == null || className.isEmpty()) return "";
+        try {
+            Class<?> cls = Class.forName(className);
+            String resource = "/" + className.replace('.', '/') + ".class";
+            InputStream stream = cls.getResourceAsStream(resource);
+            if (stream == null) return "";
+            try {
+                ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+                byte[] buffer = new byte[4096];
+                int read;
+                while ((read = stream.read(buffer)) != -1) bytes.write(buffer, 0, read);
+                return sha256(bytes.toByteArray());
+            } finally {
+                stream.close();
+            }
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
     private static String hashFromInstance(String resourceType, String resourceId) {
         try {
             Class<?> cls = null;

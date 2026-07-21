@@ -29,12 +29,33 @@ public class NodeOpenCoordinatorTest {
         assertTrue(coordinator.isOpened(allocated.nodeInstanceId));
     }
 
+    @Test
+    public void acceptsEventCommitOnlyWhenItContainsAnInterface() {
+        PartyManager parties = new PartyManager();
+        parties.initializeDefaultParty(Arrays.asList("alice"), "");
+        parties.bindMap("P0", "M1", "start", "EXORDIUM");
+        parties.setNodeInstanceHost("P0", "alice");
+        PartyState party = parties.getParty("P0");
+        Protocol.NodeInstanceInfo allocated = info("node:M1/P0/event/1", "alice");
+        allocated.roomType = "event";
+
+        Protocol.NodeGenerationCommitPayload invalid = commit(allocated, "");
+        invalid.generationResult.roomType = "event";
+        assertFalse(new NodeOpenCoordinator().acceptCommit(party, "alice", allocated, invalid));
+
+        Protocol.NodeGenerationCommitPayload event = commit(allocated, "");
+        event.generationResult = NodeGenerationPlanner.plan(
+            new MapNode("a", "event", Arrays.<String>asList()), allocated);
+        assertTrue(new NodeOpenCoordinator().acceptCommit(party, "alice", allocated, event));
+    }
+
     private static Protocol.NodeInstanceInfo info(String id, String nih) {
         Protocol.NodeInstanceInfo info = new Protocol.NodeInstanceInfo();
         info.nodeInstanceId = id;
         info.mapInstanceId = "M1";
         info.partyId = "P0";
         info.nodeId = "a";
+        info.roomType = "monster";
         info.visitId = 1;
         info.nodeInstanceHostId = nih;
         info.status = "allocated";
