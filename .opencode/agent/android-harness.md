@@ -18,16 +18,28 @@ permission:
   # edit is denied; allow external reads so E2E does not hang on permission prompts.
   external_directory:
     "*": allow
-  # Default allow for device E2E. Prior default bash:"*":ask hung the subagent on
-  # every adb shell/push, timeout wrapper, compound "cmd1 && cmd2", and echo.
-  # Keep daemon lifecycle as ask; never edit mod source (edit: deny).
+  # Default ask. Allow only connector status, sts-harness, and port-forward ops.
+  # Keep connector lifecycle as ask; never edit mod source (edit: deny).
   bash:
-    "*": allow
-    "python3 -m scripts.tools.connector stop*": ask
-    "python3 -m scripts.tools.connector restart*": ask
+    "*": ask
     "rm -rf *": deny
     "git commit*": deny
     "git push*": deny
+    "cd * && python3 -m scripts.tools.connector status": allow
+    "python3 -m scripts.tools.connector status": allow
+    "python3 scripts/tools/main.py sts-harness *": allow
+    "python3 */scripts/tools/main.py sts-harness *": allow
+    "adb -s * forward tcp:* tcp:*": allow
+    "adb -s * reverse tcp:* tcp:*": allow
+    "adb -s * shell pidof io.stamethyst": allow
+    "adb -s * shell ps *": allow
+    "adb -s * logcat *": allow
+    "python3 -m scripts.tools.connector stop*": ask
+    "python3 -m scripts.tools.connector restart*": ask
+    "python3 -m scripts.tools.connector start*": ask
+    "cd * && python3 -m scripts.tools.connector stop*": ask
+    "cd * && python3 -m scripts.tools.connector restart*": ask
+    "cd * && python3 -m scripts.tools.connector start*": ask
 ---
 
 You are the CrossSpire **Android harness E2E** subagent. You drive connector + `sts-harness` console checks and report multiplayer readiness. You never edit mod source or commit.

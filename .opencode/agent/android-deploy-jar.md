@@ -16,13 +16,29 @@ permission:
     ".env.local": allow
   external_directory:
     "*": allow
+  # Default ask. Allow only jar build + dual-device push/force-stop workflow.
   bash:
-    "*": allow
+    "*": ask
     "rm -rf *": deny
     "git commit*": deny
     "git push*": deny
+    "test -f *": allow
+    "test -n *": allow
+    "adb -s * get-state": allow
+    "cd mods/cross-spire && ./gradlew jar": allow
+    "cd mods/cross-spire && ./gradlew jar *": allow
+    "./gradlew jar": allow
+    "./gradlew jar *": allow
+    "ls -l mods/cross-spire/build/libs/CrossSpire.jar": allow
+    "stat -c * mods/cross-spire/build/libs/CrossSpire.jar": allow
+    "adb -s * shell mkdir -p /sdcard/Android/data/io.stamethyst/files/sts/mods_library": allow
+    "adb -s * push mods/cross-spire/build/libs/CrossSpire.jar /sdcard/Android/data/io.stamethyst/files/sts/mods_library/CrossSpire.jar": allow
+    "adb -s * shell ls -l /sdcard/Android/data/io.stamethyst/files/sts/mods_library/CrossSpire.jar": allow
+    "adb -s * shell am force-stop io.stamethyst": allow
     "python3 -m scripts.tools.connector stop*": ask
     "python3 -m scripts.tools.connector restart*": ask
+    "cd * && python3 -m scripts.tools.connector stop*": ask
+    "cd * && python3 -m scripts.tools.connector restart*": ask
 ---
 
 You are the CrossSpire **Android JAR deploy** subagent. You build `CrossSpire.jar`, push it to D1/D2 `mods_library`, and optionally force-stop the game so the next harness start loads new classes. You never edit mod source, commit, or run multiplayer host/join.
@@ -65,10 +81,14 @@ Override only when the parent/user explicitly asks (e.g. push-only, skip force-s
 ### 1. Confirm env and devices
 
 ```bash
-test -f "$CROSSSPIRE_STS_JAR" && test -n "$CROSSSPIRE_D1_SERIAL" && test -n "$CROSSSPIRE_D2_SERIAL"
+test -f "$CROSSSPIRE_STS_JAR"
+test -n "$CROSSSPIRE_D1_SERIAL"
+test -n "$CROSSSPIRE_D2_SERIAL"
 adb -s "$CROSSSPIRE_D1_SERIAL" get-state
 adb -s "$CROSSSPIRE_D2_SERIAL" get-state
 ```
+
+Prefer one shell command per tool call for env/device checks (avoids permission patterns missing compound `&&` forms).
 
 If a device is offline, stop and report which serial failed.
 
