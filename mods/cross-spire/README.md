@@ -23,6 +23,8 @@ cd mods/cross-spire
 # 输出: build/libs/CrossSpire.jar
 ```
 
+Android 设备推送：OpenCode `@android-deploy-jar`，或见 `docs/development/android-harness.md`（`mods_library/CrossSpire.jar` + `force-stop`）。
+
 所有游戏和 Mod JAR 路径都必须显式提供。Android 开发者可以将这些参数指向本地 SlayTheAmethyst assets，Desktop 开发者可以指向标准 STS/ModTheSpire 安装；不要把个人机器的绝对路径提交到构建脚本。
 
 ## 子包
@@ -30,12 +32,22 @@ cd mods/cross-spire
 | 包 | 职责 |
 |----|------|
 | `crossspire` | 入口 `@SpireInitializer` + `EventSuppression` |
-| `combat/` | `CentralQueueManager` 房主中央队列 + `CombatResultReplayer` 诱导重放 + `InteractionCapture` + Stub 对象 |
+| `combat/` | `CentralQueueManager` 小队队长中央队列 + `CombatResultReplayer` 诱导重放 + `InteractionCapture` + Stub 对象 |
 | `network/` | `RoomHostClient` 星型拓扑 + `HeartbeatManager` + `Protocol` POJO |
+| `party/` | `PartyState` / `PartyManager` 小队目录、确定性队长选举与 `PartyCoordinator` 路由授权 |
+| `map/` | `MapRegistry` / `NodeInstanceRegistry` / `MapRegistrationCoordinator`：RoomHost 保存不可变地图拓扑、小队隔离节点实例，以及 MapHost 登记授权 |
 | `reference/` | `Reference` 引用模型 (Local/Remote/Null) + `ContentValidator` + `ReferenceFactory` |
-| `remote/` | `RemotePlayer` / `RemotePlayerRegistry` / `RemoteRenderer` / `StageHost` |
+| `remote/` | `RemotePlayer` / `RemotePlayerRegistry` / `RemoteRenderer` / `StageHost`；渲染投影由 `PartyVisibility` 限制为同队成员 |
 | `resource/` | 素材传递：`RemoteAssetCache` + `RemoteAssetServer` + `RemoteCharacterResource` |
 | `ui/` | `LobbyScreen` / `QueueDisplay` / 在线角色状态覆盖层 |
+
+## Gameplay Patches
+
+| Patch class | Fix | Symptom addressed |
+|-------------|-----|-------------------|
+| `MonsterTurnPatches.PreTurnLogic` | Only the stage host may execute `MonsterGroup.applyPreTurnLogic()` while connected; other clients wait for authoritative `combat_result`. | Remote clients previously ran local monster AI as well as applying the stage-host result, allowing double damage and divergent combat state. |
+| `CombatSyncPatches.OnMonsterRoomEntry` | Clears in-combat `ComponentAttachment` metadata before a new monster room begins. | Buff ownership metadata from a completed combat could survive into a later room and gate the wrong projected power. |
+| `MonsterTurnPatches.PreTurnLogic` | Runs connected monster AI only on the stage host during the active `monster_turn` transaction. | A delayed, duplicated, or non-stage-host monster completion could otherwise replay effects or advance a later turn. |
 
 ## 文档
 

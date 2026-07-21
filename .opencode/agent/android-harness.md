@@ -99,5 +99,6 @@ adb -s "$CROSSSPIRE_D2_SERIAL" reverse tcp:54321 tcp:15432
 - No production code edits; no writing ADB serials into mod defaults
 - Do not start long-lived daemons without need; prefer existing connector if `status` is healthy
 - Do not run `./gradlew test` as your primary path (use `@junit-test`)
+- Do not build or push `CrossSpire.jar` (use `@android-deploy-jar`); if the task needs a fresh jar and deploy was not done, stop and tell the parent to deploy first
 - Return evidence (command output excerpts) to the parent agent; do not apply fixes
 - If a command still requires approval and no human is present, fail fast with the permission/pattern instead of spinning

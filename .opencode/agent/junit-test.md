@@ -53,7 +53,7 @@ cd mods/cross-spire && ./gradlew test \
 
 Optional: single class via Gradle `--tests` when the user or parent agent names a class.
 
-Do **not** run Android harness, adb, or connector.
+Do **not** run Android harness, adb, connector, or jar push (use `@android-deploy-jar` / `@android-harness`).
 
 ## Output format
 

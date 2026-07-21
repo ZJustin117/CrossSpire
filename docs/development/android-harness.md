@@ -81,6 +81,29 @@ cd mods/cross-spire
 
 `desktop-1.0.jar` 的位置取决于本地 STS 安装。CrossSpire 不再猜测 Steam 或 SlayTheAmethyst 的安装位置。
 
+### 推送 `CrossSpire.jar` 到设备
+
+OpenCode：改 mod 后、联机 E2E 前，委派 `@android-deploy-jar`（`./gradlew jar` → 双机 `mods_library` → 默认 `am force-stop io.stamethyst`）。**不要**把构建/推送塞进 `@android-harness`。
+
+手动等价（仓库根，已 `source .env.local`）：
+
+```bash
+cd mods/cross-spire && ./gradlew jar \
+  -PstsJar="$CROSSSPIRE_STS_JAR" \
+  -PbaseModJar="${CROSSSPIRE_BASEMOD_JAR:-$SLAY_THE_AMETHYST_ROOT/app/src/main/assets/components/mods/BaseMod.jar}" \
+  -PmodTheSpireJar="${CROSSSPIRE_MODTHESPIRE_JAR:-$SLAY_THE_AMETHYST_ROOT/app/src/main/assets/components/mods/ModTheSpire.jar}"
+
+JAR="mods/cross-spire/build/libs/CrossSpire.jar"
+REMOTE="/sdcard/Android/data/io.stamethyst/files/sts/mods_library/CrossSpire.jar"
+for s in "$CROSSSPIRE_D1_SERIAL" "$CROSSSPIRE_D2_SERIAL"; do
+  adb -s "$s" shell mkdir -p /sdcard/Android/data/io.stamethyst/files/sts/mods_library
+  adb -s "$s" push "$JAR" "$REMOTE"
+  adb -s "$s" shell am force-stop io.stamethyst
+done
+```
+
+推送后用 harness `start` 冷启动；勿依赖仅 `SkipInstall` 热重启加载新类。
+
 Harness 的 game-probe 默认端口见 `$CROSSSPIRE_GAME_PROBE_PORT`（常见 `9099`），一般不需要传 `-AgentPort`。
 
 ## 前置条件
