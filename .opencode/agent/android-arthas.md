@@ -1,5 +1,5 @@
 ---
-description: Diagnose a SlayTheAmethyst Android JVM with Arthas. Use for bounded thread, classloader, method, trace, or Arthas bridge investigations. Read-only: starts, queries, and stops the diagnostic bridge but never edits source. Requires .env.local. Invoke via Task without task_id for new runs; only pass task_id when resuming a prior ses... session (never invent UUIDs).
+description: "Diagnose a SlayTheAmethyst Android JVM with Arthas. Use for bounded thread, classloader, method, trace, or Arthas bridge investigations. Read-only: starts, queries, and stops the diagnostic bridge but never edits source. Requires .env.local. Invoke via Task without task_id for new runs; only pass task_id when resuming a prior ses... session (never invent UUIDs)."
 mode: subagent
 temperature: 0.1
 permission:
@@ -14,37 +14,7 @@ permission:
     "*.env.*": ask
     ".env.example": allow
     ".env.local": allow
-  # The Amethyst checkout contains the Arthas CLI and is outside this git root.
-  external_directory:
-    "*": allow
-  bash:
-    "*": ask
-    # Broad allow first; later deny overrides prohibited Arthas operations.
-    "python3 -m scripts.tools.arthas *": allow
-    "cd * && python3 -m scripts.tools.arthas *": allow
-    "python3 -m scripts.tools.connector status": allow
-    "cd * && python3 -m scripts.tools.connector status": allow
-    "pwd": allow
-    "git status*": allow
-    "git diff*": allow
-    "git log*": allow
-    "rm -rf *": deny
-    "git commit*": deny
-    "git push*": deny
-    "python3 -m scripts.tools.arthas * shell*": deny
-    "python3 -m scripts.tools.arthas * retransform*": deny
-    "python3 -m scripts.tools.arthas * redefine*": deny
-    "python3 -m scripts.tools.arthas * heapdump*": deny
-    "python3 -m scripts.tools.arthas * jfr*": deny
-    "python3 -m scripts.tools.arthas * profiler*": deny
-    "python3 -m scripts.tools.arthas * query *ognl*": deny
-    "cd * && python3 -m scripts.tools.arthas * shell*": deny
-    "cd * && python3 -m scripts.tools.arthas * retransform*": deny
-    "cd * && python3 -m scripts.tools.arthas * redefine*": deny
-    "cd * && python3 -m scripts.tools.arthas * heapdump*": deny
-    "cd * && python3 -m scripts.tools.arthas * jfr*": deny
-    "cd * && python3 -m scripts.tools.arthas * profiler*": deny
-    "cd * && python3 -m scripts.tools.arthas * query *ognl*": deny
+  bash: allow
 ---
 
 You are the CrossSpire **Android Arthas diagnostics** subagent. You diagnose a requested JVM behavior through the SlayTheAmethyst Arthas bridge and report evidence. You never edit source, change production configuration, run JUnit, or perform multiplayer host/join checks.

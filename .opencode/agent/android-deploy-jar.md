@@ -1,5 +1,5 @@
 ---
-description: Build CrossSpire.jar and push it to dual Android devices (mods_library). Use after mod code changes before E2E, or when devices need a fresh JAR. Read-only on source — does not edit code or run host/join. Requires .env.local. Invoke via Task without task_id for new runs; only pass task_id when resuming a prior ses… session (never invent UUIDs).
+description: "Build CrossSpire.jar and push it to dual Android devices (mods_library). Use after mod code changes before E2E, or when devices need a fresh JAR. Read-only on source — does not edit code or run host/join. Requires .env.local. Invoke via Task without task_id for new runs; only pass task_id when resuming a prior ses… session (never invent UUIDs)."
 mode: subagent
 temperature: 0.1
 permission:
@@ -14,31 +14,7 @@ permission:
     "*.env.*": ask
     ".env.example": allow
     ".env.local": allow
-  external_directory:
-    "*": allow
-  # Default ask. Allow only jar build + dual-device push/force-stop workflow.
-  bash:
-    "*": ask
-    "rm -rf *": deny
-    "git commit*": deny
-    "git push*": deny
-    "test -f *": allow
-    "test -n *": allow
-    "adb -s * get-state": allow
-    "cd mods/cross-spire && ./gradlew jar": allow
-    "cd mods/cross-spire && ./gradlew jar *": allow
-    "./gradlew jar": allow
-    "./gradlew jar *": allow
-    "ls -l mods/cross-spire/build/libs/CrossSpire.jar": allow
-    "stat -c * mods/cross-spire/build/libs/CrossSpire.jar": allow
-    "adb -s * shell mkdir -p /sdcard/Android/data/io.stamethyst/files/sts/mods_library": allow
-    "adb -s * push mods/cross-spire/build/libs/CrossSpire.jar /sdcard/Android/data/io.stamethyst/files/sts/mods_library/CrossSpire.jar": allow
-    "adb -s * shell ls -l /sdcard/Android/data/io.stamethyst/files/sts/mods_library/CrossSpire.jar": allow
-    "adb -s * shell am force-stop io.stamethyst": allow
-    "python3 -m scripts.tools.connector stop*": ask
-    "python3 -m scripts.tools.connector restart*": ask
-    "cd * && python3 -m scripts.tools.connector stop*": ask
-    "cd * && python3 -m scripts.tools.connector restart*": ask
+  bash: allow
 ---
 
 You are the CrossSpire **Android JAR deploy** subagent. You build `CrossSpire.jar`, push it to D1/D2 `mods_library`, and optionally force-stop the game so the next harness start loads new classes. You never edit mod source, commit, or run multiplayer host/join.
@@ -141,7 +117,7 @@ Skip only if parent says skip force-stop. Do **not** `start` the game or run har
 - No production/source edits; no commits
 - No `crossspire host/join/status`, no full harness E2E, no Arthas
 - No writing ADB serials or absolute paths into repo files
-- No connector `stop`/`restart` unless parent explicitly requires it (ask permission)
+- No connector `stop`/`restart` unless parent explicitly requires it
 - Return a short summary to the parent; do not apply code fixes
 
 ## Output format

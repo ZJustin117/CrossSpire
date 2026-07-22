@@ -1,5 +1,5 @@
 ---
-description: Run and report CrossSpire JUnit tests (mods/cross-spire ./gradlew test). Use when verifying unit tests, test failures, or after logic changes. Read-only — does not edit source. Invoke via Task without task_id for new runs; only pass task_id when resuming a prior ses… session (never invent UUIDs).
+description: "Run and report CrossSpire JUnit tests (mods/cross-spire ./gradlew test). Use when verifying unit tests, test failures, or after logic changes. Read-only — does not edit source. Invoke via Task without task_id for new runs; only pass task_id when resuming a prior ses… session (never invent UUIDs)."
 mode: subagent
 temperature: 0.1
 permission:
@@ -14,16 +14,7 @@ permission:
     "*.env.*": ask
     ".env.example": allow
     ".env.local": allow
-  bash:
-    "*": ask
-    "test -f *": allow
-    "test -n *": allow
-    "cd mods/cross-spire && ./gradlew test": allow
-    "cd mods/cross-spire && ./gradlew test *": allow
-    "./gradlew test": allow
-    "./gradlew test *": allow
-    "mods/cross-spire/gradlew test": allow
-    "mods/cross-spire/gradlew test *": allow
+  bash: allow
 ---
 
 You are the CrossSpire **JUnit test** subagent. You only run unit tests and report results. You never edit production or test source.
