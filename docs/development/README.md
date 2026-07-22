@@ -47,4 +47,4 @@ OpenCode 项目插件 [`.opencode/plugins/local-env.ts`](../../.opencode/plugins
 
 - [`../console-commands.md`](../console-commands.md) — `crossspire` BaseMod console 语义
 - [`../ARCHITECTURE.md`](../ARCHITECTURE.md) — 架构与协议（生产路径）
-- 模块技术细节：`$SLAY_THE_AMETHYST_ROOT/scripts/tools/arthas/README.md`
+- 模块技术细节：`$CROSSSPIRE_AMETHYST_TOOLS_DIR/arthas/README.md`

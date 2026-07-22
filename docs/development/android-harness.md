@@ -64,11 +64,11 @@ set -a && source .env.local && set +a
 
 入口约定：
 
-- CrossSpire 不再包含 `scripts/` symlink；共享工具位于 `$SLAY_THE_AMETHYST_ROOT/scripts/tools`。
-- harness：在 CrossSpire 根执行 `python3 "$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py" sts-harness ...`。
+- CrossSpire 不再包含 `scripts/` symlink；共享工具位于 `$CROSSSPIRE_AMETHYST_TOOLS_DIR`。
+- harness：在 CrossSpire 根执行 `python3 "$CROSSSPIRE_AMETHYST_TOOLS_DIR/main.py" sts-harness ...`。
 - connector 管理命令：在 **SlayTheAmethyst 仓库根** 执行 `python3 -m scripts.tools.connector ...`（需能 import `scripts.tools`）。
 - harness 的 `repo_root` 是入口脚本所在的 Amethyst 根；其 Gradle 操作仍在 Amethyst 侧。
-- CrossSpire 调试必须在仓库根先设 `HARNESS_OUT_DIR="$PWD/debug-artifacts/harness"`，并在每条 harness 命令上传 `-OutDir "$HARNESS_OUT_DIR"`。`-OutDir` 必须是绝对路径；相对路径按 Amethyst `repo_root` 解析。每次运行写入 `$HARNESS_OUT_DIR/<timestamp>/result.json`，不清空既有产物。
+- CrossSpire 调试必须设置绝对路径 `$CROSSSPIRE_HARNESS_OUT_DIR`，并在每条 harness 命令上传 `-OutDir "$CROSSSPIRE_HARNESS_OUT_DIR"`。`-OutDir` 必须是绝对路径；相对路径按 Amethyst `repo_root` 解析。每次运行写入 `$CROSSSPIRE_HARNESS_OUT_DIR/<timestamp>/result.json`，不清空既有产物。
 
 构建 CrossSpire：
 
@@ -144,22 +144,22 @@ python3 -m scripts.tools.connector stop
 Harness 只是调用标准 BaseMod console；命令本身与直接在 BaseMod console 输入时相同。以下示例假设已 `source .env.local`，并在 CrossSpire 仓库根使用 symlink 入口。
 
 ```bash
-HARNESS_OUT_DIR="$PWD/debug-artifacts/harness"
+test -n "$CROSSSPIRE_HARNESS_OUT_DIR"
 ```
 
-每条命令均传 `-OutDir "$HARNESS_OUT_DIR"`，使 `result.json`、logcat、截图和命令诊断产物留在 CrossSpire 的 gitignored `debug-artifacts/` 下；以 stdout 打印的 `Harness result:` 路径为准。
+每条命令均传 `-OutDir "$CROSSSPIRE_HARNESS_OUT_DIR"`，使 `result.json`、logcat、截图和命令诊断产物留在 CrossSpire 的 gitignored `debug-artifacts/` 下；以 stdout 打印的 `Harness result:` 路径为准。
 
 先通过 Harness 启动并等待两端达到 `READY`：
 
 ```bash
-python3 "$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py" sts-harness \
+python3 "$CROSSSPIRE_AMETHYST_TOOLS_DIR/main.py" sts-harness \
   -Command start -LaunchMode mts_basemod -DebugMode \
   -DeviceSerial "$CROSSSPIRE_D1_SERIAL" -SkipInstall \
-  -OutDir "$HARNESS_OUT_DIR"
+  -OutDir "$CROSSSPIRE_HARNESS_OUT_DIR"
 
-python3 "$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py" sts-harness \
+python3 "$CROSSSPIRE_AMETHYST_TOOLS_DIR/main.py" sts-harness \
   -Command status -DeviceSerial "$CROSSSPIRE_D1_SERIAL" \
-  -OutDir "$HARNESS_OUT_DIR"
+  -OutDir "$CROSSSPIRE_HARNESS_OUT_DIR"
 ```
 
 D2 使用相同命令并替换为 `$CROSSSPIRE_D2_SERIAL`。`start` 只表示启动请求已发送，必须以 `status` 的 `READY` 为准。
@@ -167,30 +167,30 @@ D2 使用相同命令并替换为 `$CROSSSPIRE_D2_SERIAL`。`start` 只表示启
 ### D1 启动房主
 
 ```bash
-python3 "$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py" sts-harness \
+python3 "$CROSSSPIRE_AMETHYST_TOOLS_DIR/main.py" sts-harness \
   -Command console \
   -DeviceSerial "$CROSSSPIRE_D1_SERIAL" \
-  -OutDir "$HARNESS_OUT_DIR" \
+  -OutDir "$CROSSSPIRE_HARNESS_OUT_DIR" \
   -ConsoleCommand "crossspire host 127.0.0.1 $CROSSSPIRE_GAME_PORT"
 ```
 
 ### D2 加入房间
 
 ```bash
-python3 "$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py" sts-harness \
+python3 "$CROSSSPIRE_AMETHYST_TOOLS_DIR/main.py" sts-harness \
   -Command console \
   -DeviceSerial "$CROSSSPIRE_D2_SERIAL" \
-  -OutDir "$HARNESS_OUT_DIR" \
+  -OutDir "$CROSSSPIRE_HARNESS_OUT_DIR" \
   -ConsoleCommand "crossspire join 127.0.0.1 $CROSSSPIRE_GAME_PORT"
 ```
 
 ### 查询状态
 
 ```bash
-python3 "$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py" sts-harness \
+python3 "$CROSSSPIRE_AMETHYST_TOOLS_DIR/main.py" sts-harness \
   -Command console \
   -DeviceSerial "$CROSSSPIRE_D1_SERIAL" \
-  -OutDir "$HARNESS_OUT_DIR" \
+  -OutDir "$CROSSSPIRE_HARNESS_OUT_DIR" \
   -ConsoleCommand "crossspire status"
 ```
 
@@ -199,22 +199,22 @@ python3 "$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py" sts-harness \
 ### 战斗与事件命令
 
 ```bash
-python3 "$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py" sts-harness \
+python3 "$CROSSSPIRE_AMETHYST_TOOLS_DIR/main.py" sts-harness \
   -Command console \
   -DeviceSerial "$CROSSSPIRE_D1_SERIAL" \
-  -OutDir "$HARNESS_OUT_DIR" \
+  -OutDir "$CROSSSPIRE_HARNESS_OUT_DIR" \
   -ConsoleCommand "crossspire start IRONCLAD"
 
-python3 "$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py" sts-harness \
+python3 "$CROSSSPIRE_AMETHYST_TOOLS_DIR/main.py" sts-harness \
   -Command console \
   -DeviceSerial "$CROSSSPIRE_D1_SERIAL" \
-  -OutDir "$HARNESS_OUT_DIR" \
+  -OutDir "$CROSSSPIRE_HARNESS_OUT_DIR" \
   -ConsoleCommand "fight Cultist"
 
-python3 "$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py" sts-harness \
+python3 "$CROSSSPIRE_AMETHYST_TOOLS_DIR/main.py" sts-harness \
   -Command console \
   -DeviceSerial "$CROSSSPIRE_D1_SERIAL" \
-  -OutDir "$HARNESS_OUT_DIR" \
+  -OutDir "$CROSSSPIRE_HARNESS_OUT_DIR" \
   -ConsoleCommand "crossspire play Strike_R"
 ```
 

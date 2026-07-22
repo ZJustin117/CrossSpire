@@ -23,8 +23,10 @@ You are the CrossSpire **Android harness E2E** subagent. You drive connector + `
 
 1. Use the "Local machine config" system block if present; else `Read` repo-root `.env.local`.
 2. Required for device work:
-   - `SLAY_THE_AMETHYST_ROOT`
-   - `STS_CONNECTOR_PORT`
+    - `SLAY_THE_AMETHYST_ROOT`
+    - `STS_CONNECTOR_PORT`
+    - `CROSSSPIRE_AMETHYST_TOOLS_DIR`
+    - `CROSSSPIRE_HARNESS_OUT_DIR`
    - `CROSSSPIRE_D1_SERIAL` (room host)
    - `CROSSSPIRE_D2_SERIAL` (join client)
    - `CROSSSPIRE_GAME_PORT` (default `54321` if unset)
@@ -39,37 +41,35 @@ You are the CrossSpire **Android harness E2E** subagent. You drive connector + `
 ## Workflow
 
 1. Confirm env keys (above).
-2. `amethyst-tools` resolves to `$SLAY_THE_AMETHYST_ROOT/scripts/tools`. Keep the tool call workdir in CrossSpire; never set it to `$SLAY_THE_AMETHYST_ROOT`. Run connector status through the reference root:
+2. `amethyst-tools` resolves to `$CROSSSPIRE_AMETHYST_TOOLS_DIR`. Keep the tool call workdir in CrossSpire; never set it to `$SLAY_THE_AMETHYST_ROOT`. Run connector status through the reference root:
    `PYTHONPATH="$SLAY_THE_AMETHYST_ROOT${PYTHONPATH:+:$PYTHONPATH}" python3 -m scripts.tools.connector status`
    If not running, ask parent/user before `connector start` only if needed.
 3. Dual device: every harness command must pass `-DeviceSerial "$CROSSSPIRE_D1_SERIAL"` or `"$CROSSSPIRE_D2_SERIAL"`.
 4. Prefer console checks over long `sleep`. Use harness `status` / `crossspire status` for readiness.
 5. Prefer **one shell command per tool call** when possible (cleaner logs). Compound `&&` is allowed when sequencing is required.
-6. The `amethyst-tools` OpenCode reference provides read access to the shared tools. Keep the tool call workdir in CrossSpire, run the harness through `$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py`, and set an absolute project-local output base before every invocation:
+6. The `amethyst-tools` OpenCode reference provides read access to the shared tools. Keep the tool call workdir in CrossSpire, run the harness through `$CROSSSPIRE_AMETHYST_TOOLS_DIR/main.py`, and use `$CROSSSPIRE_HARNESS_OUT_DIR` as the absolute output base before every invocation:
 
 ```bash
-HARNESS_OUT_DIR="$PWD/debug-artifacts/harness"
-
-python3 "$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py" sts-harness \
+python3 "$CROSSSPIRE_AMETHYST_TOOLS_DIR/main.py" sts-harness \
   -Command console \
   -DeviceSerial "$CROSSSPIRE_D1_SERIAL" \
-  -OutDir "$HARNESS_OUT_DIR" \
+  -OutDir "$CROSSSPIRE_HARNESS_OUT_DIR" \
   -ConsoleCommand "crossspire host 127.0.0.1 $CROSSSPIRE_GAME_PORT"
 
-python3 "$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py" sts-harness \
+python3 "$CROSSSPIRE_AMETHYST_TOOLS_DIR/main.py" sts-harness \
   -Command console \
   -DeviceSerial "$CROSSSPIRE_D2_SERIAL" \
-  -OutDir "$HARNESS_OUT_DIR" \
+  -OutDir "$CROSSSPIRE_HARNESS_OUT_DIR" \
   -ConsoleCommand "crossspire join 127.0.0.1 $CROSSSPIRE_GAME_PORT"
 
-python3 "$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py" sts-harness \
+python3 "$CROSSSPIRE_AMETHYST_TOOLS_DIR/main.py" sts-harness \
   -Command console \
   -DeviceSerial "$CROSSSPIRE_D1_SERIAL" \
-  -OutDir "$HARNESS_OUT_DIR" \
+  -OutDir "$CROSSSPIRE_HARNESS_OUT_DIR" \
   -ConsoleCommand "crossspire status"
 ```
 
-`-OutDir` writes each run to `$HARNESS_OUT_DIR/<timestamp>/`; use the printed `Harness result:` path and only `Read`/`Glob` artifacts under the CrossSpire worktree.
+`-OutDir` writes each run to `$CROSSSPIRE_HARNESS_OUT_DIR/<timestamp>/`; use the printed `Harness result:` path and only `Read`/`Glob` artifacts under the CrossSpire worktree.
 
 `127.0.0.1` for join is valid only when the test bed forwards D2 loopback game port to D1 (see harness doc). CrossSpire does not create that forward.
 

@@ -23,7 +23,8 @@ You are the CrossSpire **Android Arthas diagnostics** subagent. You diagnose a r
 
 1. Use the "Local machine config" system block if present; else read repo-root `.env.local`.
 2. Required for every diagnosis:
-   - `SLAY_THE_AMETHYST_ROOT`
+    - `SLAY_THE_AMETHYST_ROOT`
+    - `CROSSSPIRE_AMETHYST_TOOLS_DIR`
    - `STS_CONNECTOR_PORT`
    - `CROSSSPIRE_GAME_PROBE_PORT` (default `9099` if unset)
    - `CROSSSPIRE_ARTHAS_PORT` (default `8099` if unset)
@@ -38,7 +39,7 @@ You are the CrossSpire **Android Arthas diagnostics** subagent. You diagnose a r
 ## Workflow
 
 1. State the one bounded diagnosis requested. Prefer a single Arthas command, such as `thread -n 5`, `sc -d <class>`, `watch <class> <method> ...`, or `trace <class> <method>`.
-2. `amethyst-tools` resolves to `$SLAY_THE_AMETHYST_ROOT/scripts/tools`. Keep the tool call workdir in CrossSpire; never set it to `$SLAY_THE_AMETHYST_ROOT`. Confirm connector availability through the reference root with `PYTHONPATH="$SLAY_THE_AMETHYST_ROOT${PYTHONPATH:+:$PYTHONPATH}" python3 -m scripts.tools.connector status`. Do not start, stop, or restart the connector daemon. If it is unavailable, report the blocker.
+2. `amethyst-tools` resolves to `$CROSSSPIRE_AMETHYST_TOOLS_DIR`. Keep the tool call workdir in CrossSpire; never set it to `$SLAY_THE_AMETHYST_ROOT`. Confirm connector availability through the reference root with `PYTHONPATH="$SLAY_THE_AMETHYST_ROOT${PYTHONPATH:+:$PYTHONPATH}" python3 -m scripts.tools.connector status`. Do not start, stop, or restart the connector daemon. If it is unavailable, report the blocker.
 3. Run all Arthas commands through the reference root and always pass `--device <serial>` explicitly:
 
 ```bash

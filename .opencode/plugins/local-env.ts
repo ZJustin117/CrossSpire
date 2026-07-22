@@ -8,6 +8,8 @@ const ALLOWED_KEYS = new Set([
   "CROSSSPIRE_BASEMOD_JAR",
   "CROSSSPIRE_MODTHESPIRE_JAR",
   "STS_CONNECTOR_PORT",
+  "CROSSSPIRE_HARNESS_OUT_DIR",
+  "CROSSSPIRE_AMETHYST_TOOLS_DIR",
   "CROSSSPIRE_D1_SERIAL",
   "CROSSSPIRE_D2_SERIAL",
   "CROSSSPIRE_GAME_PORT",
@@ -79,6 +81,9 @@ function applyDerivedJars(merged: Record<string, string>): void {
       root,
       "app/src/main/assets/components/mods/ModTheSpire.jar",
     )
+  }
+  if (!merged.CROSSSPIRE_AMETHYST_TOOLS_DIR) {
+    merged.CROSSSPIRE_AMETHYST_TOOLS_DIR = join(root, "scripts/tools")
   }
 }
 

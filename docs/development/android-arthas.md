@@ -2,7 +2,7 @@
 
 本文记录在 SlayTheAmethyst Android 设备 JVM 上使用 [Arthas](https://arthas.aliyun.com) 做诊断的入口。Arthas、connector 端口转发和设备 serial 属于开发基础设施，不是 CrossSpire 的运行时配置或网络协议。
 
-**本机取值**见 [`.env.example`](../../.env.example) / `.env.local`。完整模块架构见 `$SLAY_THE_AMETHYST_ROOT/scripts/tools/arthas/README.md`。双设备测试台与 BaseMod console 见 [`android-harness.md`](./android-harness.md)。
+**本机取值**见 [`.env.example`](../../.env.example) / `.env.local`。完整模块架构见 `$CROSSSPIRE_AMETHYST_TOOLS_DIR/arthas/README.md`。双设备测试台与 BaseMod console 见 [`android-harness.md`](./android-harness.md)。
 
 ## 定位
 
@@ -131,7 +131,7 @@ profiler start -o jfr
 |------|------|
 | `mc` | JRE 无 `tools.jar`；本地 `javac` 后 `adb push`，再用 `retransform` / `redefine` |
 
-命令全表与参数见模块离线文档 `$SLAY_THE_AMETHYST_ROOT/scripts/tools/arthas/docs/README.md` 与[官方命令列表](https://arthas.aliyun.com/doc/commands.html)。
+命令全表与参数见模块离线文档 `$CROSSSPIRE_AMETHYST_TOOLS_DIR/arthas/docs/README.md` 与[官方命令列表](https://arthas.aliyun.com/doc/commands.html)。
 
 ## 故障定位
 
@@ -155,7 +155,7 @@ profiler start -o jfr
 
 ## 参考
 
-- 模块技术说明：`$SLAY_THE_AMETHYST_ROOT/scripts/tools/arthas/README.md`
-- 离线命令文档：`$SLAY_THE_AMETHYST_ROOT/scripts/tools/arthas/docs/README.md`
+- 模块技术说明：`$CROSSSPIRE_AMETHYST_TOOLS_DIR/arthas/README.md`
+- 离线命令文档：`$CROSSSPIRE_AMETHYST_TOOLS_DIR/arthas/docs/README.md`
 - 双设备 Harness：[`android-harness.md`](./android-harness.md)
 - [Arthas 官方文档](https://arthas.aliyun.com/doc/commands.html)
