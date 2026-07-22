@@ -255,39 +255,49 @@ python3 -m scripts.tools.connector start --port "$STS_CONNECTOR_PORT"
 
 # 以下可在 CrossSpire 根用 scripts/tools symlink
 # 已 export STS_CONNECTOR_PORT 时可不传 -ConnectorPort；双设备时每条命令必须 -DeviceSerial
+# 从 CrossSpire 根执行；OutDir 必须是绝对路径，否则 symlink harness 会写到 Amethyst 侧。
+HARNESS_OUT_DIR="$PWD/debug-artifacts/harness"
 
 # D1 (host)
 python3 scripts/tools/main.py sts-harness \
   -Command console -DeviceSerial "$CROSSSPIRE_D1_SERIAL" \
+  -OutDir "$HARNESS_OUT_DIR" \
   -ConsoleCommand "crossspire host 127.0.0.1 $CROSSSPIRE_GAME_PORT"
 
 # D2 (join)
 python3 scripts/tools/main.py sts-harness \
   -Command console -DeviceSerial "$CROSSSPIRE_D2_SERIAL" \
+  -OutDir "$HARNESS_OUT_DIR" \
   -ConsoleCommand "crossspire join 127.0.0.1 $CROSSSPIRE_GAME_PORT"
 
 # 战斗
 python3 scripts/tools/main.py sts-harness \
   -Command console -DeviceSerial "$CROSSSPIRE_D1_SERIAL" \
+  -OutDir "$HARNESS_OUT_DIR" \
   -ConsoleCommand "crossspire start IRONCLAD"
 python3 scripts/tools/main.py sts-harness \
   -Command console -DeviceSerial "$CROSSSPIRE_D1_SERIAL" \
+  -OutDir "$HARNESS_OUT_DIR" \
   -ConsoleCommand "fight Cultist"
 python3 scripts/tools/main.py sts-harness \
   -Command console -DeviceSerial "$CROSSSPIRE_D1_SERIAL" \
+  -OutDir "$HARNESS_OUT_DIR" \
   -ConsoleCommand "crossspire play Strike_R"
 
 # 事件
 python3 scripts/tools/main.py sts-harness \
   -Command console -DeviceSerial "$CROSSSPIRE_D1_SERIAL" \
+  -OutDir "$HARNESS_OUT_DIR" \
   -ConsoleCommand "crossspire cevent Living Wall"
 python3 scripts/tools/main.py sts-harness \
   -Command console -DeviceSerial "$CROSSSPIRE_D2_SERIAL" \
+  -OutDir "$HARNESS_OUT_DIR" \
   -ConsoleCommand "crossspire eselect 0 Strike_R"
 
 # 诊断
 python3 scripts/tools/main.py sts-harness \
   -Command console -DeviceSerial "$CROSSSPIRE_D1_SERIAL" \
+  -OutDir "$HARNESS_OUT_DIR" \
   -ConsoleCommand "crossspire gamestate"
 ```
 

@@ -14,10 +14,6 @@ permission:
     "*.env.*": ask
     ".env.example": allow
     ".env.local": allow
-  # Amethyst tree + harness result.json live outside the CrossSpire git root.
-  # edit is denied; allow external reads so E2E does not hang on permission prompts.
-  external_directory:
-    "*": allow
   # Default ask. Allow only connector status, sts-harness, and port-forward ops.
   # Keep connector lifecycle as ask; never edit mod source (edit: deny).
   bash:
@@ -70,24 +66,31 @@ You are the CrossSpire **Android harness E2E** subagent. You drive connector + `
 3. Dual device: every harness command must pass `-DeviceSerial "$CROSSSPIRE_D1_SERIAL"` or `"$CROSSSPIRE_D2_SERIAL"`.
 4. Prefer console checks over long `sleep`. Use harness `status` / `crossspire status` for readiness.
 5. Prefer **one shell command per tool call** when possible (cleaner logs). Compound `&&` is allowed when sequencing is required.
-6. Harness entry (from CrossSpire repo root; `scripts` is symlink to Amethyst):
+6. Harness entry (from CrossSpire repo root; `scripts` is symlink to Amethyst). Set an absolute project-local output base before every harness invocation:
 
 ```bash
+HARNESS_OUT_DIR="$PWD/debug-artifacts/harness"
+
 python3 scripts/tools/main.py sts-harness \
   -Command console \
   -DeviceSerial "$CROSSSPIRE_D1_SERIAL" \
+  -OutDir "$HARNESS_OUT_DIR" \
   -ConsoleCommand "crossspire host 127.0.0.1 $CROSSSPIRE_GAME_PORT"
 
 python3 scripts/tools/main.py sts-harness \
   -Command console \
   -DeviceSerial "$CROSSSPIRE_D2_SERIAL" \
+  -OutDir "$HARNESS_OUT_DIR" \
   -ConsoleCommand "crossspire join 127.0.0.1 $CROSSSPIRE_GAME_PORT"
 
 python3 scripts/tools/main.py sts-harness \
   -Command console \
   -DeviceSerial "$CROSSSPIRE_D1_SERIAL" \
+  -OutDir "$HARNESS_OUT_DIR" \
   -ConsoleCommand "crossspire status"
 ```
+
+`-OutDir` writes each run to `$HARNESS_OUT_DIR/<timestamp>/`; use the printed `Harness result:` path and only `Read`/`Glob` files under the CrossSpire worktree. Do not use file tools on the resolved Amethyst symlink target.
 
 `127.0.0.1` for join is valid only when the test bed forwards D2 loopback game port to D1 (see harness doc). CrossSpire does not create that forward.
 
