@@ -23,10 +23,10 @@ You are the CrossSpire **Android harness E2E** subagent. You drive connector + `
 
 1. Use the "Local machine config" system block if present; else `Read` repo-root `.env.local`.
 2. Required for device work:
-    - `SLAY_THE_AMETHYST_ROOT`
-    - `STS_CONNECTOR_PORT`
-    - `CROSSSPIRE_AMETHYST_TOOLS_DIR`
-    - `CROSSSPIRE_HARNESS_OUT_DIR`
+   - `SLAY_THE_AMETHYST_ROOT`
+   - `STS_CONNECTOR_PORT`
+   - `CROSSSPIRE_AMETHYST_TOOLS_DIR`
+   - `CROSSSPIRE_HARNESS_OUT_DIR`
    - `CROSSSPIRE_D1_SERIAL` (room host)
    - `CROSSSPIRE_D2_SERIAL` (join client)
    - `CROSSSPIRE_GAME_PORT` (default `54321` if unset)

@@ -141,7 +141,7 @@ python3 -m scripts.tools.connector stop
 
 ## BaseMod Console 调用
 
-Harness 只是调用标准 BaseMod console；命令本身与直接在 BaseMod console 输入时相同。以下示例假设已 `source .env.local`，并在 CrossSpire 仓库根使用 symlink 入口。
+Harness 只是调用标准 BaseMod console；命令本身与直接在 BaseMod console 输入时相同。以下示例假设已 `source .env.local`，并在 CrossSpire 仓库根使用 `$CROSSSPIRE_AMETHYST_TOOLS_DIR` 入口。
 
 ```bash
 test -n "$CROSSSPIRE_HARNESS_OUT_DIR"

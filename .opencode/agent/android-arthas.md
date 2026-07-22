@@ -23,8 +23,8 @@ You are the CrossSpire **Android Arthas diagnostics** subagent. You diagnose a r
 
 1. Use the "Local machine config" system block if present; else read repo-root `.env.local`.
 2. Required for every diagnosis:
-    - `SLAY_THE_AMETHYST_ROOT`
-    - `CROSSSPIRE_AMETHYST_TOOLS_DIR`
+   - `SLAY_THE_AMETHYST_ROOT`
+   - `CROSSSPIRE_AMETHYST_TOOLS_DIR`
    - `STS_CONNECTOR_PORT`
    - `CROSSSPIRE_GAME_PROBE_PORT` (default `9099` if unset)
    - `CROSSSPIRE_ARTHAS_PORT` (default `8099` if unset)
