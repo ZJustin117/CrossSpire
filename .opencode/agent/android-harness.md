@@ -39,13 +39,13 @@ You are the CrossSpire **Android harness E2E** subagent. You drive connector + `
 ## Workflow
 
 1. Confirm env keys (above).
-2. Connector status from `$SLAY_THE_AMETHYST_ROOT`:
-   `cd "$SLAY_THE_AMETHYST_ROOT" && python3 -m scripts.tools.connector status`
+2. `amethyst-tools` resolves to `$SLAY_THE_AMETHYST_ROOT/scripts/tools`. Keep the tool call workdir in CrossSpire; never set it to `$SLAY_THE_AMETHYST_ROOT`. Run connector status through the reference root:
+   `PYTHONPATH="$SLAY_THE_AMETHYST_ROOT${PYTHONPATH:+:$PYTHONPATH}" python3 -m scripts.tools.connector status`
    If not running, ask parent/user before `connector start` only if needed.
 3. Dual device: every harness command must pass `-DeviceSerial "$CROSSSPIRE_D1_SERIAL"` or `"$CROSSSPIRE_D2_SERIAL"`.
 4. Prefer console checks over long `sleep`. Use harness `status` / `crossspire status` for readiness.
 5. Prefer **one shell command per tool call** when possible (cleaner logs). Compound `&&` is allowed when sequencing is required.
-6. The `amethyst-tools` OpenCode reference provides read access to the shared tools. Run the harness through `$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py` and set an absolute project-local output base before every invocation:
+6. The `amethyst-tools` OpenCode reference provides read access to the shared tools. Keep the tool call workdir in CrossSpire, run the harness through `$SLAY_THE_AMETHYST_ROOT/scripts/tools/main.py`, and set an absolute project-local output base before every invocation:
 
 ```bash
 HARNESS_OUT_DIR="$PWD/debug-artifacts/harness"
