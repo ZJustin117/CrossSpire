@@ -1,0 +1,10 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "references": {
+    "amethyst-tools": {
+      "path": "../SlayTheAmethystModded/scripts/tools",
+      "description": "Shared SlayTheAmethyst device automation, connector, harness, and Arthas tools.",
+      "hidden": true
+    }
+  }
+}

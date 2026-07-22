@@ -52,6 +52,7 @@ The `docs/reference/` directory contains API documentation for the two key moddi
 - Maintainer paths, ADB serials, and connector ports live in gitignored `.env.local` (template: `.env.example`).
 - Process docs under `docs/development/` use env **names** only (`$CROSSSPIRE_*`, `$STS_*`, `$SLAY_THE_AMETHYST_ROOT`).
 - OpenCode plugin `.opencode/plugins/local-env.ts` loads whitelist keys into shell env and test-agent system context. Restart opencode after changing agents/plugins.
+- The external `amethyst-tools` OpenCode reference maps to `$SLAY_THE_AMETHYST_ROOT/scripts/tools`; use it for file inspection rather than adding a `scripts/` symlink in this repository. Run its commands through `$SLAY_THE_AMETHYST_ROOT`.
 
 ## OpenCode 测试 subagent
 

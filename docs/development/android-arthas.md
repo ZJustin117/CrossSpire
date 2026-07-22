@@ -2,7 +2,7 @@
 
 本文记录在 SlayTheAmethyst Android 设备 JVM 上使用 [Arthas](https://arthas.aliyun.com) 做诊断的入口。Arthas、connector 端口转发和设备 serial 属于开发基础设施，不是 CrossSpire 的运行时配置或网络协议。
 
-**本机取值**见 [`.env.example`](../../.env.example) / `.env.local`。完整模块架构见 [`../../scripts/tools/arthas/README.md`](../../scripts/tools/arthas/README.md)。双设备测试台与 BaseMod console 见 [`android-harness.md`](./android-harness.md)。
+**本机取值**见 [`.env.example`](../../.env.example) / `.env.local`。完整模块架构见 `$SLAY_THE_AMETHYST_ROOT/scripts/tools/arthas/README.md`。双设备测试台与 BaseMod console 见 [`android-harness.md`](./android-harness.md)。
 
 ## 定位
 
@@ -42,7 +42,7 @@ game-probe 负责游戏语义；Arthas 负责通用 JVM 诊断。联机 host/joi
 1. 游戏以 debug 相关模式启动，且 game-probe 可用（例如 harness `-DebugMode`）。
 2. 已启动 connector daemon，且设置 `STS_CONNECTOR_PORT`（见 [`android-harness.md`](./android-harness.md)）。
 3. 多设备时必须指定设备：`--device <serial>` 或 `export STS_TEST_DEVICE=<serial>`（解析顺序：`--device` → `STS_TEST_DEVICE` → 仅 1 台在线时自动选择）。
-4. 在 **SlayTheAmethyst 仓库根** 执行 `python3 -m scripts.tools.arthas ...`。CrossSpire 的 `scripts/tools` 是指向 Amethyst 的 symlink。
+4. 在 **SlayTheAmethyst 仓库根** 执行 `python3 -m scripts.tools.arthas ...`。CrossSpire 不包含 `scripts/` symlink。
 
 本地环境与 harness 共用 `.env.local`：
 
@@ -131,7 +131,7 @@ profiler start -o jfr
 |------|------|
 | `mc` | JRE 无 `tools.jar`；本地 `javac` 后 `adb push`，再用 `retransform` / `redefine` |
 
-命令全表与参数见模块离线文档 [`../../scripts/tools/arthas/docs/README.md`](../../scripts/tools/arthas/docs/README.md) 与[官方命令列表](https://arthas.aliyun.com/doc/commands.html)。
+命令全表与参数见模块离线文档 `$SLAY_THE_AMETHYST_ROOT/scripts/tools/arthas/docs/README.md` 与[官方命令列表](https://arthas.aliyun.com/doc/commands.html)。
 
 ## 故障定位
 
@@ -155,7 +155,7 @@ profiler start -o jfr
 
 ## 参考
 
-- 模块技术说明：[`../../scripts/tools/arthas/README.md`](../../scripts/tools/arthas/README.md)
-- 离线命令文档：[`../../scripts/tools/arthas/docs/README.md`](../../scripts/tools/arthas/docs/README.md)
+- 模块技术说明：`$SLAY_THE_AMETHYST_ROOT/scripts/tools/arthas/README.md`
+- 离线命令文档：`$SLAY_THE_AMETHYST_ROOT/scripts/tools/arthas/docs/README.md`
 - 双设备 Harness：[`android-harness.md`](./android-harness.md)
 - [Arthas 官方文档](https://arthas.aliyun.com/doc/commands.html)
