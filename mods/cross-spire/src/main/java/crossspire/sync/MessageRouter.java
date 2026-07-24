@@ -5,6 +5,7 @@ import com.badlogic.gdx.Gdx;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import crossspire.CrossSpireMod;
+import crossspire.combat.CombatResultApplyPolicy;
 import crossspire.combat.CombatResultReplayer;
 import crossspire.combat.CentralQueueManager;
 import crossspire.combat.EventCapture;
@@ -550,11 +551,36 @@ public class MessageRouter {
         broadcast.effects = result.effects;
         broadcast.operationSequence = result.operationSequence;
 
+        String raw = Protocol.GSON.toJson(broadcast);
         if (CrossSpireMod.isConnected()) {
-            CrossSpireMod.sendToParty(broadcast.partyId, Protocol.GSON.toJson(broadcast));
+            CrossSpireMod.sendToParty(broadcast.partyId, raw);
             BaseMod.logger.info("MessageRouter broadcast combat_result executor="
                 + (broadcast.executorId.length() >= 8 ? broadcast.executorId.substring(0, 8) : broadcast.executorId)
                 + " effects=" + (result.effects != null ? result.effects.length : 0));
+        }
+        // sendToParty never delivers to self; induce peer results locally when policy allows.
+        String executor = broadcast.executorId != null ? broadcast.executorId : "";
+        if (CombatResultApplyPolicy.shouldLocalInduceAfterBroadcast(CrossSpireMod.playerId, executor)
+            && isLocalParty(broadcast.partyId)) {
+            scheduleCombatResultReplay(raw);
+        }
+    }
+
+    private void scheduleCombatResultReplay(final String rawMessage) {
+        if (rawMessage == null || resultReplayer == null) return;
+        try {
+            Gdx.app.postRunnable(new Runnable() {
+                @Override public void run() {
+                    try {
+                        resultReplayer.handleCombatResult(rawMessage);
+                    } catch (Exception e) {
+                        BaseMod.logger.error("MessageRouter combat_result replay: "
+                            + e.getClass().getSimpleName() + ": " + e.getMessage(), e);
+                    }
+                }
+            });
+        } catch (Exception e) {
+            resultReplayer.handleCombatResult(rawMessage);
         }
     }
 

@@ -20,8 +20,6 @@ import crossspire.network.StandardPacket;
 
 public class CombatResultReplayer {
 
-    private static final int MAX_INDUCED_HOP = 3;
-
     public void handleCombatResult(String rawMessage) {
         if (AbstractDungeon.player == null) {
             BaseMod.logger.info("CombatResultReplayer skipped: not in game");
@@ -30,7 +28,7 @@ public class CombatResultReplayer {
         JsonObject msg = Protocol.GSON.fromJson(rawMessage, JsonObject.class);
         String executorId = resolveExecutorId(msg);
 
-        if (executorId.equals(CrossSpireMod.playerId)) {
+        if (CombatResultApplyPolicy.shouldSkipAsOwnResult(CrossSpireMod.playerId, executorId)) {
             BaseMod.logger.info("CombatResultReplayer skip: own result (REAL mode already executed)");
             return;
         }
@@ -52,11 +50,12 @@ public class CombatResultReplayer {
     }
 
     private static String resolveExecutorId(JsonObject msg) {
+        String executorField = null;
         if (msg.has("executor_id") && !msg.get("executor_id").isJsonNull()) {
-            String id = msg.get("executor_id").getAsString();
-            if (id != null && !id.isEmpty()) return id;
+            executorField = msg.get("executor_id").getAsString();
         }
-        return msg.has("source") ? msg.get("source").getAsString() : "";
+        String sourceField = msg.has("source") ? msg.get("source").getAsString() : null;
+        return CombatResultApplyPolicy.resolveExecutorId(executorField, sourceField);
     }
 
     private void authoritativeApply(JsonArray effects) {
@@ -98,7 +97,7 @@ public class CombatResultReplayer {
             JsonObject eff = el.getAsJsonObject();
             if (!"apply_power".equals(eff.has("kind") ? eff.get("kind").getAsString() : "")) continue;
             String logicOwner = eff.has("logic_owner_id") ? eff.get("logic_owner_id").getAsString() : "";
-            if (!LocalOwnerGate.isLocalOwner(logicOwner)) continue;
+            if (!CombatResultApplyPolicy.shouldFireLocalOwnerLogic(logicOwner, CrossSpireMod.playerId)) continue;
             String powerId = eff.has("power_id") ? eff.get("power_id").getAsString() : "";
             if (powerId.isEmpty()) continue;
             for (crossspire.reference.Reference<?> ref
@@ -147,7 +146,7 @@ public class CombatResultReplayer {
         String logicOwner = op.has("logic_owner_id") ? op.get("logic_owner_id").getAsString() : "";
         if (powerId.isEmpty()) return;
 
-        if (!LocalOwnerGate.isLocalOwner(logicOwner)) {
+        if (!CombatResultApplyPolicy.shouldFireLocalOwnerLogic(logicOwner, CrossSpireMod.playerId)) {
             BaseMod.logger.info("CombatResultReplayer skip non-owner power logic: " + powerId
                 + " logic_owner=" + (logicOwner.isEmpty() ? "?" : logicOwner.substring(0, Math.min(8, logicOwner.length()))));
             return;
@@ -164,12 +163,12 @@ public class CombatResultReplayer {
         if (newEffects == null || newEffects.length == 0 || !CrossSpireMod.isConnected()) return;
 
         for (Protocol.EffectDescription e : newEffects) {
-            if (e.hopCount >= MAX_INDUCED_HOP) {
+            if (CombatResultApplyPolicy.shouldDropInducedHop(e.hopCount)) {
                 BaseMod.logger.info("CombatResultReplayer drop induced effect hop=" + e.hopCount);
                 return;
             }
             e.originOwnerId = CrossSpireMod.playerId;
-            e.hopCount = e.hopCount + 1;
+            e.hopCount = CombatResultApplyPolicy.advanceHopCount(e.hopCount);
             if (e.logicOwnerId == null || e.logicOwnerId.isEmpty()) {
                 e.logicOwnerId = CrossSpireMod.playerId;
             }
