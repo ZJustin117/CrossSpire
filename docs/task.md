@@ -8,10 +8,10 @@
 > 权威写法：[`development/logic-layer-testing.md`](./development/logic-layer-testing.md)。语义默认 `@junit-test`，Harness 仅设备契约。
 
 - [x] **T-Test.0** 文档与 OpenCode agent 规范（logic-layer-testing、AGENTS、junit-test/harness/deploy/arthas、spec NFR-16–18、ARCHITECTURE §22、plan 本章）
-- [ ] **T-Test.1** combat_result admit / host local-induce → main pure；删测试镜像；JUnit 绑定生产 API
-- [ ] **T-Test.2** hop + personal target + owner-fire Policy 表测 + Replayer 接线
-- [ ] **T-Test.3** phase / queue / monster admit 边界补全
-- [ ] **T-Test.4** `combat.scenario` 首批 5–8 场景
+- [x] **T-Test.1** combat_result admit / host local-induce → `CombatResultApplyPolicy`；删测试镜像；MessageRouter 接线
+- [x] **T-Test.2** hop + own-skip + owner-fire + resolveExecutor 表测；Replayer 接线 pure
+- [x] **T-Test.3** monster admit 空 tx / wrong id / reset 边界补全（phase/queue 既有覆盖保留）
+- [x] **T-Test.4** `combat.scenario` 首批 S1–S5（own skip / peer induce / personal / owner-fire / hop）
 - [ ] **T-Test.5**（可选）schema ↔ Protocol 键校验
 - [ ] **T-Test.6** harness 文档持续对齐「语义已迁 JUnit」
 

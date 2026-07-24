@@ -24,7 +24,7 @@
 | P13 队长出牌 + 默认 NIH + CME | ✅ | leader publish combat_result；map 后 NIH=MapHost；INDUCED 主线程；双向 E2E PASS |
 | P14 毒/防御归属 | ✅ | Poison≠Vulnerable；block 仅 executor；PoisonPower 构造；Deadly Poison E2E PASS |
 | P15 双倍 INDUCED + 伤害快照 | ✅ | 中继排除 source；calculateCardDamage；毒直接 stack；单次 Poison×5 E2E PASS |
-| **P-Testing 测试规范与逻辑层** | **规范 ✅ / 实现 ⏳** | T-Test.0 文档+agent ✅；T-Test.1+ Policy 提取与 scenario 待做 |
+| **P-Testing 测试规范与逻辑层** | **规范 ✅ / 核心实现 ✅** | T-Test.0–4 ✅；T-Test.5–6 可选 |
 | **总** | **P1–P7 主路径可用；P8+ 已交付；逻辑层实现跟进** | 以构建结果为准 |
 
 ## 目录
@@ -940,10 +940,10 @@ Android Harness 对 **语义**（phase / ownership / induce）反馈慢、难断
 | ID | 内容 | 状态 | 验证 |
 |----|------|------|------|
 | T-Test.0 | 文档与 agent：logic-layer-testing、AGENTS、junit-test/harness 边界、spec NFR、ARCHITECTURE §22、本表与 task | ✅ | 文档评审 |
-| T-Test.1 | 提取 combat_result admit / host 对 peer 本地 induce 到 main pure；测试绑定生产 API；删除测试内镜像 | ⏳ | `./gradlew test` |
-| T-Test.2 | Induced hop + personal target + owner-fire Policy 表驱动 JUnit；Replayer 接线 pure | ⏳ | JUnit |
-| T-Test.3 | phase / queue / monster admit 边界表补全 | ⏳ | JUnit |
-| T-Test.4 | `crossspire.combat.scenario`（或等价）首批 5–8 场景（见 logic-layer-testing §6） | ⏳ | JUnit |
+| T-Test.1 | `CombatResultApplyPolicy` + MessageRouter local-induce；HostApply 测试绑定生产 API | ✅ | JUnit |
+| T-Test.2 | hop / own-skip / owner-fire / resolveExecutor；Replayer 接线 | ✅ | JUnit |
+| T-Test.3 | monster admit 边界补全 | ✅ | JUnit |
+| T-Test.4 | `crossspire.combat.scenario` S1–S5 | ✅ | JUnit |
 | T-Test.5 |（可选）protocol-schema 与 Protocol 键存在性校验 | ⏳ | JUnit |
 | T-Test.6 | harness 文档与共进 smoke 清单标明语义项已迁 JUnit 处（持续） | ⏳ | docs |
 

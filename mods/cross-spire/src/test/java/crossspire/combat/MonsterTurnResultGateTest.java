@@ -34,4 +34,25 @@ public class MonsterTurnResultGateTest {
         assertTrue(gate.admit(CombatPhase.MONSTER_TURN, "turn-2", "monster_turn",
             "stage-host", "stage-host", 10, "turn-2"));
     }
+
+    @Test
+    public void rejectsEmptyTransactionAndWrongMonsterId() {
+        MonsterTurnResultGate gate = new MonsterTurnResultGate();
+        assertFalse(gate.admit(CombatPhase.MONSTER_TURN, "", "monster_turn",
+            "stage-host", "stage-host", 1, ""));
+        assertFalse(gate.admit(CombatPhase.MONSTER_TURN, "turn-1", "not_monster_turn",
+            "stage-host", "stage-host", 1, "turn-1"));
+        assertFalse(gate.admit(CombatPhase.MONSTER_TURN, null, "monster_turn",
+            "stage-host", "stage-host", 1, "turn-1"));
+    }
+
+    @Test
+    public void resetClearsDedup() {
+        MonsterTurnResultGate gate = new MonsterTurnResultGate();
+        assertTrue(gate.admit(CombatPhase.MONSTER_TURN, "turn-1", "monster_turn",
+            "stage-host", "stage-host", 7, "turn-1"));
+        gate.reset();
+        assertTrue(gate.admit(CombatPhase.MONSTER_TURN, "turn-1", "monster_turn",
+            "stage-host", "stage-host", 7, "turn-1"));
+    }
 }
