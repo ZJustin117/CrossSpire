@@ -189,6 +189,92 @@ public final class Protocol {
         public String character;
     }
 
+    /** Coordinated multi-client run start (T7.7a). Control message, not StandardPacket. */
+    public static class PartyRunStart extends GameMessage {
+        public PartyRunStart() { type = "party_run_start"; }
+        @SerializedName("party_id") public String partyId;
+        public String seed;
+        public int act;
+        @SerializedName("leader_id") public String leaderId;
+        public PartyRunMember[] members;
+    }
+
+    public static class PartyRunMember {
+        @SerializedName("player_id") public String playerId;
+        public String character;
+    }
+
+    public static class PartyRunStartRequest extends GameMessage {
+        public PartyRunStartRequest() { type = "party_run_start_request"; }
+        @SerializedName("party_id") public String partyId;
+        public String seed;
+        public String character;
+    }
+
+    public static class RewardPhaseEnter extends GameMessage {
+        public RewardPhaseEnter() { type = "reward_phase_enter"; }
+        @SerializedName("party_id") public String partyId;
+        @SerializedName("node_instance_id") public String nodeInstanceId;
+        @SerializedName("transaction_id") public String transactionId;
+    }
+
+    public static class RewardOffer extends GameMessage {
+        public RewardOffer() { type = "reward_offer"; }
+        @SerializedName("party_id") public String partyId;
+        @SerializedName("node_instance_id") public String nodeInstanceId;
+        @SerializedName("card_ids") public String[] cardIds;
+        @SerializedName("relic_ids") public String[] relicIds;
+        @SerializedName("potion_ids") public String[] potionIds;
+        @SerializedName("gold_min") public int goldMin;
+        @SerializedName("gold_max") public int goldMax;
+    }
+
+    public static class RewardPick extends GameMessage {
+        public RewardPick() { type = "reward_pick"; }
+        @SerializedName("party_id") public String partyId;
+        @SerializedName("node_instance_id") public String nodeInstanceId;
+        @SerializedName("card_id") public String cardId;
+        @SerializedName("relic_id") public String relicId;
+        @SerializedName("potion_id") public String potionId;
+        public boolean skipped;
+    }
+
+    public static class RewardPlayerResult extends GameMessage {
+        public RewardPlayerResult() { type = "reward_player_result"; }
+        @SerializedName("party_id") public String partyId;
+        @SerializedName("node_instance_id") public String nodeInstanceId;
+        @SerializedName("player_id") public String playerId;
+        public EffectDescription[] effects;
+    }
+
+    public static class RewardDone extends GameMessage {
+        public RewardDone() { type = "reward_done"; }
+        @SerializedName("party_id") public String partyId;
+        @SerializedName("node_instance_id") public String nodeInstanceId;
+    }
+
+    public static class RewardPhaseComplete extends GameMessage {
+        public RewardPhaseComplete() { type = "reward_phase_complete"; }
+        @SerializedName("party_id") public String partyId;
+        @SerializedName("node_instance_id") public String nodeInstanceId;
+    }
+
+    /** RoomInstanceHost unlocks map navigation for the party (T9). */
+    public static class RoomExitUnlocked extends GameMessage {
+        public RoomExitUnlocked() { type = "room_exit_unlocked"; }
+        @SerializedName("party_id") public String partyId;
+        @SerializedName("room_instance_id") public String roomInstanceId;
+        @SerializedName("node_instance_id") public String nodeInstanceId;
+        public String reason;
+    }
+
+    public static class RoomExitLocked extends GameMessage {
+        public RoomExitLocked() { type = "room_exit_locked"; }
+        @SerializedName("party_id") public String partyId;
+        @SerializedName("room_instance_id") public String roomInstanceId;
+        @SerializedName("node_instance_id") public String nodeInstanceId;
+    }
+
     public static class MemberInfo {
         public String id;
         public String ip;
@@ -386,6 +472,7 @@ public final class Protocol {
         @SerializedName("start_node_id") public String startNodeId;
         @SerializedName("map_revision") public int mapRevision;
         @SerializedName("party_revision") public int partyRevision;
+        public MapDefinition map;
     }
 
     public static class NodeInstanceAllocatePayload {
@@ -407,6 +494,9 @@ public final class Protocol {
         @SerializedName("encounter") public String encounter;
         @SerializedName("node_id") public String nodeId;
         @SerializedName("event_interface") public EventInterfacePayload eventInterface;
+        @SerializedName("shop_seed") public String shopSeed;
+        @SerializedName("rest_options") public String[] restOptions;
+        @SerializedName("treasure_tier") public String treasureTier;
     }
 
     public static class NodeInstanceOpenedPayload {
@@ -443,6 +533,7 @@ public final class Protocol {
         @SerializedName("ui_step") public String uiStep;
         @SerializedName("option_index") public int optionIndex;
         @SerializedName("selected_cards") public String[] selectedCards;
+        @SerializedName("selected_targets") public String[] selectedTargets;
         @SerializedName("resource_hash") public String resourceHash;
     }
 
@@ -455,12 +546,23 @@ public final class Protocol {
         public String reason;
     }
 
+    public static class SharedOutcome {
+        public String type;
+        @SerializedName("instance_id") public String instanceId;
+        @SerializedName("option_index") public int optionIndex;
+        /** Combat encounter key when type=event_room (e.g. Cultist). */
+        public String encounter;
+        /** Party members who joined this event-room path; only they force-enter combat. */
+        @SerializedName("member_ids") public String[] memberIds;
+    }
+
     public static class EventPlayerResultPayload {
         @SerializedName("event_instance_id") public String eventInstanceId;
         @SerializedName("party_id") public String partyId;
         @SerializedName("request_id") public String requestId;
         @SerializedName("player_id") public String playerId;
         public EffectDescription[] effects;
+        @SerializedName("shared_outcome") public SharedOutcome sharedOutcome;
     }
 
     private Protocol() {}

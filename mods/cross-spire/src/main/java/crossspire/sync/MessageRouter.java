@@ -12,12 +12,20 @@ import crossspire.combat.EventSyncPatches;
 import crossspire.combat.MonsterTurnResultGate;
 import crossspire.event.EventApprovalCoordinator;
 import crossspire.event.EventChoiceSender;
+import crossspire.event.EventOpenModeRegistry;
+import crossspire.event.EventPlayerResultApplyPlanner;
+import crossspire.event.EventRoomInstance;
+import crossspire.event.EventRoomInstanceRegistry;
+import crossspire.event.EventRoomOutcomePlanner;
+import crossspire.event.FallbackNihResultPlanner;
 import crossspire.event.NativeEventApprovalPatches;
 import crossspire.map.MapDefinition;
 import crossspire.map.MapHostVoteSender;
 import crossspire.map.MapNavigation;
 import crossspire.map.MapProtocolMapper;
 import crossspire.map.MapRegisterSender;
+import crossspire.map.MapHostRegistrationCoordinator;
+import crossspire.map.StsMapDefinitionApplier;
 import crossspire.map.NodeEntryCoordinator;
 import crossspire.map.NodeInstance;
 import crossspire.map.NodeInstanceAllocateSender;
@@ -25,11 +33,13 @@ import crossspire.map.NodeInstanceHostVoteSender;
 import crossspire.map.NodeInstanceOpenedSender;
 import crossspire.map.NodeGenerationPlanner;
 import crossspire.map.PartyRoomPinTracker;
+import crossspire.party.ActiveNodeTracker;
 import crossspire.party.PartySnapshotCodec;
 import crossspire.party.PartySnapshotSender;
 import crossspire.party.PartyCoordinator;
 import crossspire.party.PartyManager;
 import crossspire.party.PartyState;
+import crossspire.party.RoomNavigationGate;
 import crossspire.network.HeartbeatManager;
 import crossspire.network.PacketOperation;
 import crossspire.network.Protocol;
@@ -144,6 +154,36 @@ public class MessageRouter {
             CrossSpireMod.connectionManager.onHelloReceived(rawMessage);
         } else if ("player_ready".equals(type)) {
             CrossSpireMod.lobbyState.onPlayerReady(rawMessage);
+        } else if ("party_run_start_request".equals(type)) {
+            CrossSpireMod.lobbyState.onPartyRunStartRequest(rawMessage);
+        } else if ("party_run_start".equals(type)) {
+            if (CrossSpireMod.isRoomHost()) {
+                // Host already applied when broadcasting; still allow idempotent re-apply for self-loop skips.
+                Protocol.PartyRunStart run =
+                    Protocol.GSON.fromJson(rawMessage, Protocol.PartyRunStart.class);
+                if (run != null && run.source != null && run.source.equals(CrossSpireMod.playerId)
+                    && CrossSpireMod.lobbyState.isStarted()) {
+                    BaseMod.logger.info("MessageRouter skip self party_run_start (already applied)");
+                } else {
+                    CrossSpireMod.lobbyState.applyPartyRunStart(rawMessage);
+                }
+            } else {
+                CrossSpireMod.lobbyState.applyPartyRunStart(rawMessage);
+            }
+        } else if ("reward_phase_enter".equals(type)) {
+            handleRewardPhaseEnter(rawMessage);
+        } else if ("reward_done".equals(type)) {
+            handleRewardDone(rawMessage);
+        } else if ("reward_phase_complete".equals(type)) {
+            handleRewardPhaseComplete(rawMessage);
+        } else if ("room_exit_unlocked".equals(type)) {
+            handleRoomExitUnlocked(rawMessage);
+        } else if ("room_exit_locked".equals(type)) {
+            handleRoomExitLocked(rawMessage);
+        } else if ("reward_offer".equals(type) || "reward_pick".equals(type)
+            || "reward_player_result".equals(type)) {
+            BaseMod.logger.info("MessageRouter reward msg type=" + type
+                + " (personal economy; gold not shared)");
         } else if ("invoke".equals(type)) {
             handleInvoke(rawMessage);
         } else if ("invoke_result".equals(type)) {
@@ -680,14 +720,38 @@ public class MessageRouter {
         }
         if (roomIndex < 0 || !party.memberIds.contains(source)
             || party.mapInstanceId == null || party.mapInstanceId.isEmpty()) {
-            BaseMod.logger.info("MessageRouter reject room_pin unbound party=" + partyId);
+            BaseMod.logger.info("MessageRouter reject room_pin unbound party=" + partyId
+                + " map=" + (party.mapInstanceId != null ? party.mapInstanceId : "")
+                + " pos=" + party.mapPosition);
+            return;
+        }
+        if (CrossSpireMod.roomNavigationGate != null
+            && CrossSpireMod.roomNavigationGate.blocksRoomPin()
+            && (CrossSpireMod.roomNavigationGate.getPartyId().isEmpty()
+                || partyId.equals(CrossSpireMod.roomNavigationGate.getPartyId()))) {
+            BaseMod.logger.info("MessageRouter reject room_pin exit_locked party=" + partyId
+                + " " + CrossSpireMod.roomNavigationGate.summary());
+            return;
+        }
+        if (CrossSpireMod.rewardPhaseTracker != null
+            && CrossSpireMod.rewardPhaseTracker.blocksRoomPin()
+            && partyId.equals(CrossSpireMod.rewardPhaseTracker.getPartyId())) {
+            BaseMod.logger.info("MessageRouter reject room_pin reward_phase_active party=" + partyId);
+            return;
+        }
+        if (ActiveNodeTracker.isRewardPhaseActive()
+            && partyId.equals(ActiveNodeTracker.getPartyId())) {
+            BaseMod.logger.info("MessageRouter reject room_pin local reward_phase party=" + partyId);
             return;
         }
         MapDefinition map = CrossSpireMod.roomHost.getMapRegistry().get(party.mapInstanceId);
         String nodeId = MapNavigation.resolveOutgoing(map, party.mapPosition, roomIndex);
         if (nodeId == null) {
             BaseMod.logger.info("MessageRouter reject room_pin bad index party=" + partyId
-                + " from=" + party.mapPosition + " idx=" + roomIndex);
+                + " from=" + party.mapPosition + " idx=" + roomIndex
+                + " map=" + party.mapInstanceId
+                + " outgoing=" + (map != null && map.getNode(party.mapPosition) != null
+                    ? map.getNode(party.mapPosition).outgoingNodeIds : "null"));
             return;
         }
 
@@ -731,6 +795,9 @@ public class MessageRouter {
         }
         String consensus = tracker.consensusNodeId(party);
         if (consensus == null) return;
+        // Clear leader-local pins immediately so a concurrent second pin cannot
+        // re-fire consensus for the same visit with a stale member set.
+        tracker.clear(party.partyId);
         String consensusMsg = RoomPinSender.buildRoomConsensus(
             CrossSpireMod.playerId, party.partyId, party.mapInstanceId, consensus);
         if (CrossSpireMod.isRoomHost()) {
@@ -1009,22 +1076,45 @@ public class MessageRouter {
         EventApprovalCoordinator.Decision decision = CrossSpireMod.roomHost
             .getEventApprovalCoordinator().decide(
                 CrossSpireMod.partyManager.getParty(partyId), pkt.source, request);
-        StandardPacket reply;
         if (decision.approved) {
-            reply = EventChoiceSender.approvedPacket(decision.payload);
+            deliverEventApprovals(partyId, decision);
             BaseMod.logger.info("MessageRouter event_choice_approved party=" + partyId
-                + " request=" + request.requestId);
+                + " request=" + request.requestId
+                + " approvals=" + decision.approvals.size());
         } else {
             decision.payload.reason = decision.reason;
-            reply = EventChoiceSender.rejectedPacket(decision.payload);
+            StandardPacket reply = EventChoiceSender.rejectedPacket(decision.payload);
+            if (pkt.source.equals(CrossSpireMod.playerId)) {
+                handleEventChoiceRejected(reply);
+            } else {
+                CrossSpireMod.sendToPlayer(pkt.source, StandardPacket.toJson(reply));
+            }
             BaseMod.logger.info("MessageRouter event_choice_rejected party=" + partyId
                 + " request=" + request.requestId + " reason=" + decision.reason);
         }
-        if (pkt.source.equals(CrossSpireMod.playerId)) {
-            if (decision.approved) handleEventChoiceApproved(reply);
-            else handleEventChoiceRejected(reply);
-        } else {
-            CrossSpireMod.sendToPlayer(pkt.source, StandardPacket.toJson(reply));
+    }
+
+    private void deliverEventApprovals(String partyId, EventApprovalCoordinator.Decision decision) {
+        PartyState party = CrossSpireMod.partyManager != null
+            ? CrossSpireMod.partyManager.getParty(partyId) : null;
+        for (Protocol.EventChoiceDecisionPayload payload : decision.approvals) {
+            if (payload == null) continue;
+            StandardPacket reply = EventChoiceSender.approvedPacket(payload);
+            String chooser = CrossSpireMod.roomHost != null
+                ? CrossSpireMod.roomHost.getEventApprovalCoordinator()
+                    .chooserForRequest(payload.eventInstanceId, payload.requestId)
+                : null;
+            if (chooser == null || chooser.equals(CrossSpireMod.playerId)) {
+                handleEventChoiceApproved(reply);
+            } else {
+                CrossSpireMod.sendToPlayer(chooser, StandardPacket.toJson(reply));
+            }
+            maybeEmitNihFallbackResult(partyId, chooser != null ? chooser : CrossSpireMod.playerId,
+                payload);
+        }
+        if (party != null) {
+            BaseMod.logger.info("MessageRouter voting/individual approvals delivered party="
+                + partyId + " count=" + decision.approvals.size());
         }
     }
 
@@ -1037,6 +1127,45 @@ public class MessageRouter {
             BaseMod.logger.info("MessageRouter event_choice_approved event="
                 + decision.eventInstanceId + " request=" + decision.requestId);
         }
+    }
+
+    /**
+     * When local is the party's NodeInstanceHost and the event was opened as fallback UI,
+     * produce a diagnostic personal result for the chooser. Native opens capture real deltas
+     * on the chooser after buttonEffect instead.
+     */
+    private void maybeEmitNihFallbackResult(String partyId, String chooserId,
+                                            Protocol.EventChoiceDecisionPayload decision) {
+        if (decision == null || CrossSpireMod.partyManager == null) return;
+        if (!EventOpenModeRegistry.isFallback(decision.eventInstanceId)) {
+            BaseMod.logger.info("MessageRouter skip NIH diagnostic result for native event="
+                + decision.eventInstanceId);
+            return;
+        }
+        PartyState party = CrossSpireMod.partyManager.getParty(partyId);
+        if (party == null || party.nodeInstanceHostId == null
+            || !party.nodeInstanceHostId.equals(CrossSpireMod.playerId)) {
+            return;
+        }
+        Protocol.EventInterfacePayload iface = CrossSpireMod.roomHost != null
+            ? CrossSpireMod.roomHost.getEventApprovalCoordinator()
+                .getInterface(decision.eventInstanceId)
+            : null;
+        Protocol.EventPlayerResultPayload result = FallbackNihResultPlanner.plan(iface, decision, chooserId);
+        if (result == null) {
+            BaseMod.logger.info("MessageRouter NIH fallback result skipped event="
+                + decision.eventInstanceId + " request=" + decision.requestId);
+            return;
+        }
+        StandardPacket resultPkt = EventChoiceSender.resultPacket(result);
+        if (CrossSpireMod.isRoomHost()) {
+            handleEventPlayerResult(resultPkt);
+        } else {
+            CrossSpireMod.send(StandardPacket.toJson(resultPkt));
+        }
+        BaseMod.logger.info("MessageRouter NIH fallback result event=" + result.eventInstanceId
+            + " request=" + result.requestId + " chooser=" + chooserId
+            + " effects=" + (result.effects != null ? result.effects.length : 0));
     }
 
     private void handleEventChoiceRejected(StandardPacket pkt) {
@@ -1057,6 +1186,13 @@ public class MessageRouter {
         if (result == null) return;
         String partyId = partyId(result.partyId);
         if (!CrossSpireMod.isRoomHost()) {
+            applyPersonalEventResult(result);
+            if (result.sharedOutcome != null) {
+                BaseMod.logger.info("MessageRouter shared_outcome type=" + result.sharedOutcome.type
+                    + " instance=" + result.sharedOutcome.instanceId
+                    + " option=" + result.sharedOutcome.optionIndex
+                    + " encounter=" + result.sharedOutcome.encounter);
+            }
             BaseMod.logger.info("MessageRouter event_player_result party=" + partyId
                 + " request=" + result.requestId);
             return;
@@ -1069,9 +1205,81 @@ public class MessageRouter {
                 + " request=" + result.requestId);
             return;
         }
-        CrossSpireMod.sendToParty(partyId, StandardPacket.toJson(pkt));
+        attachSharedOutcomeIfNeeded(party, result);
+        // Re-serialize payload after optional shared_outcome enrichment.
+        StandardPacket out = EventChoiceSender.resultPacket(result);
+        out.source = pkt.source;
+        CrossSpireMod.sendToParty(partyId, StandardPacket.toJson(out));
+        applyPersonalEventResult(result);
         BaseMod.logger.info("MessageRouter event_player_result party=" + partyId
-            + " request=" + result.requestId);
+            + " request=" + result.requestId
+            + (result.sharedOutcome != null
+                ? (" shared=" + result.sharedOutcome.type + ":" + result.sharedOutcome.instanceId)
+                : ""));
+    }
+
+    private void attachSharedOutcomeIfNeeded(PartyState party, Protocol.EventPlayerResultPayload result) {
+        if (party == null || result == null || result.sharedOutcome != null
+            || CrossSpireMod.roomHost == null) {
+            return;
+        }
+        EventApprovalCoordinator coordinator = CrossSpireMod.roomHost.getEventApprovalCoordinator();
+        Protocol.EventInterfacePayload iface = coordinator.getInterface(result.eventInstanceId);
+        Integer option = coordinator.optionForRequest(result.eventInstanceId, result.requestId);
+        if (iface == null || option == null) return;
+        String chooser = result.playerId != null ? result.playerId
+            : coordinator.chooserForRequest(result.eventInstanceId, result.requestId);
+        if (EventRoomOutcomePlanner.requiresLeaveParty(iface, option.intValue())) {
+            result.sharedOutcome = EventRoomInstanceRegistry.leavePartyOutcome(option.intValue());
+            return;
+        }
+        if (!EventRoomOutcomePlanner.createsEventRoom(iface, option.intValue())) return;
+        EventRoomInstance room = CrossSpireMod.roomHost.getEventRoomInstanceRegistry()
+            .allocateOrJoin(party, result.eventInstanceId, option.intValue(), chooser);
+        if (room != null) {
+            String encounter = EventRoomOutcomePlanner.resolveEncounter(iface, option.intValue());
+            result.sharedOutcome = EventRoomInstanceRegistry.toSharedOutcome(room, encounter);
+            BaseMod.logger.info("MessageRouter event_room instance=" + room.instanceId
+                + " option=" + option + " members=" + room.size()
+                + " encounter=" + encounter);
+        }
+    }
+
+    private void applyPersonalEventResult(Protocol.EventPlayerResultPayload result) {
+        if (result != null && result.sharedOutcome != null) {
+            applySharedEventOutcome(result.sharedOutcome);
+        }
+        if (!EventPlayerResultApplyPlanner.shouldApplyLocally(result, CrossSpireMod.playerId)) {
+            return;
+        }
+        if (result.effects == null || result.effects.length == 0) return;
+        // Chooser already applied native side effects locally; only re-apply remote/fallback deltas.
+        if (result.playerId != null && result.playerId.equals(CrossSpireMod.playerId)
+            && !EventOpenModeRegistry.isFallback(result.eventInstanceId)
+            && EventOpenModeRegistry.mode(result.eventInstanceId) != null) {
+            BaseMod.logger.info("MessageRouter skip re-apply native self result request="
+                + result.requestId);
+            return;
+        }
+        resultReplayer.applyEffects(result.effects);
+        BaseMod.logger.info("MessageRouter applied personal event result request="
+            + result.requestId + " effects=" + result.effects.length);
+    }
+
+    /**
+     * T7.5: event_room shared_outcome → local STS combat for members on that path.
+     * Shop/rest map rooms stay type-only; in-event fight still needs a shared encounter shell.
+     */
+    private void applySharedEventOutcome(Protocol.SharedOutcome outcome) {
+        if (outcome == null || !"event_room".equals(outcome.type)) return;
+        if (!EventRoomOutcomePlanner.shouldLocalPlayerEnterEventRoom(outcome, CrossSpireMod.playerId)) {
+            BaseMod.logger.info("MessageRouter skip event_room enter not a member instance="
+                + outcome.instanceId);
+            return;
+        }
+        String encounter = outcome.encounter != null && !outcome.encounter.isEmpty()
+            ? outcome.encounter : "Cultist";
+        SyncExecutor.enterEventRoomCombat(outcome.instanceId, encounter);
     }
 
     private void handleMapHostVote(StandardPacket pkt) {
@@ -1095,6 +1303,8 @@ public class MessageRouter {
         if (consensus != null) {
             StandardPacket result = MapHostVoteSender.buildResult(partyId, consensus);
             CrossSpireMod.sendToParty(partyId, StandardPacket.toJson(result));
+            // RoomHost path: register here only. Clients register from map_host_result.
+            MapHostRegistrationCoordinator.registerIfElected(partyId, consensus);
             BaseMod.logger.info("MessageRouter map_host_result party=" + partyId
                 + " host=" + consensus);
         }
@@ -1107,6 +1317,7 @@ public class MessageRouter {
         if (result == null) return;
         String hostId = result.mapHostId != null ? result.mapHostId : result.candidateId;
         if (hostId == null) return;
+        MapHostRegistrationCoordinator.registerIfElected(partyId(result.partyId), hostId);
         BaseMod.logger.info("MessageRouter map_host_result party="
             + partyId(result.partyId) + " host=" + hostId);
     }
@@ -1122,10 +1333,20 @@ public class MessageRouter {
         String partyId = partyId(registration.partyId);
         PartyState party = CrossSpireMod.partyManager.getParty(partyId);
         MapDefinition map = MapProtocolMapper.fromProtocol(registration.map);
+        if (party != null && party.mapInstanceId != null && !party.mapInstanceId.isEmpty()) {
+            BaseMod.logger.info("MessageRouter ignore duplicate map_register party=" + partyId
+                + " existing=" + party.mapInstanceId);
+            return;
+        }
         MapDefinition accepted = CrossSpireMod.roomHost.getMapRegistrationCoordinator()
             .register(party, pkt.source, registration.mapHostId, map);
         if (accepted == null) {
             BaseMod.logger.info("MessageRouter reject map_register party=" + partyId);
+            return;
+        }
+        if (!StsMapDefinitionApplier.apply(accepted)) {
+            BaseMod.logger.error("MessageRouter RoomHost failed to apply authoritative map="
+                + accepted.mapInstanceId);
             return;
         }
         PartyState bound = CrossSpireMod.partyManager.bindMap(
@@ -1145,9 +1366,23 @@ public class MessageRouter {
 
     private void handleMapRegistered(StandardPacket pkt) {
         if (CrossSpireMod.isRoomHost()) return;
+        if (CrossSpireMod.hostId == null || !CrossSpireMod.hostId.equals(pkt.source)) {
+            BaseMod.logger.error("MessageRouter reject map_registered from non-host=" + pkt.source);
+            return;
+        }
         Protocol.MapRegisteredPayload registered = Protocol.GSON.fromJson(
             pkt.payload, Protocol.MapRegisteredPayload.class);
         if (registered == null) return;
+        MapDefinition map = MapProtocolMapper.fromProtocol(registered.map);
+        if (map == null || !registered.mapInstanceId.equals(map.mapInstanceId)
+            || !registered.startNodeId.equals(map.startNodeId)) {
+            BaseMod.logger.error("MessageRouter reject map_registered without authoritative topology");
+            return;
+        }
+        if (!StsMapDefinitionApplier.apply(map)) {
+            BaseMod.logger.error("MessageRouter failed to reconstruct authoritative map=" + map.mapInstanceId);
+            return;
+        }
         BaseMod.logger.info("MessageRouter map_registered party="
             + partyId(registered.partyId) + " map=" + registered.mapInstanceId
             + " start=" + registered.startNodeId);
@@ -1319,5 +1554,169 @@ public class MessageRouter {
                 BaseMod.logger.info("MessageRouter event_votes broadcast: " + votesJson);
             }
         }
+    }
+
+    private void handleRewardPhaseEnter(String rawMessage) {
+        Protocol.RewardPhaseEnter msg =
+            Protocol.GSON.fromJson(rawMessage, Protocol.RewardPhaseEnter.class);
+        if (msg == null) return;
+        String partyId = partyId(msg.partyId);
+        if (!isLocalParty(partyId)) return;
+        if (CrossSpireMod.rewardPhaseTracker != null) {
+            if (CrossSpireMod.rewardPhaseTracker.isCompletedNode(msg.nodeInstanceId)) {
+                BaseMod.logger.info("MessageRouter ignore reward_phase_enter completed node="
+                    + msg.nodeInstanceId);
+                return;
+            }
+            if (!CrossSpireMod.rewardPhaseTracker.enter(partyId, msg.nodeInstanceId)) {
+                BaseMod.logger.info("MessageRouter ignore reward_phase_enter party=" + partyId
+                    + " node=" + msg.nodeInstanceId);
+                return;
+            }
+        }
+        ActiveNodeTracker.setRewardPhaseActive(true);
+        BaseMod.logger.info("MessageRouter reward_phase_enter party=" + partyId
+            + " node=" + msg.nodeInstanceId);
+    }
+
+    private void handleRewardDone(String rawMessage) {
+        Protocol.RewardDone msg = Protocol.GSON.fromJson(rawMessage, Protocol.RewardDone.class);
+        if (msg == null || msg.source == null) return;
+        String partyId = partyId(msg.partyId);
+        PartyState party = CrossSpireMod.partyManager != null
+            ? CrossSpireMod.partyManager.getParty(partyId) : null;
+        if (party == null) return;
+
+        if (CrossSpireMod.isRoomHost()
+            && !PartyCoordinator.isLeader(CrossSpireMod.partyManager, partyId, CrossSpireMod.playerId)) {
+            String leaderId = PartyCoordinator.leaderId(CrossSpireMod.partyManager, partyId);
+            if (leaderId != null && !leaderId.isEmpty() && !leaderId.equals(CrossSpireMod.playerId)) {
+                CrossSpireMod.sendToPlayer(leaderId, rawMessage);
+                return;
+            }
+        }
+
+        if (!PartyCoordinator.isLeader(CrossSpireMod.partyManager, partyId, CrossSpireMod.playerId)
+            && !CrossSpireMod.isRoomHost()) {
+            CrossSpireMod.send(rawMessage);
+            return;
+        }
+
+        if (CrossSpireMod.rewardPhaseTracker == null) return;
+        // Never re-open a completed reward node on late reward_done.
+        if (CrossSpireMod.rewardPhaseTracker.isCompletedNode(msg.nodeInstanceId)) {
+            BaseMod.logger.info("MessageRouter ignore late reward_done completed node="
+                + msg.nodeInstanceId);
+            return;
+        }
+        if (!CrossSpireMod.rewardPhaseTracker.isActive()) {
+            // First done can open phase only if enter was lost; not if already completed.
+            if (!CrossSpireMod.rewardPhaseTracker.enter(partyId, msg.nodeInstanceId)) {
+                return;
+            }
+            ActiveNodeTracker.setRewardPhaseActive(true);
+        }
+        boolean allDone = CrossSpireMod.rewardPhaseTracker.markDone(msg.source, party);
+        BaseMod.logger.info("MessageRouter reward_done from="
+            + (msg.source.length() >= 8 ? msg.source.substring(0, 8) : msg.source)
+            + " done=" + CrossSpireMod.rewardPhaseTracker.doneCount()
+            + "/" + party.memberIds.size());
+        if (allDone) {
+            Protocol.RewardPhaseComplete complete = new Protocol.RewardPhaseComplete();
+            complete.source = CrossSpireMod.playerId;
+            complete.seq = CrossSpireMod.nextSeq();
+            complete.partyId = partyId;
+            complete.nodeInstanceId = msg.nodeInstanceId != null
+                ? msg.nodeInstanceId : CrossSpireMod.rewardPhaseTracker.getNodeInstanceId();
+            String json = Protocol.GSON.toJson(complete);
+            CrossSpireMod.send(json);
+            handleRewardPhaseComplete(json);
+        }
+    }
+
+    private void handleRewardPhaseComplete(String rawMessage) {
+        Protocol.RewardPhaseComplete msg =
+            Protocol.GSON.fromJson(rawMessage, Protocol.RewardPhaseComplete.class);
+        if (msg == null) return;
+        String partyId = partyId(msg.partyId);
+        if (!isLocalParty(partyId)) return;
+        if (CrossSpireMod.rewardPhaseTracker != null) {
+            if (CrossSpireMod.rewardPhaseTracker.isCompletedNode(msg.nodeInstanceId)
+                && !CrossSpireMod.rewardPhaseTracker.isActive()) {
+                ActiveNodeTracker.setRewardPhaseActive(false);
+                applyRoomExitUnlocked(partyId, msg.nodeInstanceId, "reward_complete");
+                BaseMod.logger.info("MessageRouter reward_phase_complete idempotent party="
+                    + partyId + " node=" + msg.nodeInstanceId);
+                return;
+            }
+            CrossSpireMod.rewardPhaseTracker.clear();
+        }
+        ActiveNodeTracker.setRewardPhaseActive(false);
+        applyRoomExitUnlocked(partyId, msg.nodeInstanceId, "reward_complete");
+        BaseMod.logger.info("MessageRouter reward_phase_complete party=" + partyId
+            + " node=" + msg.nodeInstanceId + " room_pin allowed");
+    }
+
+    private void handleRoomExitUnlocked(String rawMessage) {
+        Protocol.RoomExitUnlocked msg =
+            Protocol.GSON.fromJson(rawMessage, Protocol.RoomExitUnlocked.class);
+        if (msg == null) return;
+        String partyId = partyId(msg.partyId);
+        if (!isLocalParty(partyId)) return;
+        String instanceId = msg.roomInstanceId != null && !msg.roomInstanceId.isEmpty()
+            ? msg.roomInstanceId : msg.nodeInstanceId;
+        applyRoomExitUnlocked(partyId, instanceId, msg.reason != null ? msg.reason : "host");
+    }
+
+    private void handleRoomExitLocked(String rawMessage) {
+        Protocol.RoomExitLocked msg =
+            Protocol.GSON.fromJson(rawMessage, Protocol.RoomExitLocked.class);
+        if (msg == null || CrossSpireMod.roomNavigationGate == null) return;
+        String partyId = partyId(msg.partyId);
+        if (!isLocalParty(partyId)) return;
+        String instanceId = msg.roomInstanceId != null && !msg.roomInstanceId.isEmpty()
+            ? msg.roomInstanceId : msg.nodeInstanceId;
+        CrossSpireMod.roomNavigationGate.lock(partyId, instanceId);
+        BaseMod.logger.info("MessageRouter room_exit_locked party=" + partyId
+            + " room=" + instanceId);
+    }
+
+    private static void applyRoomExitUnlocked(String partyId, String roomInstanceId, String reason) {
+        if (CrossSpireMod.roomNavigationGate == null) return;
+        boolean ok = CrossSpireMod.roomNavigationGate.unlock(partyId, roomInstanceId, reason);
+        BaseMod.logger.info("MessageRouter room_exit_unlocked party=" + partyId
+            + " room=" + roomInstanceId + " reason=" + reason + " applied=" + ok
+            + " " + CrossSpireMod.roomNavigationGate.summary());
+    }
+
+    /**
+     * RoomInstanceHost (or console): broadcast map navigation unlock for the active room.
+     * Shop/rest do not sync inventory/options—only unlock so the party can pin.
+     */
+    public static void broadcastRoomExitUnlocked(String reason) {
+        String partyId = ActiveNodeTracker.getPartyId();
+        if (partyId == null || partyId.isEmpty()) partyId = PartyManager.DEFAULT_PARTY_ID;
+        String instanceId = ActiveNodeTracker.getNodeInstanceId();
+        if (instanceId == null || instanceId.isEmpty()) {
+            if (CrossSpireMod.roomNavigationGate != null) {
+                instanceId = CrossSpireMod.roomNavigationGate.getRoomInstanceId();
+            }
+        }
+        Protocol.RoomExitUnlocked msg = new Protocol.RoomExitUnlocked();
+        msg.source = CrossSpireMod.playerId;
+        msg.seq = CrossSpireMod.nextSeq();
+        msg.partyId = partyId;
+        msg.roomInstanceId = instanceId != null ? instanceId : "";
+        msg.nodeInstanceId = msg.roomInstanceId;
+        msg.reason = reason != null ? reason : "manual";
+        String json = Protocol.GSON.toJson(msg);
+        CrossSpireMod.send(json);
+        if (CrossSpireMod.messageRouter != null) {
+            CrossSpireMod.messageRouter.route(json);
+        } else {
+            applyRoomExitUnlocked(partyId, msg.roomInstanceId, msg.reason);
+        }
+        BaseMod.logger.info("MessageRouter broadcast room_exit_unlocked reason=" + msg.reason
+            + " room=" + msg.roomInstanceId);
     }
 }

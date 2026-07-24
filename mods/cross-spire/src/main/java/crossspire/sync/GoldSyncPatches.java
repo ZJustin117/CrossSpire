@@ -29,8 +29,13 @@ public class GoldSyncPatches {
         }
     }
 
+    /**
+     * Personal economy (US-4d): only project local gold for remote display.
+     * Receivers must not apply this as a shared wallet write on their own player.
+     */
     private static void broadcastGold(String kind, int amount, AbstractPlayer player) {
         if (!CrossSpireMod.isConnected()) return;
+        if (AbstractDungeon.player != null && player != AbstractDungeon.player) return;
 
         Protocol.PlayerStateMessage msg = new Protocol.PlayerStateMessage();
         msg.source = CrossSpireMod.playerId;
@@ -44,6 +49,7 @@ public class GoldSyncPatches {
         msg.player.characterClass = player.getClass().getSimpleName();
 
         CrossSpireMod.send(Protocol.GSON.toJson(msg));
-        BaseMod.logger.info("GoldSyncPatches " + kind + ": " + amount);
+        BaseMod.logger.info("GoldSyncPatches " + kind + " projection amount=" + amount
+            + " localGold=" + player.gold + " (personal economy; not shared wallet)");
     }
 }

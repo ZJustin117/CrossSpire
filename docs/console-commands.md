@@ -12,7 +12,7 @@ CrossSpire 通过 BaseMod 的 `ConsoleCommand` API 注册 `crossspire` 命名空
 
 | 命令 | 说明 |
 |------|------|
-| `crossspire host <advertised-ip> <port>` | 以房主身份启动 P2P 监听并公布显式地址（星型拓扑） |
+| `crossspire host <advertised-ip> <port>` | 以房主身份启动监听并公布显式地址（星型拓扑） |
 | `crossspire join <ip> <port>` | 作为客户端连接到指定房主 |
 | `crossspire disconnect` | 断开连接并清空远程玩家注册表 |
 
@@ -30,12 +30,12 @@ CrossSpire 通过 BaseMod 的 `ConsoleCommand` API 注册 `crossspire` 命名空
 
 | 命令 | 说明 |
 |------|------|
-| `crossspire ready [char]` | 标记本地玩家就绪，可选角色名 |
-| `crossspire start [char] [seed]` | 开始游戏，可选角色名和种子 |
+| `crossspire ready [char]` | 标记本地玩家就绪，可选角色名；全员 ready 后才允许共进 start |
+| `crossspire start [char] [seed]` | 共进：全员 ready 时由队长广播 `party_run_start`，各端本地 `GameStarter`；单机未联机时仅本地 start。可选角色覆盖本地 ready 角色；seed 仅队长/发起端有效 |
 | `crossspire vote <player_id>` | 选举图主（stage host），全员一致即确认 |
 | `crossspire room <index>` | 为本队标注下一房间（0-based 出边 index）；需 map 绑定；一致后分配 NodeInstance |
 | `crossspire snapshot` | 发送当前游戏状态快照 (`full_snapshot`) |
-| `crossspire party status` | 显示本地小队目录（T7.2a 诊断；leave/join 命令待后续 routing） |
+| `crossspire party status` | 显示本地小队目录（party_id / leader / members / map / NIH） |
 | `crossspire maphost <candidate_id>` | 为本队投 MapHost 票；全员一致后房主广播 `map_host_result` |
 | `crossspire mapreg [map_id] [start] [next] [monster|event]` | 获选 MapHost 登记最小不可变拓扑（诊断用）；末参可选 `event` 使 next 为事件节点 |
 | `crossspire nodehost <candidate_id>` | 为本队投 NodeInstanceHost 票（需已 map 绑定）；一致后写目录并广播 |
@@ -48,18 +48,20 @@ CrossSpire 通过 BaseMod 的 `ConsoleCommand` API 注册 `crossspire` 命名空
 | 命令 | 说明 |
 |------|------|
 | `crossspire play <card_id> [target]` | 打出一张卡牌，通过 CentralQueueManager 调度执行 |
+| `crossspire rewarddone` | 本地奖励屏完成，发送 `reward_done`（T7.8；完成后映射为导航 unlock） |
+| `crossspire mapunlock [reason]` | 房间实例主广播 `room_exit_unlocked`，本队解锁地图 pin（T9；商店/篝火不需同步货架） |
 | `crossspire queue` | 显示当前待打出队列 |
 
-### 事件系统（就近原则 + 沙盒转录）
+### 旧事件诊断命令
 
 | 命令 | 说明 |
 |------|------|
-| `crossspire cevent <event_name...>` | 通过 EventHelper.getEvent 获取事件实例，进入事件房间，广播 event_interface |
-| `crossspire eventsel <option_index>` | 沙盒模式：生成 buttonEffect transcript 发往 stage host 重播 |
-| `crossspire eselect <option_index> <card_id> [card_id2...]` | 完整 transcript：buttonEffect + cardSelect + confirm 一次性发送 |
-| `crossspire evote <option_index>` | 事件投票模式：标注投票选项，房主聚合后共识执行 |
-| `crossspire select <card_id>` | 从 GridCardSelectScreen 的 targetGroup 中选一张卡插入 selectedCards |
-| `crossspire confirm` | 模拟点击 GridCardSelectScreen 的确认按钮（+ isScreenUp=false + event.update） |
+| `crossspire cevent <event_name...>` | 旧本地事件诊断入口；不属于当前批准式事件流程 |
+| `crossspire eventsel <option_index>` | 旧事件诊断入口；不使用 transcript 远端重播 |
+| `crossspire eselect <option_index> <card_id> [card_id2...]` | 旧 transcript 选牌诊断；生产路径用原生 Grid/Hand 门控（`cardSelect`/`targetSelect`） |
+| `crossspire evote <option_index>` | 旧 `event_vote` 控制消息；小队 voting 生产路径走 `event_choice_request` + 全员同选项共识 |
+| `crossspire select <card_id>` | 从 GridCardSelectScreen 的 targetGroup 中选一张卡插入 selectedCards（本地 UI 辅助） |
+| `crossspire confirm` | 模拟点击 GridCardSelectScreen 的确认按钮（会触发已绑定事件的 `cardSelect` 门控） |
 
 ---
 
@@ -71,7 +73,7 @@ CrossSpire 通过 BaseMod 的 `ConsoleCommand` API 注册 `crossspire` 命名空
 crossspire host 127.0.0.1 54321
 ```
 
-房主创建 P2P 监听端口，并在 `hello` 中公布显式传入的地址。所有客户端连接到房主后形成**星型拓扑**（O(n) 连接，客户端间不直连）。CrossSpire 不提供隐式 IP 或端口默认值。
+房主创建监听端口，并在 `hello` 中公布显式传入的地址。所有客户端连接到房主后形成**星型拓扑**（O(n) 连接，客户端间不直连）。CrossSpire 不提供隐式 IP 或端口默认值。
 
 ### `crossspire join <ip> <port>`
 
@@ -139,10 +141,10 @@ crossspire vote b9c0db98
 crossspire room 0
 ```
 
-标注下一个地图房间 index。房主聚合所有玩家标注后：
+标注本队下一个地图房间 index。队长聚合本队成员标注后：
 
-- 全员一致 → 构造 `room_consensus` → stage host 导航到该房间
-- 未一致 → 广播 `room_pins` 快照
+- 本队一致 → `room_consensus` 经房主分配 NodeInstance，再由 NodeInstanceHost 打开
+- 未一致 → 仅向本队广播 `room_pins` 快照
 
 ### `crossspire play <card_id> [target]`
 
@@ -152,11 +154,17 @@ crossspire play Bash
 crossspire play Strike_R JawWorm
 ```
 
-房主模式下：构造 `QueueSubmitMessage` → `CentralQueueManager.onQueueSubmit` → 队列调度执行。客户端模式下：发送 `queue_submit` 到房主。
+成员将 `queue_submit` 经房主定向路由到本队队长；队长调用 `CentralQueueManager` 调度，再由房主仅向本队中继玩法输出。
 
 目标：攻击卡默认第一个存活的怪物；其他卡默认 self。
 
-### `crossspire cevent <event_name...>`
+### 批准式事件
+
+当前事件节点打开后，匹配 `event_class`/hash 的客户端本地实例化原生事件。`AbstractEvent.buttonEffect(int)` 在产生副作用前发送 `event_choice_request`；批准只放行对应选择一次，拒绝恢复输入。class/hash 不匹配的客户端显示 fallback UI。个人结果通过 `event_player_result` 向本队中继。
+
+使用 `crossspire eventopen`、`crossspire eventchoice` 和 `crossspire eventresult` 进行当前流程的诊断。原生多步骤 UI 已接线：`GridCardSelectScreen` → `cardSelect`、`HandCardSelectScreen` → `targetSelect`；小队 voting 由房主按 `party_id` 聚合同选项请求。
+
+### 旧本地事件诊断
 
 ```
 crossspire cevent Big Fish
@@ -168,7 +176,7 @@ crossspire cevent Living Wall
 - `crossspire cevent Big Fish` — 进入 BigFish 事件
 - `crossspire cevent Living Wall` — 进入 LivingWall 事件
 
-事件进入后自动广播 `event_interface`（含 `event_class` 全限定名和 `OPTIONS`）。
+该命令不是 P7 批准式流程的入口；新流程由已经打开的 event NodeInstance 发布 `event_interface`。
 
 ### `crossspire eventsel <option_index>`
 
@@ -176,7 +184,7 @@ crossspire cevent Living Wall
 crossspire eventsel 0
 ```
 
-生成 `event_transcript {buttonEffect: 0}` 发往 stage host。stage host 收到后反射调用 `event.buttonEffect(0)` 重播。
+此旧诊断命令不再生成或发送 `event_transcript`。当前事件选择使用 `crossspire eventchoice`，并在本地原生事件上通过批准门控执行。
 
 ### `crossspire eselect <option_index> <card_id> [card_id2...]`
 
@@ -185,27 +193,15 @@ crossspire eselect 0 Strike_R
 crossspire eselect 1 Defend_R Bash
 ```
 
-生成完整 transcript：
-```json
-{
-  "type": "event_transcript",
-  "actions": [
-    {"type": "buttonEffect", "index": 0},
-    {"type": "cardSelect", "cards": ["Strike_R"]},
-    {"type": "confirm"}
-  ]
-}
-```
-
-stage host 收到后依次执行：buttonEffect → cardSelect 注入 → confirm 确认。LivingWall "Forget" 选项测例：
+以下为**旧** transcript 本地诊断示例；生产路径应在 event NodeInstance 上用原生选牌 UI（门控会发 `cardSelect`/`targetSelect`），或用 `eventchoice` 诊断：
 
 ```
 crossspire start IRONCLAD
 crossspire cevent Living Wall
-crossspire eventsel 0          # 点击 "Forget"
-crossspire select Strike_R     # 选中 Strike_R
-crossspire confirm             # 确认 → deck 10→9 ✅
-crossspire gamestate           # 验证
+crossspire eventsel 0          # 旧入口
+crossspire select Strike_R     # 注入 selectedCards
+crossspire confirm             # 确认点击（绑定事件时走 GateGridConfirm）
+crossspire gamestate
 ```
 
 ### `crossspire evote <option_index>`
@@ -214,10 +210,7 @@ crossspire gamestate           # 验证
 crossspire evote 0
 ```
 
-发送 `event_vote {option_index: 0}` 到房主。房主使用 `RoomHost.castEventVote` + `checkEventVoteConsensus` 聚合：
-
-- 全员一致 → 自动构造 event_transcript buttonEffect → 重播
-- 未一致 → 广播 `event_votes` 快照
+发送旧控制消息 `event_vote`。小队 voting 生产路径：各成员发 `event_choice_request`（同 `option_index`），房主全员一致后广播 `event_choice_approved`。
 
 ### `crossspire select <card_id>`
 
@@ -270,29 +263,32 @@ python3 "$CROSSSPIRE_AMETHYST_TOOLS_DIR/main.py" sts-harness \
   -OutDir "$CROSSSPIRE_HARNESS_OUT_DIR" \
   -ConsoleCommand "crossspire join 127.0.0.1 $CROSSSPIRE_GAME_PORT"
 
-# 战斗
+# 真共进主路径（T7.7+）：双方 ready → start → map/node → room pin → 同 node 打牌
+# 注意：仅 D1 start + BaseMod "fight Cultist" 是 host-spawn projection 回归，不作为共进 pass。
 python3 "$CROSSSPIRE_AMETHYST_TOOLS_DIR/main.py" sts-harness \
   -Command console -DeviceSerial "$CROSSSPIRE_D1_SERIAL" \
   -OutDir "$CROSSSPIRE_HARNESS_OUT_DIR" \
-  -ConsoleCommand "crossspire start IRONCLAD"
-python3 "$CROSSSPIRE_AMETHYST_TOOLS_DIR/main.py" sts-harness \
-  -Command console -DeviceSerial "$CROSSSPIRE_D1_SERIAL" \
-  -OutDir "$CROSSSPIRE_HARNESS_OUT_DIR" \
-  -ConsoleCommand "fight Cultist"
-python3 "$CROSSSPIRE_AMETHYST_TOOLS_DIR/main.py" sts-harness \
-  -Command console -DeviceSerial "$CROSSSPIRE_D1_SERIAL" \
-  -OutDir "$CROSSSPIRE_HARNESS_OUT_DIR" \
-  -ConsoleCommand "crossspire play Strike_R"
-
-# 事件
-python3 "$CROSSSPIRE_AMETHYST_TOOLS_DIR/main.py" sts-harness \
-  -Command console -DeviceSerial "$CROSSSPIRE_D1_SERIAL" \
-  -OutDir "$CROSSSPIRE_HARNESS_OUT_DIR" \
-  -ConsoleCommand "crossspire cevent Living Wall"
+  -ConsoleCommand "crossspire ready IRONCLAD"
 python3 "$CROSSSPIRE_AMETHYST_TOOLS_DIR/main.py" sts-harness \
   -Command console -DeviceSerial "$CROSSSPIRE_D2_SERIAL" \
   -OutDir "$CROSSSPIRE_HARNESS_OUT_DIR" \
-  -ConsoleCommand "crossspire eselect 0 Strike_R"
+  -ConsoleCommand "crossspire ready IRONCLAD"
+python3 "$CROSSSPIRE_AMETHYST_TOOLS_DIR/main.py" sts-harness \
+  -Command console -DeviceSerial "$CROSSSPIRE_D1_SERIAL" \
+  -OutDir "$CROSSSPIRE_HARNESS_OUT_DIR" \
+  -ConsoleCommand "crossspire start"
+# 等待双端 GAMEPLAY 后：maphost / nodehost / 双方 room 0
+# 再：crossspire play …；胜后奖励屏 → 再 room 投票
+
+# 当前事件诊断
+python3 "$CROSSSPIRE_AMETHYST_TOOLS_DIR/main.py" sts-harness \
+  -Command console -DeviceSerial "$CROSSSPIRE_D1_SERIAL" \
+  -OutDir "$CROSSSPIRE_HARNESS_OUT_DIR" \
+  -ConsoleCommand "crossspire eventopen"
+python3 "$CROSSSPIRE_AMETHYST_TOOLS_DIR/main.py" sts-harness \
+  -Command console -DeviceSerial "$CROSSSPIRE_D2_SERIAL" \
+  -OutDir "$CROSSSPIRE_HARNESS_OUT_DIR" \
+  -ConsoleCommand "crossspire eventchoice 0"
 
 # 诊断
 python3 "$CROSSSPIRE_AMETHYST_TOOLS_DIR/main.py" sts-harness \
@@ -303,7 +299,7 @@ python3 "$CROSSSPIRE_AMETHYST_TOOLS_DIR/main.py" sts-harness \
 
 ---
 
-## 命令速查表（21 个主子命令）
+## 命令速查表
 
 ```
 crossspire host <advertised-ip> <port>
@@ -319,6 +315,13 @@ crossspire start [char] [seed]
 crossspire vote <player_id>
 crossspire room <index>
 crossspire snapshot
+crossspire party status
+crossspire maphost <candidate_id>
+crossspire mapreg [map_id] [start] [next] [monster|event]
+crossspire nodehost <candidate_id>
+crossspire eventopen [event_id]
+crossspire eventchoice <option_index>
+crossspire eventresult
 crossspire play <card_id> [target]
 crossspire queue
 crossspire cevent <event_name...>

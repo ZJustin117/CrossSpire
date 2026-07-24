@@ -356,6 +356,59 @@ public class CombatResultReplayer {
                     }
                     break;
                 }
+                case "remove_relic": {
+                    String relicId = eff.has("relic_id") ? eff.get("relic_id").getAsString() : "";
+                    if (!relicId.isEmpty() && AbstractDungeon.player != null) {
+                        AbstractDungeon.player.loseRelic(relicId);
+                    }
+                    break;
+                }
+                case "remove_potion": {
+                    String potionId = eff.has("potion_id") ? eff.get("potion_id").getAsString() : "";
+                    if (!potionId.isEmpty() && AbstractDungeon.player != null
+                        && AbstractDungeon.player.potions != null) {
+                        for (int i = AbstractDungeon.player.potions.size() - 1; i >= 0; i--) {
+                            com.megacrit.cardcrawl.potions.AbstractPotion p =
+                                AbstractDungeon.player.potions.get(i);
+                            if (p != null && potionId.equals(p.ID)) {
+                                AbstractDungeon.player.removePotion(p);
+                                break;
+                            }
+                        }
+                    }
+                    break;
+                }
+                case "obtain_card": {
+                    String cardId = eff.has("card_id") ? eff.get("card_id").getAsString() : "";
+                    if (!cardId.isEmpty() && AbstractDungeon.player != null
+                        && AbstractDungeon.player.masterDeck != null) {
+                        AbstractCard card = com.megacrit.cardcrawl.helpers.CardLibrary.getCard(cardId);
+                        if (card != null) {
+                            AbstractDungeon.player.masterDeck.addToTop(card.makeCopy());
+                        }
+                    }
+                    break;
+                }
+                case "remove_card": {
+                    String cardId = eff.has("card_id") ? eff.get("card_id").getAsString() : "";
+                    if (!cardId.isEmpty() && AbstractDungeon.player != null
+                        && AbstractDungeon.player.masterDeck != null
+                        && AbstractDungeon.player.masterDeck.group != null) {
+                        for (int i = AbstractDungeon.player.masterDeck.group.size() - 1; i >= 0; i--) {
+                            AbstractCard c = AbstractDungeon.player.masterDeck.group.get(i);
+                            if (c != null && cardId.equals(c.cardID)) {
+                                AbstractDungeon.player.masterDeck.group.remove(i);
+                                break;
+                            }
+                        }
+                    }
+                    break;
+                }
+                case "max_hp":
+                    if ("self".equals(target) && AbstractDungeon.player != null) {
+                        AbstractDungeon.player.increaseMaxHp(amount, true);
+                    }
+                    break;
                 default:
                     BaseMod.logger.info("CombatResultReplayer unhandled: " + kind);
                     break;

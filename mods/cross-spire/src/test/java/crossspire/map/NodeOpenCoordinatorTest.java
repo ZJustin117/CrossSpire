@@ -49,6 +49,40 @@ public class NodeOpenCoordinatorTest {
         assertTrue(new NodeOpenCoordinator().acceptCommit(party, "alice", allocated, event));
     }
 
+    @Test
+    public void acceptsShopEliteAndResolvedUnknownCommits() {
+        PartyManager parties = new PartyManager();
+        parties.initializeDefaultParty(Arrays.asList("alice"), "");
+        parties.bindMap("P0", "M1", "start", "EXORDIUM");
+        parties.setNodeInstanceHost("P0", "alice");
+        PartyState party = parties.getParty("P0");
+        NodeOpenCoordinator coordinator = new NodeOpenCoordinator();
+
+        Protocol.NodeInstanceInfo shop = info("node:M1/P0/shop/1", "alice");
+        shop.nodeId = "shop";
+        shop.roomType = "shop";
+        Protocol.NodeGenerationCommitPayload shopCommit = commit(shop, "");
+        shopCommit.generationResult = NodeGenerationPlanner.plan(
+            new MapNode("shop", "shop", Arrays.<String>asList()), shop);
+        assertTrue(coordinator.acceptCommit(party, "alice", shop, shopCommit));
+
+        Protocol.NodeInstanceInfo elite = info("node:M1/P0/elite/1", "alice");
+        elite.nodeId = "elite";
+        elite.roomType = "elite";
+        Protocol.NodeGenerationCommitPayload eliteCommit = commit(elite, "Gremlin Nob");
+        eliteCommit.generationResult = NodeGenerationPlanner.plan(
+            new MapNode("elite", "elite", Arrays.<String>asList()), elite);
+        assertTrue(coordinator.acceptCommit(party, "alice", elite, eliteCommit));
+
+        Protocol.NodeInstanceInfo unknown = info("node:M1/P0/q/1", "alice");
+        unknown.nodeId = "q-node";
+        unknown.roomType = "unknown";
+        Protocol.NodeGenerationCommitPayload unknownCommit = commit(unknown, "");
+        unknownCommit.generationResult = NodeGenerationPlanner.plan(
+            new MapNode("q-node", "unknown", Arrays.<String>asList()), unknown);
+        assertTrue(new NodeOpenCoordinator().acceptCommit(party, "alice", unknown, unknownCommit));
+    }
+
     private static Protocol.NodeInstanceInfo info(String id, String nih) {
         Protocol.NodeInstanceInfo info = new Protocol.NodeInstanceInfo();
         info.nodeInstanceId = id;

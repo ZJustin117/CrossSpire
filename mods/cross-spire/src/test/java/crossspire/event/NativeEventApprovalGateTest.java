@@ -57,6 +57,79 @@ public class NativeEventApprovalGateTest {
         assertEquals(null, gate.beforeButtonEffect(event, 0).request);
     }
 
+    @Test
+    public void armApprovedRequestPermitsConsoleDrivenExecuteOnce() {
+        NativeEventApprovalGate gate = new NativeEventApprovalGate();
+        Object event = new Object();
+        gate.bind(event, iface("E1", "hash-a"));
+
+        Protocol.EventChoiceRequestPayload request = new Protocol.EventChoiceRequestPayload();
+        request.eventInstanceId = "E1";
+        request.partyId = "P0";
+        request.requestId = "req-console";
+        request.uiStep = NativeEventApprovalGate.STEP_BUTTON;
+        request.optionIndex = 0;
+        Protocol.EventChoiceDecisionPayload decision = decision(request, 0);
+
+        assertTrue(gate.armApprovedRequest(event, request, decision));
+        assertTrue(gate.beforeButtonEffect(event, 0).execute);
+        assertFalse(gate.beforeButtonEffect(event, 0).execute);
+        assertEquals(event, gate.findEventForDecision(decision));
+    }
+
+    @Test
+    public void multiStepCardSelectRequiresCardsAndMatchingApproval() {
+        NativeEventApprovalGate gate = new NativeEventApprovalGate();
+        Object event = new Object();
+        gate.bind(event, iface("E1", "hash-a"));
+
+        NativeEventApprovalGate.Attempt button = gate.beforeButtonEffect(event, 0);
+        assertFalse(button.execute);
+        assertTrue(gate.approve(decision(button.request, 0)));
+        assertTrue(gate.beforeButtonEffect(event, 0).execute);
+
+        assertFalse(gate.beforeChoice(event, NativeEventApprovalGate.STEP_CARD_SELECT, 0, null).execute);
+        NativeEventApprovalGate.Attempt cards = gate.beforeChoice(event,
+            NativeEventApprovalGate.STEP_CARD_SELECT, 0, new String[] {"Strike_R"});
+        assertFalse(cards.execute);
+        assertNotNull(cards.request);
+        assertEquals(NativeEventApprovalGate.STEP_CARD_SELECT, cards.request.uiStep);
+        assertEquals(1, cards.request.selectedCards.length);
+        assertEquals("Strike_R", cards.request.selectedCards[0]);
+
+        assertTrue(gate.approve(decision(cards.request, 0)));
+        assertTrue(gate.beforeChoice(event, NativeEventApprovalGate.STEP_CARD_SELECT, 0,
+            new String[] {"Strike_R"}).execute);
+        assertFalse(gate.beforeChoice(event, NativeEventApprovalGate.STEP_CARD_SELECT, 0,
+            new String[] {"Strike_R"}).execute);
+    }
+
+    @Test
+    public void multiStepTargetSelectRequiresTargetsAndMatchingApproval() {
+        NativeEventApprovalGate gate = new NativeEventApprovalGate();
+        Object event = new Object();
+        gate.bind(event, iface("E1", "hash-a"));
+
+        assertFalse(gate.beforeChoice(event, NativeEventApprovalGate.STEP_TARGET_SELECT, 0,
+            null, null).execute);
+        assertFalse(gate.beforeChoice(event, NativeEventApprovalGate.STEP_TARGET_SELECT, 0,
+            null, new String[0]).execute);
+
+        NativeEventApprovalGate.Attempt targets = gate.beforeChoice(event,
+            NativeEventApprovalGate.STEP_TARGET_SELECT, 0, null, new String[] {"Strike_R"});
+        assertFalse(targets.execute);
+        assertNotNull(targets.request);
+        assertEquals(NativeEventApprovalGate.STEP_TARGET_SELECT, targets.request.uiStep);
+        assertEquals(1, targets.request.selectedTargets.length);
+        assertEquals("Strike_R", targets.request.selectedTargets[0]);
+
+        assertTrue(gate.approve(decision(targets.request, 0)));
+        assertTrue(gate.beforeChoice(event, NativeEventApprovalGate.STEP_TARGET_SELECT, 0,
+            null, new String[] {"Strike_R"}).execute);
+        assertFalse(gate.beforeChoice(event, NativeEventApprovalGate.STEP_TARGET_SELECT, 0,
+            null, new String[] {"Strike_R"}).execute);
+    }
+
     private static Protocol.EventInterfacePayload iface(String id, String hash) {
         Protocol.EventInterfacePayload iface = new Protocol.EventInterfacePayload();
         iface.eventInstanceId = id;

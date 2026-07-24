@@ -8,6 +8,7 @@ import com.megacrit.cardcrawl.characters.AbstractPlayer;
 import com.megacrit.cardcrawl.core.CardCrawlGame;
 import com.megacrit.cardcrawl.dungeons.AbstractDungeon;
 import com.megacrit.cardcrawl.helpers.MonsterHelper;
+import com.megacrit.cardcrawl.map.MapRoomNode;
 import com.megacrit.cardcrawl.monsters.MonsterGroup;
 import com.megacrit.cardcrawl.events.AbstractEvent;
 import com.megacrit.cardcrawl.rooms.EventRoom;
@@ -18,6 +19,10 @@ import crossspire.combat.EventSyncPatches;
 import crossspire.event.NativeEventApprovalPatches;
 import crossspire.event.NativeEventOpenPlanner;
 import crossspire.network.Protocol;
+import crossspire.map.MapDefinition;
+import crossspire.map.StsMapDefinitionApplier;
+import crossspire.map.StsMapTopology;
+import crossspire.party.ActiveNodeTracker;
 import crossspire.reference.ContentValidator;
 import crossspire.remote.RemotePlayerRegistry;
 import crossspire.remote.RemotePlayerState;
@@ -141,12 +146,63 @@ public class SyncExecutor {
         });
     }
 
-    private void createGameIfNeeded() {
+    /**
+     * Legacy host-spawn combat projection fallback only.
+     * Co-op main path (T7.7a): clients must already be in GAMEPLAY via party_run_start.
+     * Do not use this as the dual-client open-world start.
+     */
+    private static void createGameIfNeeded() {
         if (AbstractDungeon.player != null && CardCrawlGame.mode == CardCrawlGame.GameMode.GAMEPLAY) {
             BaseMod.logger.info("SyncExecutor game already running, skip create");
             return;
         }
+        if (CrossSpireMod.lobbyState != null && CrossSpireMod.lobbyState.isStarted()) {
+            BaseMod.logger.info("SyncExecutor skip createGameIfNeeded: party_run_start already applied"
+                + " (wait for local GAMEPLAY; co-op path must not force IRONCLAD)");
+            return;
+        }
+        BaseMod.logger.info("SyncExecutor createGameIfNeeded legacy IRONCLAD bootstrap"
+            + " (host-spawn projection only; not co-op main path)");
         crossspire.remote.GameStarter.start("IRONCLAD");
+    }
+
+    /**
+     * T7.5: open a shared in-event combat shell for members on an event_room path.
+     * Uses the current map node (event node) as host for a MonsterRoom install.
+     */
+    public static void enterEventRoomCombat(String eventRoomInstanceId, String encounter) {
+        final String enc = encounter != null && !encounter.isEmpty() ? encounter : "Cultist";
+        final String instanceId = eventRoomInstanceId != null ? eventRoomInstanceId : "";
+        Gdx.app.postRunnable(new Runnable() {
+            @Override public void run() {
+                if (AbstractDungeon.player == null
+                        || CardCrawlGame.mode != CardCrawlGame.GameMode.GAMEPLAY) {
+                    BaseMod.logger.info("SyncExecutor event_room combat deferred: not GAMEPLAY");
+                    return;
+                }
+                BaseMod.logger.info("SyncExecutor event_room combat enter instance="
+                    + instanceId + " encounter=" + enc);
+                // Tag active tracker so combat_result / reward paths see a room id.
+                ActiveNodeTracker.setActive(
+                    ActiveNodeTracker.getPartyId().isEmpty()
+                        ? crossspire.party.PartyManager.DEFAULT_PARTY_ID
+                        : ActiveNodeTracker.getPartyId(),
+                    ActiveNodeTracker.getMapInstanceId(),
+                    ActiveNodeTracker.getNodeId(),
+                    instanceId.isEmpty() ? ActiveNodeTracker.getNodeInstanceId() : instanceId,
+                    "monster",
+                    enc);
+                if (CrossSpireMod.roomNavigationGate != null && !instanceId.isEmpty()) {
+                    CrossSpireMod.roomNavigationGate.onRoomOpened(
+                        ActiveNodeTracker.getPartyId(), instanceId);
+                }
+                EventSuppression.suppressEvents(new Runnable() {
+                    @Override public void run() {
+                        enterRemoteCombat(enc);
+                    }
+                });
+            }
+        });
     }
 
     private static void enterRemoteCombat(String monsterName) {
@@ -236,20 +292,30 @@ public class SyncExecutor {
                                          boolean asHost) {
         if (info == null || result == null) return;
         final String role = asHost ? "Host" : "Member";
-        if ("monster".equals(result.roomType)) {
+        String encounterOrType = result.encounter != null ? result.encounter : result.roomType;
+        // Force-follow: drop prior room identity before installing the new RoomInstance.
+        String prev = ActiveNodeTracker.getNodeInstanceId();
+        if (prev != null && !prev.isEmpty() && !prev.equals(info.nodeInstanceId)) {
+            ActiveNodeTracker.forceLeave("opened " + info.nodeInstanceId);
+        }
+        ActiveNodeTracker.setActive(info.partyId, info.mapInstanceId, info.nodeId,
+            info.nodeInstanceId, result.roomType, encounterOrType);
+        if (CrossSpireMod.roomNavigationGate != null) {
+            CrossSpireMod.roomNavigationGate.onRoomOpened(info.partyId, info.nodeInstanceId);
+        }
+        BaseMod.logger.info("SyncExecutor active node " + ActiveNodeTracker.summary()
+            + " role=" + role + " nav locked");
+        if ("monster".equals(result.roomType) || "elite".equals(result.roomType)
+            || "boss".equals(result.roomType)) {
             final String encounter = result.encounter != null && !result.encounter.isEmpty()
-                ? result.encounter : "Cultist";
+                ? result.encounter
+                : ("boss".equals(result.roomType) ? "The Guardian"
+                    : ("elite".equals(result.roomType) ? "Gremlin Nob" : "Cultist"));
+            final String nodeId = info.nodeId;
             BaseMod.logger.info("SyncExecutor openNodeInstanceAs" + role + " party=" + info.partyId
-                + " node=" + info.nodeId + " encounter=" + encounter);
-            Gdx.app.postRunnable(new Runnable() {
-                @Override public void run() {
-                    EventSuppression.suppressEvents(new Runnable() {
-                        @Override public void run() {
-                            enterRemoteCombat(encounter);
-                        }
-                    });
-                }
-            });
+                + " node=" + nodeId + " type=" + result.roomType + " encounter=" + encounter
+                + " instance=" + info.nodeInstanceId);
+            scheduleAuthoritativeMonsterEntry(nodeId, encounter, 0);
             return;
         }
         if ("event".equals(result.roomType)) {
@@ -266,7 +332,194 @@ public class SyncExecutor {
                     });
                 }
             });
+            return;
         }
+        if ("shop".equals(result.roomType) || "rest".equals(result.roomType)
+            || "treasure".equals(result.roomType)) {
+            final String roomType = result.roomType;
+            final String nodeId = info.nodeId;
+            BaseMod.logger.info("SyncExecutor openNodeInstanceAs" + role + " party=" + info.partyId
+                + " node=" + nodeId + " type=" + roomType);
+            scheduleAuthoritativeRoomEntry(nodeId, roomType, 0);
+        }
+    }
+
+    private static void scheduleAuthoritativeRoomEntry(final String nodeId, final String roomType,
+                                                         final int attempt) {
+        Gdx.app.postRunnable(new Runnable() {
+            @Override public void run() {
+                createGameIfNeeded();
+                crossspire.remote.GameStarter.bindLocalPlayerIfReady();
+                boolean ready = AbstractDungeon.player != null
+                    && CardCrawlGame.mode == CardCrawlGame.GameMode.GAMEPLAY
+                    && AbstractDungeon.getCurrMapNode() != null
+                    && StsMapDefinitionApplier.active() != null
+                    && CardCrawlGame.dungeon != null;
+                if (!ready) {
+                    if (attempt < 40) {
+                        scheduleAuthoritativeRoomEntry(nodeId, roomType, attempt + 1);
+                    } else {
+                        BaseMod.logger.error("SyncExecutor room open not ready after retries node="
+                            + nodeId + " type=" + roomType);
+                    }
+                    return;
+                }
+                MapDefinition active = StsMapDefinitionApplier.active();
+                if (active != null) StsMapDefinitionApplier.apply(active);
+                EventSuppression.suppressEvents(new Runnable() {
+                    @Override public void run() {
+                        enterAuthoritativeTypedRoom(nodeId, roomType);
+                    }
+                });
+            }
+        });
+    }
+
+    private static void enterAuthoritativeTypedRoom(String nodeId, String roomType) {
+        MapDefinition active = StsMapDefinitionApplier.active();
+        MapRoomNode target = StsMapDefinitionApplier.find(nodeId);
+        MapRoomNode current = AbstractDungeon.getCurrMapNode();
+        if (target == null) {
+            BaseMod.logger.error("SyncExecutor reject room node missing " + nodeId + " type=" + roomType);
+            return;
+        }
+        String fromId = resolveCurrentNodeId(current, active);
+        if (target != current && !StsMapDefinitionApplier.isReachable(fromId, nodeId)) {
+            BaseMod.logger.error("SyncExecutor reject unreachable room node=" + nodeId
+                + " type=" + roomType + " from=" + fromId);
+            return;
+        }
+        try {
+            target.setRoom(createRoom(roomType));
+            CombatSyncPatches.suppressBroadcast = true;
+            if (CardCrawlGame.dungeon != null && AbstractDungeon.overlayMenu != null
+                && AbstractDungeon.fadeColor != null) {
+                AbstractDungeon.nextRoom = target;
+                CardCrawlGame.dungeon.nextRoomTransition();
+            } else {
+                AbstractDungeon.currMapNode = target;
+                if (target.room != null) target.room.onPlayerEntry();
+            }
+            BaseMod.logger.info("SyncExecutor transition to authoritative room node=" + nodeId
+                + " type=" + roomType + " from=" + fromId);
+        } catch (Exception e) {
+            CombatSyncPatches.suppressBroadcast = false;
+            BaseMod.logger.error("SyncExecutor authoritative room transition: "
+                + e.getClass().getSimpleName() + ": " + e.getMessage(), e);
+        }
+    }
+
+    private static com.megacrit.cardcrawl.rooms.AbstractRoom createRoom(String roomType) {
+        if ("shop".equals(roomType)) return new com.megacrit.cardcrawl.rooms.ShopRoom();
+        if ("rest".equals(roomType)) return new com.megacrit.cardcrawl.rooms.RestRoom();
+        if ("treasure".equals(roomType)) return new com.megacrit.cardcrawl.rooms.TreasureRoom();
+        if ("elite".equals(roomType)) return new com.megacrit.cardcrawl.rooms.MonsterRoomElite();
+        if ("boss".equals(roomType)) return new com.megacrit.cardcrawl.rooms.MonsterRoomBoss();
+        if ("event".equals(roomType)) return new com.megacrit.cardcrawl.rooms.EventRoom();
+        return new MonsterRoom();
+    }
+
+    private static void scheduleAuthoritativeMonsterEntry(final String nodeId, final String encounter,
+                                                            final int attempt) {
+        Gdx.app.postRunnable(new Runnable() {
+            @Override public void run() {
+                createGameIfNeeded();
+                crossspire.remote.GameStarter.bindLocalPlayerIfReady();
+                boolean ready = AbstractDungeon.player != null
+                    && CardCrawlGame.mode == CardCrawlGame.GameMode.GAMEPLAY
+                    && AbstractDungeon.getCurrMapNode() != null
+                    && StsMapDefinitionApplier.active() != null
+                    && CardCrawlGame.dungeon != null;
+                if (!ready) {
+                    if (attempt < 40) {
+                        scheduleAuthoritativeMonsterEntry(nodeId, encounter, attempt + 1);
+                    } else {
+                        BaseMod.logger.error("SyncExecutor authoritative open not ready after retries node="
+                            + nodeId + " mode=" + CardCrawlGame.mode
+                            + " dungeon=" + (CardCrawlGame.dungeon != null)
+                            + " activeMap=" + (StsMapDefinitionApplier.active() != null));
+                    }
+                    return;
+                }
+                // Local bootstrap may have regenerated map; ensure authoritative topology is current.
+                MapDefinition active = StsMapDefinitionApplier.active();
+                if (active != null) StsMapDefinitionApplier.apply(active);
+                EventSuppression.suppressEvents(new Runnable() {
+                    @Override public void run() {
+                        enterAuthoritativeMonsterNode(nodeId, encounter);
+                    }
+                });
+            }
+        });
+    }
+
+    /** Installs NIH-owned combat content in a reconstructed map node, then uses STS transition flow. */
+    private static void enterAuthoritativeMonsterNode(String nodeId, String encounter) {
+        MapDefinition active = StsMapDefinitionApplier.active();
+        MapRoomNode target = StsMapDefinitionApplier.find(nodeId);
+        MapRoomNode current = AbstractDungeon.getCurrMapNode();
+        if (target == null || target.room == null || !(target.room instanceof MonsterRoom)) {
+            BaseMod.logger.error("SyncExecutor reject monster node: missing or non-monster " + nodeId
+                + " target=" + target + " room=" + (target != null ? target.room : null));
+            return;
+        }
+        String fromId = resolveCurrentNodeId(current, active);
+        if (target != current && !StsMapDefinitionApplier.isReachable(fromId, nodeId)) {
+            BaseMod.logger.error("SyncExecutor reject unreachable monster node=" + nodeId
+                + " from=" + fromId + " curr=" + (current != null
+                    ? current.x + ":" + current.y : "null"));
+            return;
+        }
+        try {
+            String key = resolveEncounterKey(encounter);
+            if (AbstractDungeon.lastCombatMetricKey == null) {
+                AbstractDungeon.lastCombatMetricKey = key;
+            }
+            ((MonsterRoom) target.room).monsters = null;
+            CombatSyncPatches.suppressBroadcast = true;
+            // Prefer STS transition when dungeon fade/overlay is fully live; otherwise enter directly.
+            if (CardCrawlGame.dungeon != null && AbstractDungeon.overlayMenu != null
+                && AbstractDungeon.fadeColor != null) {
+                AbstractDungeon.nextRoom = target;
+                CardCrawlGame.dungeon.nextRoomTransition();
+            } else {
+                enterRemoteCombat(key);
+                AbstractDungeon.currMapNode = target;
+            }
+            BaseMod.logger.info("SyncExecutor transition to authoritative monster node=" + nodeId
+                + " from=" + fromId + " key=" + key);
+        } catch (Exception e) {
+            CombatSyncPatches.suppressBroadcast = false;
+            BaseMod.logger.error("SyncExecutor authoritative monster transition: "
+                + e.getClass().getSimpleName() + ": " + e.getMessage(), e);
+            try {
+                enterRemoteCombat(resolveEncounterKey(encounter));
+                AbstractDungeon.currMapNode = target;
+            } catch (Exception fallback) {
+                BaseMod.logger.error("SyncExecutor direct combat fallback failed: "
+                    + fallback.getClass().getSimpleName() + ": " + fallback.getMessage(), fallback);
+            }
+        }
+    }
+
+    private static String resolveCurrentNodeId(MapRoomNode current, MapDefinition active) {
+        if (active == null) {
+            return current != null ? StsMapTopology.nodeId(current.x, current.y) : null;
+        }
+        // Party still at map start while STS may still be on Neow or another off-topology room.
+        if (current == null) return active.startNodeId;
+        for (crossspire.map.MapNode node : active.nodes()) {
+            if (node.x == current.x && node.y == current.y) return node.nodeId;
+        }
+        if (CrossSpireMod.partyManager != null) {
+            String partyId = CrossSpireMod.partyManager.getPartyIdForPlayer(CrossSpireMod.playerId);
+            crossspire.party.PartyState party = partyId != null
+                ? CrossSpireMod.partyManager.getParty(partyId) : null;
+            if (party != null && party.mapPosition != null && !party.mapPosition.isEmpty()) {
+                return party.mapPosition;
+            }
+        }
+        return active.startNodeId;
     }
 
     /**
@@ -280,10 +533,14 @@ public class SyncExecutor {
         NativeEventOpenPlanner.Mode mode = NativeEventOpenPlanner.mode(iface, classPresent, localHash);
         if (mode == NativeEventOpenPlanner.Mode.NATIVE) {
             if (enterNativeEvent(iface)) {
+                crossspire.event.EventOpenModeRegistry.mark(
+                    iface.eventInstanceId, crossspire.event.EventOpenModeRegistry.NATIVE);
                 BaseMod.logger.info("SyncExecutor native event opened: " + iface.eventInstanceId);
                 return;
             }
         }
+        crossspire.event.EventOpenModeRegistry.mark(
+            iface.eventInstanceId, crossspire.event.EventOpenModeRegistry.FALLBACK);
         RemoteEventDisplay.show(iface);
         BaseMod.logger.info("SyncExecutor fallback event display: " + iface.eventInstanceId
             + " classPresent=" + classPresent);

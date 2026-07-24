@@ -28,6 +28,23 @@ public class CombatSyncPatches {
             }
             if (!CrossSpireMod.isConnected()) return;
             if (__instance.monsters == null) return;
+            // Co-op map path: node_instance_opened drives dual enter; do not also room_enter.
+            if (crossspire.party.ActiveNodeTracker.getNodeInstanceId() != null
+                && !crossspire.party.ActiveNodeTracker.getNodeInstanceId().isEmpty()) {
+                BaseMod.logger.info("CombatSync skip room_enter: active node_instance="
+                    + crossspire.party.ActiveNodeTracker.getNodeInstanceId());
+                RenderSafetyPatches.remoteCombatActive = true;
+                return;
+            }
+            if (CrossSpireMod.partyManager != null && CrossSpireMod.playerId != null) {
+                crossspire.party.PartyState party = CrossSpireMod.partyManager.getParty(
+                    CrossSpireMod.partyManager.getPartyIdForPlayer(CrossSpireMod.playerId));
+                if (party != null && party.mapInstanceId != null && !party.mapInstanceId.isEmpty()) {
+                    BaseMod.logger.info("CombatSync skip room_enter: party map bound "
+                        + party.mapInstanceId);
+                    return;
+                }
+            }
 
             JsonObject sync = new JsonObject();
             sync.addProperty("type", "stage_sync");
@@ -45,7 +62,7 @@ public class CombatSyncPatches {
             sync.add("monster_hps", monsterHps);
 
             CrossSpireMod.send(sync.toString());
-            BaseMod.logger.info("CombatSync broadcast room_enter: " + monsterIds);
+            BaseMod.logger.info("CombatSync broadcast room_enter (legacy host-spawn): " + monsterIds);
         }
     }
 }

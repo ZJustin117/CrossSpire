@@ -196,27 +196,46 @@ python3 "$CROSSSPIRE_AMETHYST_TOOLS_DIR/main.py" sts-harness \
 
 将 `$CROSSSPIRE_D1_SERIAL` 替换为 `$CROSSSPIRE_D2_SERIAL` 可查询 D2。
 
-### 战斗与事件命令
+### 真共进主路径 smoke（T7.7+ / T8 / T9 验收）
+
+唯一共进 pass 标准（**不是** D1-only `fight Cultist`）：
+
+```text
+host/join → 双方 ready → start (party_run_start) → 双 GAMEPLAY
+  → maphost/nodehost → 双方 room 0 → 同 node_instance（nav locked）
+  → 开战无自动 player_end_turn；play 进 resolving_queue（T8.0）
+  → 胜后 rewarddone 或 RIH mapunlock / 打开地图 → exit_unlocked
+  → 双方 room <next> → 新节点 force-follow
+```
 
 ```bash
+# 双方 ready（host/join 已完成）
 python3 "$CROSSSPIRE_AMETHYST_TOOLS_DIR/main.py" sts-harness \
-  -Command console \
-  -DeviceSerial "$CROSSSPIRE_D1_SERIAL" \
+  -Command console -DeviceSerial "$CROSSSPIRE_D1_SERIAL" \
   -OutDir "$CROSSSPIRE_HARNESS_OUT_DIR" \
-  -ConsoleCommand "crossspire start IRONCLAD"
-
+  -ConsoleCommand "crossspire ready IRONCLAD"
 python3 "$CROSSSPIRE_AMETHYST_TOOLS_DIR/main.py" sts-harness \
-  -Command console \
-  -DeviceSerial "$CROSSSPIRE_D1_SERIAL" \
+  -Command console -DeviceSerial "$CROSSSPIRE_D2_SERIAL" \
   -OutDir "$CROSSSPIRE_HARNESS_OUT_DIR" \
-  -ConsoleCommand "fight Cultist"
-
+  -ConsoleCommand "crossspire ready IRONCLAD"
 python3 "$CROSSSPIRE_AMETHYST_TOOLS_DIR/main.py" sts-harness \
-  -Command console \
-  -DeviceSerial "$CROSSSPIRE_D1_SERIAL" \
+  -Command console -DeviceSerial "$CROSSSPIRE_D1_SERIAL" \
   -OutDir "$CROSSSPIRE_HARNESS_OUT_DIR" \
-  -ConsoleCommand "crossspire play Strike_R"
+  -ConsoleCommand "crossspire start"
+# maphost/nodehost（用 status 中的 player id）→ 双方 room 0
+# 日志：nav locked；无 "EndTurnSync broadcast" 于开战瞬间
+# D1: crossspire play Strike_R  → queue_empty / D2 INDUCED
+# 解锁：crossspire mapunlock  或 RIH 本地打开地图（T9.3）
+# 双方再 room 0 → 新 node_instance
 ```
+
+通过条件（日志）：
+1. 双端 `party_run_start` + GAMEPLAY  
+2. 同 `node_instance_id`；pin 在 unlock 前 `exit_locked`  
+3. 开战无自动 `player_end_turn`；`play` 不因 `monster_turn` 拒绝  
+4. unlock 后 pin 共识进入下一房  
+
+**非共进回归（deprecated）：** 仅 D1 `start` + BaseMod `fight Cultist` = host-spawn projection，**不得**作为共进 pass。
 
 完整命令语义见 [`../console-commands.md`](../console-commands.md)。
 

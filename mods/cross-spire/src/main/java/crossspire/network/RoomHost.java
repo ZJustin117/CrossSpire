@@ -2,6 +2,7 @@ package crossspire.network;
 
 import com.google.gson.Gson;
 import crossspire.event.EventApprovalCoordinator;
+import crossspire.event.EventRoomInstanceRegistry;
 import crossspire.map.MapRegistry;
 import crossspire.map.MapRegistrationCoordinator;
 import crossspire.map.NodeEntryCoordinator;
@@ -29,6 +30,7 @@ public class RoomHost {
         new NodeEntryCoordinator(mapRegistry, nodeInstanceRegistry);
     private final NodeOpenCoordinator nodeOpenCoordinator = new NodeOpenCoordinator();
     private final EventApprovalCoordinator eventApprovalCoordinator = new EventApprovalCoordinator();
+    private final EventRoomInstanceRegistry eventRoomInstanceRegistry = new EventRoomInstanceRegistry();
     private final List<String> playerIds = new CopyOnWriteArrayList<String>();
     private final Map<String, Integer> playerPins = new HashMap<String, Integer>();
     private final Map<String, String> stageVotes = new HashMap<String, String>();
@@ -75,6 +77,10 @@ public class RoomHost {
 
     public EventApprovalCoordinator getEventApprovalCoordinator() {
         return eventApprovalCoordinator;
+    }
+
+    public EventRoomInstanceRegistry getEventRoomInstanceRegistry() {
+        return eventRoomInstanceRegistry;
     }
 
     public List<String> getPlayerIds() {

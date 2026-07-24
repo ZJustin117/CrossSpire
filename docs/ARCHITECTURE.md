@@ -381,6 +381,10 @@ MAP_COMPLETED
 
 MapHost 生成的只是地图骨架：普通/精英/商店/篝火/宝箱/Boss 的基础节点类别、路径和图标在此固定；`?` 保持问号节点，直到首次进入时解析。佛珠手链、小宝箱等影响问号结果的遗物只在节点实例生成时生效，绝不在地图或过渡阶段提前消耗。
 
+`map_register` 成功后，`MapDefinition` 是所有本队成员本地 STS 地图的唯一拓扑来源：MapHost 从自身已生成的地图捕获定义，成员以该定义重建 `AbstractDungeon.map` 的 `MapRoomNode` 坐标、边和基础房间类别。客户端不得继续使用各自本地 RNG 生成的地图作为路径或房间类型依据。`node_instance_opened` 只在已重建、类型匹配且从当前位置可达的本地节点上安装 NodeInstanceHost 提交的内容，并通过 STS 正常房间转场进入；无法重建或校验时必须拒绝打开而非降级到合成房间。
+
+原版地图选择开始前可能尚无 `currMapNode`。此时 MapHost 在权威定义中加入一个无房间内容的合成 `start` 路径锚点，连向全部入度为零的首层节点；它只表达“尚未选择首个节点”，不替代任何 STS 房间，也不参与 NodeInstance 内容生成。
+
 ### 小队范围的主机选举
 
 MapHost 投票只发生在创建新地图的小队，NodeInstanceHost 投票发生在每个完成选图的小队。房主按 `party_id` 聚合全员一致投票；无超时和默认选择。两种角色可以同人，但选票、结果和目录字段必须独立。
@@ -430,7 +434,24 @@ NodeInstanceKey = (map_instance_id, party_id, node_id, visit_id)
 
 NodeInstanceHost 是本队节点内怪物、事件、商店、宝箱、篝火、问号解析和核心状态的强所有者。地图图形可以共享，但位置、已访问节点、生成遗物状态和战斗状态按小队隔离；本期不实现相遇、合并或共享战斗。
 
-首个非战斗节点切片只处理 `monster` 与 `event` 两种不可变 `MapNode.room_type`。NodeInstanceHost 为已分配实例生成类型化 `NodeGenerationResult`：`monster` 必须带 `encounter`，`event` 必须带完整 `event_interface`。RoomHost 仅校验该类型化提交并向本队打开实例；打开 event 实例后仅 NodeInstanceHost 经房主发布该已提交的 interface。此切片不解析 `?`、不生成商店/篝火/宝箱，也不提前消耗生成修正器。
+NodeInstanceHost（房间实例主）为已分配 **RoomInstance** 生成类型化 `NodeGenerationResult`。所有房间类型共用同一打开管线；`room_type` 为枚举：
+
+- `monster` / `elite` / `boss` 必须带 `encounter`（战斗实体权威）
+- `event` 必须带完整 `event_interface`
+- `shop` / `rest` / `treasure` **只同步房间类型与实例身份**（「这是商人/篝火/宝箱」）。**不**把商店库存、价格、篝火选项或开箱内容作为联机 SoT；各端本地 STS/Mod 生成与结算
+- 地图上的 `?`/未解析类别在 generation 时解析为上述之一；不在 map_register 阶段提前消耗生成修正器
+
+RoomHost 仅校验该类型化提交并向本队打开实例；`node_instance_opened` 后本队 **强制 follow**：关闭旧 RoomInstance UI，安装新实例。打开 event 后仅 NodeInstanceHost 经房主发布已提交的 interface。
+
+#### 地图导航解锁（room_exit_unlocked）
+
+活动 RoomInstance 期间默认 `exit_unlocked=false`，全队拒绝 `room_pin`。仅 **当前房间实例主** 在本地判定可离开（战斗奖励结束、离开商店/篝火、点继续等）时广播：
+
+```
+room_exit_unlocked  房间实例主→房主→本队  {party_id, room_instance_id, reason?}
+```
+
+队员收到后本地解锁地图选点/继续箭头，再走全员 `room_pin` 共识。非实例主不得伪造全队 unlock。`reward_phase_complete` 等类型内信号应导致实例主侧进入同一 unlock 路径（或直接等价广播 unlock）。
 
 影响房间生成的遗物只在节点实例生成时生效。NodeInstanceHost 使用只读、版本化的生成上下文和声明式修正器，不能临时迁移或挂载远端 `AbstractRelic`。未知 Mod 遗物由真实所有者受控解析；Tiny Chest 等修正器计数变更必须与 `node_generation_commit` 原子提交。
 
@@ -774,7 +795,7 @@ event_interface {
 
 原版事件的首个 gate 放在 `AbstractEvent.update()` 内对 `buttonEffect(int)` 的共享调用点：只有已绑定到已验证 `event_interface` 的本地事件实例会被拦截。首次调用冻结该 dialog 并发送 request；同一 `event_instance_id`、`request_id`、`ui_step` 和选项的批准只能放行一次；拒绝或不匹配批准不能执行副作用，拒绝后恢复输入。未绑定事件、单人和旧协议路径保持原生行为。
 
-event 节点打开时，匹配客户端用 `Class.forName(event_class)` 构造事件并进入 `EventRoom`，在 `onEnterRoom` 后绑定 approval gate；hash 或类不匹配则显示 `RemoteEventDisplay`，不尝试 sandbox。打开原生事件期间抑制旧 legacy `event_interface` 广播。图像事件、选牌/目标后的额外 UI step 与 fallback NIH 执行不属于该首个 gate。
+event 节点打开时，匹配客户端用 `Class.forName(event_class)` 构造事件并进入 `EventRoom`，在 `onEnterRoom` 后绑定 approval gate；hash 或类不匹配则显示 `RemoteEventDisplay`，不尝试 sandbox。打开原生事件期间抑制旧 legacy `event_interface` 广播。多步骤 UI：`GridCardSelectScreen` 确认走 `cardSelect`，`HandCardSelectScreen` 确认走 `targetSelect`（`selected_targets`）；fallback NIH 个人结果与 native personal delta 已接线。图像事件字段仍为 polish。
 
 ```
 1. 匹配客户端选择按钮、卡牌或目标
@@ -1669,6 +1690,11 @@ interface ControlMessage {
 | `ping` / `pong` | C↔房主 | 心跳保活 | — |
 | `player_joined` / `player_left` | 房主→全员 | 玩家进出通知 | `player_id, player_name` |
 | `room_info` | 任意成员→C | 响应 hello，返回房间完整信息 | `name, host, members[], stage_host` |
+| `player_ready` | C→房主→全员 | 大厅就绪与角色 | `character` |
+| `party_run_start_request` | C→房主 | 请求协调开局（需全员 ready） | `party_id, seed?, character?` |
+| `party_run_start` | 房主→本队 | 协调双机开局（T7.7a） | `party_id, seed, act, leader_id, members[]` |
+| `reward_phase_enter` / `reward_offer` / `reward_pick` / `reward_player_result` / `reward_done` / `reward_phase_complete` | 见 schema | 战斗奖励屏（T7.8）；金币个人经济；complete 应 unlock 导航 | `party_id, node_instance_id, …` |
+| `room_exit_unlocked` / `room_exit_locked` | 房间实例主→本队 | 地图选点/pin 门控（T9）；shop/rest 仅类型不同步库存 | `party_id, room_instance_id, reason` |
 | `stage_host_election` | 房主→全员 | 新阶段投票发起 | `candidates[]` |
 | `stage_host_result` | 房主→全员 | 投票结果 | `host_id` |
 | `host_election` | 房主→全员 | 房主掉线后投票选新房主 | `candidates[]` |

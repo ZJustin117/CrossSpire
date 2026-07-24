@@ -34,8 +34,14 @@ public final class NodeInstanceRegistry {
     }
 
     private static boolean isReachable(MapDefinition map, String fromNodeId, String nodeId) {
-        return fromNodeId == null || fromNodeId.isEmpty()
-            ? map.startNodeId.equals(nodeId) : map.hasEdge(fromNodeId, nodeId);
+        if (fromNodeId == null || fromNodeId.isEmpty()) {
+            return map.startNodeId.equals(nodeId);
+        }
+        if (map.hasEdge(fromNodeId, nodeId)) return true;
+        // Allow pin resolution fallback (empty outgoing → next row) for allocate.
+        MapNode from = map.getNode(fromNodeId);
+        if (from == null) return false;
+        return MapNavigation.forwardFallback(map, from).contains(nodeId);
     }
 
     private static String key(String mapInstanceId, String partyId, String nodeId, int visitId) {

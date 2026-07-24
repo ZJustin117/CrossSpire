@@ -28,6 +28,7 @@ public final class MapRegisterSender {
         payload.startNodeId = map.startNodeId;
         payload.mapRevision = map.mapRevision;
         payload.partyRevision = 0;
+        payload.map = toProtocol(map);
         return packet(PacketOperation.MAP_REGISTERED, payload);
     }
 
@@ -44,7 +45,11 @@ public final class MapRegisterSender {
             MapNode node = nodes.get(i);
             Protocol.MapNode n = new Protocol.MapNode();
             n.nodeId = node.nodeId;
+            n.x = node.x;
+            n.y = node.y;
             n.roomType = node.roomType;
+            n.icon = node.icon;
+            n.burningElite = node.burningElite;
             n.outgoingNodeIds = node.outgoingNodeIds.toArray(new String[0]);
             dto.nodes[i] = n;
         }

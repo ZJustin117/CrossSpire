@@ -23,6 +23,49 @@ public class MapProtocolMapperTest {
     }
 
     @Test
+    public void preservesNodeCoordinatesAndDisplayMetadataAcrossProtocolRoundTrip() {
+        MapNode source = new MapNode("3:7", 3, 7, "elite", "E", true,
+            java.util.Collections.singletonList("4:8"));
+        MapDefinition definition = new MapDefinition("M1", "EXORDIUM", 1, "digest", "3:7",
+            java.util.Arrays.asList(source, new MapNode("4:8", 4, 8, "monster", "M", false,
+                java.util.Collections.<String>emptyList())));
+
+        MapDefinition restored = MapProtocolMapper.fromProtocol(MapRegisterSender.toProtocol(definition));
+
+        assertNotNull(restored);
+        MapNode node = restored.getNode("3:7");
+        assertEquals(3, node.x);
+        assertEquals(7, node.y);
+        assertEquals("E", node.icon);
+        assertEquals(true, node.burningElite);
+    }
+
+    @Test
+    public void registeredPacketCarriesAuthoritativeTopologyForClientReconstruction() {
+        MapDefinition definition = new MapDefinition("M1", "EXORDIUM", 1, "digest", "0:0",
+            java.util.Arrays.asList(new MapNode("0:0", 0, 0, "start", "", false,
+                java.util.Collections.singletonList("1:1")), new MapNode("1:1", 1, 1, "monster",
+                "M", false, java.util.Collections.<String>emptyList())));
+
+        Protocol.MapRegisteredPayload payload = Protocol.GSON.fromJson(
+            MapRegisterSender.buildRegistered("P0", definition).payload, Protocol.MapRegisteredPayload.class);
+
+        assertNotNull(payload.map);
+        assertNotNull(MapProtocolMapper.fromProtocol(payload.map));
+        assertEquals("1:1", payload.map.nodes[1].nodeId);
+    }
+
+    @Test
+    public void acceptsSyntheticStartAnchorForAnUnselectedVanillaMap() {
+        MapDefinition definition = new MapDefinition("M1", "EXORDIUM", 1, "digest", "virtual:start",
+            java.util.Arrays.asList(new MapNode("virtual:start", -2, -2, "start", "", false,
+                java.util.Collections.singletonList("0:0")), new MapNode("0:0", 0, 0, "monster",
+                "M", false, java.util.Collections.<String>emptyList())));
+
+        assertEquals(true, definition.hasEdge("virtual:start", "0:0"));
+    }
+
+    @Test
     public void rejectsPayloadWithUnknownEdgeOrStartNode() {
         Protocol.MapDefinition payload = mapPayload();
         payload.startNodeId = "missing";

@@ -17,6 +17,7 @@ import crossspire.combat.EventSyncPatches;
 import crossspire.CrossSpireMod;
 import crossspire.event.EventApprovalCoordinator;
 import crossspire.event.EventChoiceSender;
+import crossspire.event.EventInterfaceFactory;
 import crossspire.map.MapDefinition;
 import crossspire.map.MapHostVoteSender;
 import crossspire.map.MapNode;
@@ -30,11 +31,13 @@ import crossspire.network.StandardPacket;
 import crossspire.network.StageVoteSender;
 import crossspire.remote.RemotePlayerRegistry;
 import crossspire.sync.FullSnapshotSender;
+import crossspire.sync.MessageRouter;
 import crossspire.remote.RemotePlayerState;
 import crossspire.sync.QueueSubmitBuilder;
 import crossspire.party.PartyState;
 import crossspire.party.PartyCoordinator;
 import crossspire.party.PartyManager;
+import crossspire.party.PartyMemberIdResolver;
 import java.util.Arrays;
 import java.util.UUID;
 import java.io.PrintWriter;
@@ -70,6 +73,8 @@ public class CrossSpireCommand extends ConsoleCommand {
         else if ("gamestate".equals(sub)) { cmdGameState(); }
         else if ("confirm".equals(sub)) { cmdConfirm(); }
         else if ("phase".equals(sub)) { cmdPhase(tokens, depth); }
+        else if ("rewarddone".equals(sub)) { cmdRewardDone(); }
+        else if ("mapunlock".equals(sub)) { cmdMapUnlock(tokens, depth); }
         else if ("party".equals(sub)) { cmdParty(tokens, depth); }
         else if ("maphost".equals(sub)) { cmdMapHostVote(tokens, depth); }
         else if ("mapreg".equals(sub)) { cmdMapRegister(tokens, depth); }
@@ -134,6 +139,23 @@ public class CrossSpireCommand extends ConsoleCommand {
         DevConsole.log("Queue size: " + (CrossSpireMod.centralQueueManager != null
             ? CrossSpireMod.centralQueueManager.size() : 0));
         DevConsole.log("Combat phase: " + crossspire.combat.CombatPhaseCoordinator.getCurrentPhase());
+        if (CrossSpireMod.lobbyState != null) {
+            DevConsole.log("Ready: " + CrossSpireMod.lobbyState.getReadyPlayers().size()
+                + " started=" + CrossSpireMod.lobbyState.isStarted()
+                + " seed=" + CrossSpireMod.lobbyState.getLastRunSeed());
+            DevConsole.log("Local ready char: " + CrossSpireMod.lobbyState.getMyCharacter()
+                + " mode=" + CardCrawlGame.mode
+                + " player=" + (AbstractDungeon.player != null ? AbstractDungeon.player.name : "null"));
+        }
+        DevConsole.log("Active: " + crossspire.party.ActiveNodeTracker.summary());
+        if (CrossSpireMod.roomNavigationGate != null) {
+            DevConsole.log("Nav: " + CrossSpireMod.roomNavigationGate.summary());
+        }
+        if (CrossSpireMod.rewardPhaseTracker != null && CrossSpireMod.rewardPhaseTracker.isActive()) {
+            DevConsole.log("Reward phase: party=" + CrossSpireMod.rewardPhaseTracker.getPartyId()
+                + " node=" + CrossSpireMod.rewardPhaseTracker.getNodeInstanceId()
+                + " done=" + CrossSpireMod.rewardPhaseTracker.doneCount());
+        }
     }
 
     private void cmdParty(String[] tokens, int depth) {
@@ -166,13 +188,24 @@ public class CrossSpireCommand extends ConsoleCommand {
         return partyId != null ? partyId : PartyManager.DEFAULT_PARTY_ID;
     }
 
+    private static String resolvePartyMemberId(String partyId, String idOrPrefix) {
+        PartyState party = CrossSpireMod.partyManager != null
+            ? CrossSpireMod.partyManager.getParty(partyId) : null;
+        String resolved = PartyMemberIdResolver.resolve(party, idOrPrefix);
+        if (resolved == null) {
+            DevConsole.log("Candidate must uniquely match a member of party " + partyId + ": " + idOrPrefix);
+        }
+        return resolved;
+    }
+
     private void cmdMapHostVote(String[] tokens, int depth) {
         if (tokens.length < depth + 2) {
             DevConsole.log("Usage: crossspire maphost <candidate_player_id>");
             return;
         }
-        String candidate = tokens[depth + 1];
         String partyId = localPartyId();
+        String candidate = resolvePartyMemberId(partyId, tokens[depth + 1]);
+        if (candidate == null) return;
         StandardPacket vote = MapHostVoteSender.buildVote(partyId, candidate);
         String raw = StandardPacket.toJson(vote);
         if (CrossSpireMod.isRoomHost() && CrossSpireMod.messageRouter != null) {
@@ -217,8 +250,9 @@ public class CrossSpireCommand extends ConsoleCommand {
             DevConsole.log("Usage: crossspire nodehost <candidate_player_id>");
             return;
         }
-        String candidate = tokens[depth + 1];
         String partyId = localPartyId();
+        String candidate = resolvePartyMemberId(partyId, tokens[depth + 1]);
+        if (candidate == null) return;
         StandardPacket vote = NodeInstanceHostVoteSender.buildVote(partyId, candidate);
         String raw = StandardPacket.toJson(vote);
         if (CrossSpireMod.isRoomHost() && CrossSpireMod.messageRouter != null) {
@@ -316,41 +350,35 @@ public class CrossSpireCommand extends ConsoleCommand {
         CrossSpireMod.lobbyState.markLocalReady(charName);
     }
 
+    private void cmdRewardDone() {
+        DevConsole.log("Sending reward_done for active node...");
+        crossspire.sync.CombatRewardPatches.sendRewardDone("console");
+    }
+
+    private void cmdMapUnlock(String[] tokens, int depth) {
+        String reason = tokens.length > depth + 1 ? tokens[depth + 1] : "manual";
+        DevConsole.log("Broadcast room_exit_unlocked reason=" + reason);
+        MessageRouter.broadcastRoomExitUnlocked(reason);
+    }
+
     private void cmdStart(String[] tokens, int depth) {
-        final String charName = tokens.length > depth + 1 ? tokens[depth + 1].toUpperCase() : "IRONCLAD";
+        // Online co-op: all ready → party_run_start (T7.7a). Offline: local GameStarter only.
+        // Optional args: character override, seed (seed used only by RoomHost when authorizing).
+        final String charName = tokens.length > depth + 1 ? tokens[depth + 1].toUpperCase() : "";
         final String seed = tokens.length > depth + 2 ? tokens[depth + 2] : "";
-        DevConsole.log("Starting " + charName + " seed=" + (seed.isEmpty() ? "(auto)" : seed) + " (next frame)");
-        // Console / game-probe run off the GL thread. GameStarter mutates CardCrawlGame.mode
-        // and dungeon state; concurrent MainMenuScreen.render → FontHelper GlyphLayout IOB.
-        Gdx.app.postRunnable(new Runnable() {
-            @Override public void run() {
-                try {
-                    crossspire.remote.GameStarter.start(charName, seed.isEmpty() ? null : seed);
-                    BaseMod.logger.info("CrossSpire start queued: mode=" + CardCrawlGame.mode
-                        + " fading=" + (CardCrawlGame.mainMenuScreen != null
-                            && CardCrawlGame.mainMenuScreen.isFadingOut));
-                } catch (Exception e) {
-                    BaseMod.logger.error("CrossSpire start failed: " + e.getClass().getName() + ": " + e.getMessage());
-                    StringWriter sw = new StringWriter();
-                    e.printStackTrace(new PrintWriter(sw));
-                    BaseMod.logger.error("CrossSpire start stack: " + sw.toString());
-                    DevConsole.log("Start failed: " + e.getMessage());
-                }
-                // Frame order: this runnable → update sees fadedOut → dungeon built.
-                // Re-post so bind runs after that update (next frame).
-                Gdx.app.postRunnable(new Runnable() {
-                    @Override public void run() {
-                        crossspire.remote.GameStarter.bindLocalPlayerIfReady();
-                        BaseMod.logger.info("CrossSpire start result: player="
-                            + (AbstractDungeon.player != null ? AbstractDungeon.player.name : "null")
-                            + " mode=" + CardCrawlGame.mode + " floor=" + AbstractDungeon.floorNum
-                            + " dungeon=" + (CardCrawlGame.dungeon != null
-                                ? CardCrawlGame.dungeon.getClass().getSimpleName() : "null")
-                            + " transition=" + (CardCrawlGame.dungeonTransitionScreen != null));
-                    }
-                });
-            }
-        });
+        DevConsole.log("Start co-op request char="
+            + (charName.isEmpty() ? "(ready/default)" : charName)
+            + " seed=" + (seed.isEmpty() ? "(auto)" : seed));
+        String reject = CrossSpireMod.lobbyState.requestPartyRunStart(
+            charName.isEmpty() ? null : charName,
+            seed.isEmpty() ? null : seed);
+        if (reject != null) {
+            DevConsole.log("Start rejected: " + reject
+                + " (need all party members ready; use crossspire ready [char])");
+            BaseMod.logger.info("CrossSpire start rejected: " + reject);
+            return;
+        }
+        DevConsole.log("Start accepted (local GameStarter or party_run_start in flight)");
     }
 
     private void cmdPlay(String[] tokens, int depth) {
@@ -564,28 +592,43 @@ public class CrossSpireCommand extends ConsoleCommand {
 
     private void cmdEventOpen(String[] tokens, int depth) {
         String partyId = localPartyId();
-        String eventId = tokens.length > depth + 1 ? tokens[depth + 1] : "BigFish";
-        Protocol.EventInterfacePayload iface = new Protocol.EventInterfacePayload();
-        iface.eventInstanceId = "evt:" + partyId + ":" + UUID.randomUUID().toString().substring(0, 8);
-        iface.partyId = partyId;
-        iface.eventId = eventId;
-        iface.eventClass = "diagnostic." + eventId;
-        iface.resourceHash = "diagnostic-" + eventId;
-        iface.name = eventId;
-        iface.description = "T7.4 diagnostic event";
-        iface.mode = EventApprovalCoordinator.MODE_INDIVIDUAL;
-        Protocol.EventOptionInfo option = new Protocol.EventOptionInfo();
-        option.index = 0;
-        option.text = "Choose";
-        option.enabled = true;
-        iface.options = new Protocol.EventOptionInfo[] {option};
+        String eventId = tokens.length > depth + 1 ? tokens[depth + 1] : "diagnostic";
+        // "native" or "BigFish" opens a hash-matched BigFish interface for T7.4c personal-delta E2E.
+        boolean nativeOpen = "native".equalsIgnoreCase(eventId) || "BigFish".equalsIgnoreCase(eventId);
+        Protocol.EventInterfacePayload iface;
+        if (nativeOpen) {
+            Protocol.NodeInstanceInfo fake = new Protocol.NodeInstanceInfo();
+            fake.nodeInstanceId = "diag:" + partyId + ":" + UUID.randomUUID().toString().substring(0, 8);
+            fake.partyId = partyId;
+            iface = EventInterfaceFactory.create(fake);
+            if (iface == null) {
+                DevConsole.log("eventopen native: failed to build BigFish interface");
+                return;
+            }
+        } else {
+            iface = new Protocol.EventInterfacePayload();
+            iface.eventInstanceId = "evt:" + partyId + ":" + UUID.randomUUID().toString().substring(0, 8);
+            iface.partyId = partyId;
+            iface.eventId = eventId;
+            iface.eventClass = "diagnostic." + eventId;
+            iface.resourceHash = "diagnostic-" + eventId;
+            iface.name = eventId;
+            iface.description = "T7.4 diagnostic event";
+            iface.mode = EventApprovalCoordinator.MODE_INDIVIDUAL;
+            Protocol.EventOptionInfo option = new Protocol.EventOptionInfo();
+            option.index = 0;
+            option.text = "Choose";
+            option.enabled = true;
+            iface.options = new Protocol.EventOptionInfo[] {option};
+        }
         approvalEventInstanceId = iface.eventInstanceId;
         approvalEventHash = iface.resourceHash;
         StandardPacket packet = EventChoiceSender.interfacePacket(iface);
         String raw = StandardPacket.toJson(packet);
         if (CrossSpireMod.isRoomHost()) CrossSpireMod.messageRouter.route(raw);
         else CrossSpireMod.send(raw);
-        BaseMod.logger.info("CrossSpire eventopen party=" + partyId + " event=" + iface.eventInstanceId);
+        BaseMod.logger.info("CrossSpire eventopen party=" + partyId + " event=" + iface.eventInstanceId
+            + " native=" + nativeOpen);
     }
 
     private void cmdEventChoice(String[] tokens, int depth) {
@@ -797,6 +840,6 @@ public class CrossSpireCommand extends ConsoleCommand {
 
     @Override
     public void errorMsg() {
-        DevConsole.log("crossspire: host <advertised-ip> <port> | join <ip> <port> | disconnect | status | info | lobby | combat | gamestate | ready [char] | start [char] [seed] | play <card> [target] | queue | room <index> | phase [name] | snapshot | vote <player> | select <card> | cevent <name> | eventsel <index> | eselect <index> <card> | evote <index> | confirm");
+        DevConsole.log("crossspire: host <advertised-ip> <port> | join <ip> <port> | disconnect | status | info | lobby | combat | gamestate | ready [char] | start [char] [seed] | play <card> [target] | rewarddone | queue | room <index> | phase [name] | snapshot | vote <player> | select <card> | cevent <name> | eventsel <index> | eselect <index> <card> | evote <index> | confirm");
     }
 }

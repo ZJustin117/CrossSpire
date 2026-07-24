@@ -4,7 +4,7 @@
 
 ## 执行状态
 
-> 与 `task.md` 对齐（2026-07-19）。历史 commit 见各阶段实施记录；测试数以 `./gradlew test` 为准。
+> 与 `task.md` 对齐（2026-07-24）。历史 commit 见各阶段实施记录；测试数以 `./gradlew test` 为准。
 
 | Phase | 进度 | 说明 |
 |-------|------|------|
@@ -14,8 +14,9 @@
 | P4 Android 调试清理 | ✅ 完成 | T4.1–T4.7（见 `task.md` / `development/`） |
 | 归档 | ✅ 完成 | A1–A6 |
 | P5 Buff 所有权契约 | ✅ 原版完成 | T5.0–T5.2 + T5.4–T5.5 ✅；**T5.3 灾厄/mutation 延后** |
-| P6 战斗回合闭环 | ✅ 核心完成 | T6.0–T6.2/T6.4/T6.5 ✅；T6.3 可选增强 |
-| **总** | **P5 原版完成 + P6 进行中** | 以构建结果为准 |
+| P6 战斗回合闭环 | ✅ 核心完成 | T6.0–T6.2/T6.4/T6.5 ✅；T8.0 end-turn 修复 |
+| P7 小队化冒险 + 共进主路径 | ✅ 完成 | T7.0–T7.9、T8、T9；T7.4e–f / T7.5c 已落地；2026-07-24 共进 E2E smoke PASS |
+| **总** | **P1–P7 主路径可用；T5.3/可选 polish 见 task 文末** | 以构建结果为准 |
 
 ## 目录
 
@@ -873,11 +874,35 @@ P7.0 战斗权威/快照硬化
 | T7.0c | monster-turn transaction gate：连续回合、零伤害、host≠stage-host 的图主来源验证、重复/延迟 result 拒绝 | ✅ JUnit 153/153；Android 双机 E2E 两轮闭环通过（2026-07-20） |
 | T7.1 | Schema-first `PartyState`/`PartyManager`、默认 P0、成员最小 ID 队长、leave/join 请求与批准/拒绝状态 | ✅ JUnit 159/159；router/命令 wiring 留给 T7.2 |
 | T7.2a | Party snapshot 路由：房主默认 P0、标准包广播、客户端原子应用与 status 诊断 | ✅ JUnit 159/159；Android 双机 P0 snapshot 通过（2026-07-20） |
-| T7.2b | `party_id` 隔离中央队列、end-turn、combat phase、room pins 与同队渲染；RoomHost 仅路由/目录 | 进行中：queue/end-turn/phase 的数据与接收 UI 已按 party 隔离（2026-07-20）；成员→RoomHost→队长的定向路由和队长→RoomHost→本队的玩法中继已完成（2026-07-21）。`PartyVisibility` 已限制远程角色渲染/状态 UI/怪物目标计数为同队成员；room pins 仍依赖 T7.3 |
-| T7.3 | 图主地图快照、房间目录与正常相邻节点导航；按小队 room consensus | 进行中：MapHost/NIH + pin/allocate + NIH open/`node_instance_opened`（诊断 Cultist）已完成，Android D1/D2 全链路通过（2026-07-21）。真实节点生成 RNG 与多房间类型待实现 |
-| T7.4 | `event_choice_request/approved/rejected/player_result`；hash 匹配时原生 UI，不用 sandbox；fallback 由图主定向执行 | 进行中：individual 审批状态机、StandardPacket 路由、诊断命令与 Android D1/D2 approval/result relay 通过（2026-07-21）；原生 buttonEffect 门控、fallback NIH 执行与 voting 待实现 |
-| T7.5 | event-room instance、同选项成员路径与按小队 voting；跨队相遇仅记录 | 待开始 |
-| T7.6 | Schema/FullSnapshot 对齐 attachment 与 parties；Android 双机和 Desktop smoke 验证 | 待开始 |
+| T7.2b | `party_id` 隔离中央队列、end-turn、combat phase、room pins 与同队渲染；RoomHost 仅路由/目录 | ✅ queue/end-turn/phase/可见性/room_pin 按 party 隔离；2026-07-22 关闭 |
+| T7.3 | 图主地图快照、房间目录与正常相邻节点导航；按小队 room consensus | ✅ 导航/多类型 open；shop/rest **仅类型**联机（库存不同步，T9 合约） |
+| T7.4 | `event_choice_request/approved/rejected/player_result`；hash 匹配时原生 UI；fallback + NIH 个人结果 | ✅ 主路径 + T7.4e targetSelect/HandCard + T7.4f relic/potion/card delta |
+| T7.5 | event-room instance、同选项成员路径与按小队 voting；跨队相遇仅记录 | ✅ voting + instance + T7.5b combat shell + T7.5c record-only |
+| T7.6 | Schema/FullSnapshot 对齐 attachment 与 parties；Android 双机 smoke | ✅ parties/maps/attachments/active_nodes + Android smoke；Desktop 暂缓 |
+| T7.7a | Ready+Play 双机开局：`party_run_start`；全员 ready 后 start 广播；双端 GameStarter；废弃 createGameIfNeeded 主路径 | ✅ 实现 + JUnit planner |
+| T7.7b | 同队 P0 + map/NIH 门控：仅 GAMEPLAY 后 maphost 捕获与 room_pin | ✅ GAMEPLAY 门控 + reward 期拒 pin |
+| T7.7c | room_pin 共识双端自动进房；`node_instance_id`/encounter 诊断硬断言；抑制 legacy room_enter 双开 | ✅ ActiveNodeTracker + skip room_enter |
+| T7.7d | 同 node_instance 可玩：可见、双端 play、phase 统一；harness 禁用仅 D1 fight 作共进 pass | ✅ 文档/诊断；玩法复用既有 queue/phase |
+| T7.8 | CombatRewardScreen 阶段门控；个人金币；全员 reward_done 后再 pin | ✅ enter/done/complete；战后 pin 不再 reblock；map 出边 repair + 下一房 E2E |
+| T7.9 | 战后地图出边/下一房闭环 | ✅ capture 扩展边 + empty outgoing repair + allocate fallback；Android `0:0`→`2:1` |
+| T9.0 | 统一 RoomInstance 合约：类型枚举、shop/rest 仅类型、room_exit_unlocked | ✅ |
+| T9.1 | RoomNavigationGate + pin 门控 + force-follow | ✅ |
+| T9.2 | shop/rest 类型-only + `mapunlock` | ✅ |
+| T8.0 | 战斗 end-turn 仅 disable(true)；修复 enable 误触发 | ✅ JUnit + Android play E2E |
+| T8.1 | 账本对齐 + 共进 smoke 文档固化 | ✅ |
+| T9.3 | RIH 打开地图自动 room_exit_unlocked | ✅ MapUnlockPatches |
+
+### 真共进验收主路径（T7.7–T7.8）
+
+```
+双方 ready → party_run_start → 双端 GAMEPLAY
+  → 同队 P0 + maphost/nodehost + map bind
+    → 双方 room <i> 共识 → 同 node_instance 自动进房
+      → 互相可见 + play + phase 统一
+        → 胜后完整奖励屏（个人经济）→ reward_done → 再 room 投票
+```
+
+历史「D1 start + fight Cultist + D2 INDUCED」仅为 host-spawn projection 回归，不作为共进 pass。
 
 ### 事件约束
 

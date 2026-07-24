@@ -154,11 +154,10 @@ public class RoomPanel {
 
             if (hitTest(panelX + 6, playBtnY, btnW, btnH, mx, my)
                 && isReady) {
-                Gdx.app.postRunnable(new Runnable() {
-                    @Override public void run() {
-                        crossspire.remote.GameStarter.start(selectedCharacter);
-                    }
-                });
+                String reject = CrossSpireMod.lobbyState.requestPartyRunStart(selectedCharacter, null);
+                if (reject != null) {
+                    BaseMod.logger.info("RoomPanel play rejected: " + reject);
+                }
             }
         }
     }

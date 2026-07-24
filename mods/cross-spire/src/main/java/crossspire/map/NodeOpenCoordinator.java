@@ -22,7 +22,9 @@ public final class NodeOpenCoordinator {
         if (commit.mapInstanceId == null || !commit.mapInstanceId.equals(party.mapInstanceId)) return false;
         if (commit.nodeId == null || !commit.nodeId.equals(allocated.nodeId)) return false;
         if (commit.generationResult == null || allocated.roomType == null
-            || !allocated.roomType.equals(commit.generationResult.roomType)) return false;
+            || !roomTypeCompatible(allocated.roomType, commit.generationResult.roomType)) {
+            return false;
+        }
         if (!sourcePlayerId.equals(allocated.nodeInstanceHostId)) return false;
         if (!sourcePlayerId.equals(party.nodeInstanceHostId)) return false;
         if (!validGenerationResult(commit.generationResult, allocated.nodeId)) return false;
@@ -35,9 +37,17 @@ public final class NodeOpenCoordinator {
         return nodeInstanceId != null && openedInstances.contains(nodeInstanceId);
     }
 
+    private static boolean roomTypeCompatible(String allocatedType, String generatedType) {
+        if (allocatedType == null || generatedType == null) return false;
+        if (allocatedType.equals(generatedType)) return true;
+        // '?' / capture placeholders may resolve only at generation time.
+        return "unknown".equals(allocatedType) || "?".equals(allocatedType);
+    }
+
     private static boolean validGenerationResult(Protocol.NodeGenerationResult result, String nodeId) {
         if (result == null || result.roomType == null || !nodeId.equals(result.nodeId)) return false;
-        if ("monster".equals(result.roomType)) {
+        if ("monster".equals(result.roomType) || "elite".equals(result.roomType)
+            || "boss".equals(result.roomType)) {
             return result.encounter != null && !result.encounter.isEmpty();
         }
         if ("event".equals(result.roomType)) {
@@ -46,6 +56,10 @@ public final class NodeOpenCoordinator {
                 && !result.eventInterface.eventInstanceId.isEmpty()
                 && result.eventInterface.options != null
                 && result.eventInterface.options.length > 0;
+        }
+        if ("shop".equals(result.roomType) || "rest".equals(result.roomType)
+            || "treasure".equals(result.roomType)) {
+            return true;
         }
         return false;
     }

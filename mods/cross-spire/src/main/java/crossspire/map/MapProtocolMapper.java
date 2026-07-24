@@ -15,7 +15,8 @@ public final class MapProtocolMapper {
         List<MapNode> nodes = new ArrayList<MapNode>();
         for (Protocol.MapNode node : payload.nodes) {
             if (node == null || node.nodeId == null || node.outgoingNodeIds == null) return null;
-            nodes.add(new MapNode(node.nodeId, node.roomType, Arrays.asList(node.outgoingNodeIds)));
+            nodes.add(new MapNode(node.nodeId, node.x, node.y, node.roomType, node.icon,
+                node.burningElite, Arrays.asList(node.outgoingNodeIds)));
         }
         try {
             return new MapDefinition(payload.mapInstanceId, payload.actId, payload.mapRevision,

@@ -4,14 +4,17 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.megacrit.cardcrawl.dungeons.AbstractDungeon;
 import crossspire.CrossSpireMod;
+import crossspire.combat.ComponentAttachmentRegistry;
 
 public final class FullSnapshotSender {
 
     private FullSnapshotSender() {}
 
     public static String build() {
-        JsonObject snap = new JsonObject();
-        snap.addProperty("type", "full_snapshot");
+        JsonObject snap = FullSnapshotBuilder.buildDirectory(
+            CrossSpireMod.partyManager != null ? CrossSpireMod.partyManager.snapshot() : null,
+            CrossSpireMod.roomHost != null ? CrossSpireMod.roomHost.getMapRegistry() : null,
+            ComponentAttachmentRegistry.all());
         snap.addProperty("source", CrossSpireMod.playerId);
         snap.addProperty("seq", CrossSpireMod.nextSeq());
 
@@ -25,7 +28,8 @@ public final class FullSnapshotSender {
             player.addProperty("hp", AbstractDungeon.player.currentHealth);
             player.addProperty("max_hp", AbstractDungeon.player.maxHealth);
             player.addProperty("block", AbstractDungeon.player.currentBlock);
-            player.addProperty("energy", AbstractDungeon.player.energy != null ? AbstractDungeon.player.energy.energy : 0);
+            player.addProperty("energy", AbstractDungeon.player.energy != null
+                ? AbstractDungeon.player.energy.energy : 0);
             player.addProperty("gold", AbstractDungeon.player.gold);
             player.addProperty("character_class", AbstractDungeon.player.getClass().getSimpleName());
 
@@ -42,7 +46,8 @@ public final class FullSnapshotSender {
 
         JsonArray monsters = new JsonArray();
         if (AbstractDungeon.getCurrRoom() != null && AbstractDungeon.getCurrRoom().monsters != null) {
-            for (com.megacrit.cardcrawl.monsters.AbstractMonster m : AbstractDungeon.getCurrRoom().monsters.monsters) {
+            for (com.megacrit.cardcrawl.monsters.AbstractMonster m
+                : AbstractDungeon.getCurrRoom().monsters.monsters) {
                 JsonObject mo = new JsonObject();
                 mo.addProperty("id", m.id);
                 mo.addProperty("hp", m.currentHealth);

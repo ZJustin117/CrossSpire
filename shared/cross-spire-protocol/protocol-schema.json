@@ -24,8 +24,9 @@
           "type": "string",
           "enum": ["damage", "gain_block", "apply_power", "remove_power", "heal", "gain_energy",
             "draw_card", "discard_card", "exhaust_card", "gain_gold", "obtain_relic",
-            "obtain_potion", "lose_hp", "magic_number", "set_monster_hp", "monster_death"],
-          "description": "set_monster_hp / monster_death are planned monster-authority effects"
+            "obtain_potion", "lose_hp", "magic_number", "set_monster_hp", "monster_death",
+            "obtain_card", "remove_card", "remove_relic", "remove_potion", "max_hp", "deck_size"],
+          "description": "set_monster_hp / monster_death are planned monster-authority effects; obtain/remove_* cover personal event inventory deltas"
         },
         "target": { "type": "string" },
         "amount": { "type": "integer" },
@@ -190,11 +191,18 @@
     },
     "NodeGenerationResult": {
       "type": "object",
-      "description": "NodeInstanceHost's resolved content for one allocated node. Exactly one room-type-specific descriptor is required.",
+      "description": "NodeInstanceHost's resolved content for one allocated node. Room-type-specific descriptors are required for combat and event nodes.",
       "required": ["room_type", "node_id"],
       "properties": {
-        "room_type": { "type": "string", "enum": ["monster", "event"] },
-        "encounter": { "type": "string", "description": "Required when room_type is monster." },
+        "room_type": {
+          "type": "string",
+          "enum": ["monster", "event", "elite", "shop", "rest", "treasure", "boss"],
+          "description": "Resolved node category. Immutable map '?' nodes resolve here before open."
+        },
+        "encounter": {
+          "type": "string",
+          "description": "Required when room_type is monster, elite, or boss."
+        },
         "node_id": { "type": "string" },
         "event_interface": {
           "type": "object",
@@ -210,6 +218,18 @@
             "mode": { "type": "string", "enum": ["individual", "voting"] },
             "options": { "type": "array" }
           }
+        },
+        "shop_seed": {
+          "type": "string",
+          "description": "Optional local-only shop seed hint. Not multiplayer inventory SoT; shop rooms sync type/instance only."
+        },
+        "rest_options": {
+          "type": "array",
+          "description": "Optional local-only rest option hint. Not multiplayer SoT; rest rooms sync type/instance only."
+        },
+        "treasure_tier": {
+          "type": "string",
+          "description": "Optional local-only treasure tier hint. Not multiplayer loot SoT."
         }
       }
     }
@@ -361,6 +381,116 @@
         "parties": { "type": "array", "items": { "$ref": "#/definitions/PartyInfo" } }
       }
     },
+    "party_run_start_request": {
+      "description": "Member → RoomHost: request coordinated run start after all party members ready (T7.7a)",
+      "extends": "GameMessage",
+      "properties": {
+        "party_id": { "type": "string" },
+        "seed": { "type": "string", "description": "Optional seed suggestion; RoomHost may ignore if already chosen" },
+        "character": { "type": "string", "description": "Requester character override for ready table" }
+      }
+    },
+    "party_run_start": {
+      "description": "RoomHost/party leader → party: coordinated dual-client run start. Each member starts local GameStarter with own character and shared seed. Not host-spawn combat projection.",
+      "extends": "GameMessage",
+      "required": ["party_id", "seed", "act", "members", "leader_id"],
+      "properties": {
+        "party_id": { "type": "string" },
+        "seed": { "type": "string" },
+        "act": { "type": "integer" },
+        "leader_id": { "type": "string" },
+        "members": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["player_id", "character"],
+            "properties": {
+              "player_id": { "type": "string" },
+              "character": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "reward_phase_enter": {
+      "description": "NIH/leader → party: enter combat reward phase after victory (T7.8)",
+      "extends": "GameMessage",
+      "properties": {
+        "party_id": { "type": "string" },
+        "node_instance_id": { "type": "string" },
+        "transaction_id": { "type": "string" }
+      }
+    },
+    "reward_offer": {
+      "description": "NIH → party: shared reward candidate pool (deterministic from node_instance_id); personal gold is not shared",
+      "extends": "GameMessage",
+      "properties": {
+        "party_id": { "type": "string" },
+        "node_instance_id": { "type": "string" },
+        "card_ids": { "type": "array", "items": { "type": "string" } },
+        "relic_ids": { "type": "array", "items": { "type": "string" } },
+        "potion_ids": { "type": "array", "items": { "type": "string" } },
+        "gold_min": { "type": "integer" },
+        "gold_max": { "type": "integer" }
+      }
+    },
+    "reward_pick": {
+      "description": "Member → leader/NIH: personal reward selection (does not alter other players' gold/deck)",
+      "extends": "GameMessage",
+      "properties": {
+        "party_id": { "type": "string" },
+        "node_instance_id": { "type": "string" },
+        "card_id": { "type": "string" },
+        "relic_id": { "type": "string" },
+        "potion_id": { "type": "string" },
+        "skipped": { "type": "boolean" }
+      }
+    },
+    "reward_player_result": {
+      "description": "Member → party: personal reward apply delta (gold/deck/relics are personal economy)",
+      "extends": "GameMessage",
+      "properties": {
+        "party_id": { "type": "string" },
+        "node_instance_id": { "type": "string" },
+        "player_id": { "type": "string" },
+        "effects": { "type": "array", "items": { "$ref": "#/definitions/EffectDescription" } }
+      }
+    },
+    "reward_done": {
+      "description": "Member → leader: local CombatRewardScreen finished/Proceed",
+      "extends": "GameMessage",
+      "properties": {
+        "party_id": { "type": "string" },
+        "node_instance_id": { "type": "string" }
+      }
+    },
+    "reward_phase_complete": {
+      "description": "Leader → party: all members reward_done. Should unlock map navigation (same as room_exit_unlocked) for this room_instance.",
+      "extends": "GameMessage",
+      "properties": {
+        "party_id": { "type": "string" },
+        "node_instance_id": { "type": "string" }
+      }
+    },
+    "room_exit_unlocked": {
+      "description": "RoomInstanceHost/NodeInstanceHost → party: map navigation unlocked for this room instance. Members enable continue arrow / room_pin. Shop inventory and rest options are NOT synced—only room type was shared at open.",
+      "extends": "GameMessage",
+      "properties": {
+        "party_id": { "type": "string" },
+        "room_instance_id": { "type": "string", "description": "Same as node_instance_id for this visit" },
+        "node_instance_id": { "type": "string" },
+        "reason": { "type": "string", "description": "Optional: reward_complete | shop_leave | rest_leave | manual" }
+      }
+    },
+    "room_exit_locked": {
+      "description": "Optional: re-lock navigation while still in the same room instance (rare).",
+      "extends": "GameMessage",
+      "properties": {
+        "party_id": { "type": "string" },
+        "room_instance_id": { "type": "string" },
+        "node_instance_id": { "type": "string" }
+      }
+    },
     "party_leave_request": {
       "description": "Member → RoomHost: leave current party into a single-member party",
       "properties": { "party_id": { "type": "string" } }
@@ -430,13 +560,14 @@
       }
     },
     "map_registered": {
-      "description": "RoomHost → party: accepted immutable map registration and initial party binding.",
+      "description": "RoomHost → party: accepted immutable map registration, initial party binding, and the authoritative topology clients must reconstruct locally.",
       "properties": {
         "party_id": { "type": "string" },
         "map_instance_id": { "type": "string" },
         "start_node_id": { "type": "string" },
         "map_revision": { "type": "integer" },
-        "party_revision": { "type": "integer" }
+        "party_revision": { "type": "integer" },
+        "map": { "$ref": "#/definitions/MapDefinition" }
       }
     },
     "map_join_request": {
@@ -571,6 +702,7 @@
         "ui_step": { "type": "string" },
         "option_index": { "type": "integer" },
         "selected_cards": { "type": "array", "items": { "type": "string" } },
+        "selected_targets": { "type": "array", "items": { "type": "string" } },
         "resource_hash": { "type": "string" }
       }
     },
@@ -601,7 +733,25 @@
         "party_id": { "type": "string" },
         "request_id": { "type": "string" },
         "player_id": { "type": "string" },
-        "effects": { "type": "array", "items": { "$ref": "#/definitions/EffectDescription" } }
+        "effects": { "type": "array", "items": { "$ref": "#/definitions/EffectDescription" } },
+        "shared_outcome": {
+          "type": "object",
+          "description": "Optional party-scoped shared consequence (event-room path or leave_party). event_room opens a shared STS combat shell for listed members (T7.5).",
+          "properties": {
+            "type": { "type": "string", "enum": ["event_room", "leave_party"] },
+            "instance_id": { "type": "string" },
+            "option_index": { "type": "integer" },
+            "encounter": {
+              "type": "string",
+              "description": "When type=event_room: MonsterHelper encounter key for the shared fight shell"
+            },
+            "member_ids": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Players on this event-room path; only they force-enter the combat shell"
+            }
+          }
+        }
       }
     },
 
@@ -668,9 +818,16 @@
       }
     },
     "full_snapshot": {
-      "description": "StageHost → Player: complete stage state snapshot on join",
+      "description": "RoomHost/directory snapshot: parties, maps, attachments, active nodes, plus local player combat fields when available.",
       "extends": "GameMessage",
       "properties": {
+        "parties": { "type": "array" },
+        "maps": { "type": "array", "items": { "$ref": "#/definitions/MapDefinition" } },
+        "attachments": { "type": "array" },
+        "active_node_instances": { "type": "array" },
+        "stage": { "type": "object" },
+        "player": { "type": "object" },
+        "monsters": { "type": "array" },
         "stage_sync": { "$ref": "#/messageTypes/stage_sync" },
         "players": { "type": "array", "items": { "$ref": "#/definitions/RemotePlayerState" } },
         "pending_messages": { "type": "array" }

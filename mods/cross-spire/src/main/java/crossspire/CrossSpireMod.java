@@ -25,6 +25,8 @@ import crossspire.ui.ServerPicker;
 import crossspire.party.PartyManager;
 import crossspire.party.PartySnapshotSender;
 import crossspire.party.PartyState;
+import crossspire.party.RewardPhaseTracker;
+import crossspire.party.RoomNavigationGate;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.UUID;
 import com.google.gson.JsonObject;
@@ -42,6 +44,8 @@ public class CrossSpireMod {
     public static StageHost stageHost;
     public static PartyManager partyManager;
     public static PartyEndTurnTracker partyEndTurnTracker;
+    public static RewardPhaseTracker rewardPhaseTracker;
+    public static RoomNavigationGate roomNavigationGate;
     public static CrossSpireHUD hud;
     public static String playerId = "";
     public static String hostId = "";
@@ -71,6 +75,8 @@ public class CrossSpireMod {
         stageHost = new StageHost("");
         partyManager = new PartyManager();
         partyEndTurnTracker = new PartyEndTurnTracker();
+        rewardPhaseTracker = new RewardPhaseTracker();
+        roomNavigationGate = new RoomNavigationGate();
         messageRouter = new MessageRouter(new SyncExecutor(), centralQueueManager, new CombatResultReplayer());
 
         lobbyScreen = new LobbyScreen();
