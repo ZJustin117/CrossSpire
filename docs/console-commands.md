@@ -4,6 +4,8 @@ CrossSpire 通过 BaseMod 的 `ConsoleCommand` API 注册 `crossspire` 命名空
 
 实现类：`crossspire.ui.CrossSpireCommand`
 
+**P8**：生产主路径（host/join、ready/play、maphost/nodehost、room pin）已接到游戏内 HUD（F1 Lobby + 右侧 Vote/Pin 面板），与 console **共用** `ConnectionActions` / `LobbyActions` / `VoteActions` / `MapActions`。console 仍作 harness 自动化与诊断回退；`mapreg` / `eventopen` / 强制 `phase` 等保持仅 console。
+
 ---
 
 ## 命令列表
@@ -238,6 +240,8 @@ crossspire confirm
 命令由 SlayTheAmethyst Harness 经 **connector daemon** 调用标准 BaseMod console，不再通过 ADB 写入 batch 文件，也不直接连 game-probe。
 
 设备 serial、connector 端口与路径来自仓库根 `.env.local`（见 [`.env.example`](../.env.example)）。D2 的 `127.0.0.1:$CROSSSPIRE_GAME_PORT` 由外部测试基础设施转发到 D1；这不是普通双设备网络的默认行为，也不由 CrossSpire 维护。完整环境、前置条件和故障定位见 [`development/android-harness.md`](./development/android-harness.md)。
+
+**说明：** console 联机验证 ≠ 逻辑层单元测。phase / ownership / induce 等语义默认见 [`development/logic-layer-testing.md`](./development/logic-layer-testing.md) 与 `./gradlew test`。
 
 ```bash
 set -a && source .env.local && set +a

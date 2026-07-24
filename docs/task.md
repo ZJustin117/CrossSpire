@@ -1,7 +1,19 @@
 # CrossSpire — SDD 迁移任务清单 (Task)
 
 > 历史阶段 30/30 完成。当前测试数和 JAR 大小以构建结果为准。
-> 与 `plan.md` 执行状态对齐：2026-07-24。**P5 原版 ✅；P6 核心 ✅；P7 共进/导航/事件主路径 ✅（含 T7.4e–f / T7.5c）；T5.3 延后；可选 polish 见文末**。
+> 与 `plan.md` 执行状态对齐：2026-07-24。**P5–P15 ✅；T5.3 延后；P-Testing 规范 ✅ / 实现 ⏳**。
+
+## P-Testing 逻辑层测试（规范 + 实现队列）
+
+> 权威写法：[`development/logic-layer-testing.md`](./development/logic-layer-testing.md)。语义默认 `@junit-test`，Harness 仅设备契约。
+
+- [x] **T-Test.0** 文档与 OpenCode agent 规范（logic-layer-testing、AGENTS、junit-test/harness/deploy/arthas、spec NFR-16–18、ARCHITECTURE §22、plan 本章）
+- [ ] **T-Test.1** combat_result admit / host local-induce → main pure；删测试镜像；JUnit 绑定生产 API
+- [ ] **T-Test.2** hop + personal target + owner-fire Policy 表测 + Replayer 接线
+- [ ] **T-Test.3** phase / queue / monster admit 边界补全
+- [ ] **T-Test.4** `combat.scenario` 首批 5–8 场景
+- [ ] **T-Test.5**（可选）schema ↔ Protocol 键校验
+- [ ] **T-Test.6** harness 文档持续对齐「语义已迁 JUnit」
 
 ## P4 Android 调试基础设施清理 ✅
 
@@ -200,6 +212,81 @@
 
 - A1-A6 全部完成
 
+## P15 双倍 INDUCED + 实际伤害快照
+
+> 日志：同一 combat_result 两次 INDUCED（毒 5→10）；Perfected Strike 用 baseDamage=6。
+
+- [x] P15.1 host 中继 combat_result 排除 source（防二次 apply）
+- [x] P15.2 prepareCardForSnapshot(calculateCardDamage) 同步实际伤害
+- [x] P15.3 毒直接 stackPower（suppress 下可挂层）
+- [x] P15.4 双机 E2E：Deadly Poison 单次 INDUCED + Poison×5 一次；Strike 双向各 1 次（JAR 747123）
+
+## P14 毒/易伤映射 + 个人防御归属
+
+> 毒被写成 Vulnerable；gain_block self 对端误加到自己；Poison 构造 owner 错误。
+
+- [x] P14.1 cardId 推断 Poison/Weak/Vulnerable；block 目标=executor
+- [x] P14.2 INDUCED 个人效果仅 executor 本机 apply；PoisonPower(owner,source,amount)
+- [x] P14.3 双机 E2E：Deadly Poison→Poison×5；Defend gain_block skip non-local；Strike 双向（JAR 745573）
+
+## P13 队长出牌 + map 后默认 NIH
+
+> 日志：队长 CapturePatches 只 send 无 peer 结果；无 NIH 时原生 2 Louse；无 node_instance。
+
+- [x] P13.1 队长 useCard 后 publish combat_result（不二次 queue）
+- [x] P13.2 map_register 后默认 NIH=MapHost；client 应用 payload
+- [x] P13.3 拦截 nextRoomTransition；native combat 门控用 connectionManager
+- [x] P13.4 双机 E2E：auto NIH + 同 Cultist + 双向 INDUCED；无 CME（JAR 743711）
+- [x] P13.5 combat_result 主线程 postRunnable（修 D2 ConcurrentModificationException）
+
+## P12 防原生进房 + 关 legacy room_enter
+
+> 会话 A：无 NIH 时拦截关闭→直接 Next Room；共进前 room_enter 投影战。
+
+- [x] P12.1 map 绑定即拦截；无 NIH 点图拒绝 pin（不原生进）
+- [x] P12.2 map-bound 无 active node 时挡 MonsterRoom.onPlayerEntry
+- [x] P12.3 共进目录/已 start/已 map 时忽略 legacy room_enter
+- [x] P12.4 双机 E2E：room 0 同 node + Strike INDUCED；无 legacy room_enter（JAR 738565）
+
+## P11 地图选房早拦截（防不同房）
+
+> 根因：`nextRoomTransitionStart` 拦截过晚，首房已 `setCurrMapNode`；无 MapHost/NIH 时原生独自进房。
+
+- [x] P11.1 `MapRoomNode.update` 在 setCurr 前提前 pin + 挡 transition/setCurr
+- [x] P11.2 pin by `node_id` + host 接受 node_id
+- [x] P11.3 双机 E2E：console room 共识同 node PASS（JAR 737292）；地图点击早拦截需手测 `MapRoomSelectPatches early pin`
+
+## P10 双向战斗 + 结束回合 + 图主时机
+
+> 日志：D2→D1 仅 `broadcast combat_result` 无 INDUCED（sendToParty 跳过 self）；end_turn 零条；Vote 过早。
+
+- [x] P10.1 `broadcastCombatResult` 本地 INDUCED + LocalReference/queue_submit 填 party_id
+- [x] P10.2 end_turn 全员上线（含 host+leader sendToParty）+ mirror
+- [x] P10.3 VotePanel 仅 GAMEPLAY 可投 + 时机文案
+- [x] P10.4 双机 E2E：D1→D2 与 **D2→D1 INDUCED** PASS（JAR 732877）；end_turn 仅代码路径（无 console 按钮）
+
+## P9 战斗同源 + 地图点击选房
+
+> latest.log：`encounter=Cultist` 后 STS 本地 roll 出 `2 Louse`；`remoteCombatActive` 抑制 BattleStart 致血条异常。去掉独立 Pin 面板。
+
+- [x] P9.1 权威 encounter 预装（`setMonster` + `MonsterGroup.init`，禁止 re-roll）
+- [x] P9.2 co-op 进房不 suppress BattleStart；显式 `showHealthBar`
+- [x] P9.3 移除 RoomPinPanel；`MapRoomSelectPatches` 拦截 `nextRoomTransitionStart` → room_pin
+- [x] P9.4 双机 E2E：Cultist 双端 50/50、无 Louse、Strike→D2 INDUCED PASS（JAR 731033，2026-07-24）
+
+## P8 游戏 UI 可玩性（控制台 → 手操）
+
+> 目标：主路径可不写 console；投票行显示角色选择屏按钮缩略图。诊断命令仍保留 console。
+
+- [x] T8-UI.1 Connection/Lobby/Vote/Map actions 抽取（与 console 同路径）
+- [x] T8-UI.2 `CharacterIconPaths`/`CharacterIconCache` + Lobby 角色图标
+- [x] T8-UI.3 RoomPanel Host/Join/Disconnect/Port 切换
+- [x] T8-UI.4 VotePanel MapHost/NIH + 成员角色图标
+- [x] T8-UI.5 RoomPinPanel 出边 pin + pins 快照图标
+- [x] T8-UI.6 HUD 集成 + `room_pins`/选举结果写入 `PartyUiState`
+- [x] T8-UI.0 文档补全（plan/task/spec US-9/console 标注）
+- [x] T8-UI.7 双机 Full E2E（console=actions 同路径）：host/join→ready/start→maphost/nodehost→room 0 同 node_instance PASS（JAR 727827，2026-07-24）
+
 ## 显式未开 / 可选（非 P7 阻塞）
 
 | 项 | 优先级 | 说明 |
@@ -214,3 +301,4 @@
 | US-7 卡牌 invoke 交互（非事件） | 另开阶段 | 事件已用批准协议；卡牌选牌/目标非本轮 |
 | 商店库存 / 篝火选项 / 宝箱完整同步 | 不做 | T9 类型-only 合约 |
 | StarConnectionManager `route error: null` | 诊断债 | 非阻塞 |
+| P-Testing T-Test.1–4 逻辑层提取与 scenario | 进行中 | 规范 T-Test.0 已完成；见上节 |

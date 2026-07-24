@@ -2,6 +2,8 @@
 
 本文记录 CrossSpire 在 SlayTheAmethyst Android 上的双设备测试台用法。ADB serial、connector daemon 和端口转发属于开发基础设施，不是 CrossSpire 的运行时配置或网络协议。
 
+**语义回归（phase / ownership / induce / queue admit 等）默认用 JUnit，不靠本手册的双机流程。** 逻辑层规范见 [`logic-layer-testing.md`](./logic-layer-testing.md)；OpenCode 用 `@junit-test`。Harness 只验证联机/设备契约与发布级共进 smoke。
+
 **本机取值**见仓库根 [`.env.example`](../../.env.example) / 本地 `.env.local`（gitignored）。下文只使用环境变量名。
 
 ## 支持与验证范围
@@ -197,6 +199,8 @@ python3 "$CROSSSPIRE_AMETHYST_TOOLS_DIR/main.py" sts-harness \
 将 `$CROSSSPIRE_D1_SERIAL` 替换为 `$CROSSSPIRE_D2_SERIAL` 可查询 D2。
 
 ### 真共进主路径 smoke（T7.7+ / T8 / T9 验收）
+
+**定位：** 设备路径与 console 联机是否仍通。induce/phase 等规则变更应先有 JUnit（[`logic-layer-testing.md`](./logic-layer-testing.md)）；本 smoke 不替代逻辑层断言。
 
 唯一共进 pass 标准（**不是** D1-only `fight Cultist`）：
 

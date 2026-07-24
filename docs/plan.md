@@ -16,7 +16,16 @@
 | P5 Buff 所有权契约 | ✅ 原版完成 | T5.0–T5.2 + T5.4–T5.5 ✅；**T5.3 灾厄/mutation 延后** |
 | P6 战斗回合闭环 | ✅ 核心完成 | T6.0–T6.2/T6.4/T6.5 ✅；T8.0 end-turn 修复 |
 | P7 小队化冒险 + 共进主路径 | ✅ 完成 | T7.0–T7.9、T8、T9；T7.4e–f / T7.5c 已落地；2026-07-24 共进 E2E smoke PASS |
-| **总** | **P1–P7 主路径可用；T5.3/可选 polish 见 task 文末** | 以构建结果为准 |
+| P8 游戏 UI 可玩性 | ✅ 核心完成 | Lobby/Host/Join/Vote 图标；Pin 面板已废（P9.3 改地图点击） |
+| P9 战斗同源 + 地图选房 | ✅ | 权威 Cultist 预装+init；无 BattleStart suppress；地图 click→pin；E2E Strike INDUCED PASS |
+| P10 双向战斗 + end_turn + 图主时机 | ✅ | host 本地 INDUCED；end_turn 上线；Vote GAMEPLAY 门控；D2→D1 INDUCED E2E PASS |
+| P11 地图选房早拦截 | ✅ | update 前 pin；挡 setCurr/transition；node_id pin；console 同房 E2E PASS |
+| P12 防原生进房 / legacy | ✅ | map 绑定即拦；无 NIH 拒 pin；挡 native combat；忽略 co-op room_enter；E2E PASS |
+| P13 队长出牌 + 默认 NIH + CME | ✅ | leader publish combat_result；map 后 NIH=MapHost；INDUCED 主线程；双向 E2E PASS |
+| P14 毒/防御归属 | ✅ | Poison≠Vulnerable；block 仅 executor；PoisonPower 构造；Deadly Poison E2E PASS |
+| P15 双倍 INDUCED + 伤害快照 | ✅ | 中继排除 source；calculateCardDamage；毒直接 stack；单次 Poison×5 E2E PASS |
+| **P-Testing 测试规范与逻辑层** | **规范 ✅ / 实现 ⏳** | T-Test.0 文档+agent ✅；T-Test.1+ Policy 提取与 scenario 待做 |
+| **总** | **P1–P7 主路径可用；P8+ 已交付；逻辑层实现跟进** | 以构建结果为准 |
 
 ## 目录
 
@@ -910,3 +919,35 @@ P7.0 战斗权威/快照硬化
 2. 内容类和 hash 匹配才可执行本地原生事件；缺类或 hash 不匹配时用 `RemoteEventDisplay`，由图主执行并定向应用结果。
 3. 事件不得隐式让同一小队成员走向不同地图节点。产生事件内房间时，图主创建稳定 instance，选择相同选项者走同一小队路径；直接离开去地图节点前必须显式离队。
 4. 投票仅按 `party_id` 聚合；房间全员不再是默认玩法共识范围。
+
+---
+
+## Phase Testing: 逻辑层测试规范与实现
+
+### 背景
+
+Android Harness 对 **语义**（phase / ownership / induce）反馈慢、难断言；仓库已有大量 pure JUnit，但决策仍部分散落在 `CombatResultReplayer` / `MessageRouter`，且个别测试镜像生产 if。目标：规范落地 + 后续提取，使语义默认走 JUnit。
+
+### 原则
+
+1. 测 CrossSpire 联机规则，不测 STS 卡牌数值；不默认 desktop.jar 战斗仿真。
+2. 生产 pure 为唯一决策实现；禁止测试内镜像。
+3. Harness 缩权为设备/联机契约与发布 smoke。
+4. 细则：[`development/logic-layer-testing.md`](./development/logic-layer-testing.md)；架构：`ARCHITECTURE.md` §22；验收：`spec.md` NFR-16–18。
+
+### 任务
+
+| ID | 内容 | 状态 | 验证 |
+|----|------|------|------|
+| T-Test.0 | 文档与 agent：logic-layer-testing、AGENTS、junit-test/harness 边界、spec NFR、ARCHITECTURE §22、本表与 task | ✅ | 文档评审 |
+| T-Test.1 | 提取 combat_result admit / host 对 peer 本地 induce 到 main pure；测试绑定生产 API；删除测试内镜像 | ⏳ | `./gradlew test` |
+| T-Test.2 | Induced hop + personal target + owner-fire Policy 表驱动 JUnit；Replayer 接线 pure | ⏳ | JUnit |
+| T-Test.3 | phase / queue / monster admit 边界表补全 | ⏳ | JUnit |
+| T-Test.4 | `crossspire.combat.scenario`（或等价）首批 5–8 场景（见 logic-layer-testing §6） | ⏳ | JUnit |
+| T-Test.5 |（可选）protocol-schema 与 Protocol 键存在性校验 | ⏳ | JUnit |
+| T-Test.6 | harness 文档与共进 smoke 清单标明语义项已迁 JUnit 处（持续） | ⏳ | docs |
+
+### 与既有阶段关系
+
+- 不改写 P5–P15 已交付行为合同；只改**验证方式**与必要 pure 提取。
+- 历史 plan 中「`CombatResultReplayerTest` 假引擎 double-exec」类条目以 pure plan / scenario 为准，不再追求无 STS 的全量 Replayer 集成测。

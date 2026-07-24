@@ -23,17 +23,20 @@ OpenCode 项目插件 [`.opencode/plugins/local-env.ts`](../../.opencode/plugins
 
 | Agent | 调用 | 职责 |
 |-------|------|------|
-| `junit-test` | `@junit-test` | `mods/cross-spire` 下 `./gradlew test`；只读 |
-| `android-deploy-jar` | `@android-deploy-jar` | `./gradlew jar` + 推送 `CrossSpire.jar` 到 D1/D2 `mods_library` + 默认 `force-stop`；只读源码；依赖 `.env.local` |
-| `android-harness` | `@android-harness` | connector + harness console E2E；只读；依赖 `.env.local`（假定设备已有目标 jar） |
-| `android-arthas` | `@android-arthas` | 设备 JVM 的 Arthas 线程、类加载、方法与调用链诊断；只读；按 `start → query → stop` 清理 bridge；依赖 `.env.local` |
+| `junit-test` | `@junit-test` | 逻辑层默认回归：`mods/cross-spire` 下 `./gradlew test`（含 pure Gate/Planner/Policy 与 scenario）；只读 |
+| `android-deploy-jar` | `@android-deploy-jar` | `./gradlew jar` + 推送 `CrossSpire.jar` 到 D1/D2 `mods_library` + 默认 `force-stop`；只读源码；依赖 `.env.local`；**非**语义回归 |
+| `android-harness` | `@android-harness` | connector + harness console **设备/联机契约** E2E；只读；依赖 `.env.local`（假定设备已有目标 jar）；**不**替代逻辑层 JUnit |
+| `android-arthas` | `@android-arthas` | 设备 JVM 的 Arthas 线程、类加载、方法与调用链诊断；只读；按 `start → query → stop` 清理 bridge；依赖 `.env.local`；**非**语义回归 |
 
 定义位置：`.opencode/agent/*.md`。修改 agent/plugin 后需**重启 opencode**。
+
+语义（phase / ownership / induce / queue admit）默认走 **JUnit**；细则见 [`logic-layer-testing.md`](./logic-layer-testing.md)。
 
 ## 文档列表
 
 | 文件 | 内容 |
 |------|------|
+| [`logic-layer-testing.md`](./logic-layer-testing.md) | **单元/逻辑层测试规范**：金字塔、可测边界、写法、与 Harness 分工、场景规划 |
 | [`android-harness.md`](./android-harness.md) | 双设备 Harness、connector daemon、BaseMod console 联机流程 |
 | [`android-arthas.md`](./android-arthas.md) | 设备 JVM 上的 Arthas 生命周期与常用诊断 |
 

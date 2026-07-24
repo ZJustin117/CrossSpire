@@ -26,6 +26,7 @@
 19. [协议消息定义](#协议消息定义)
 20. [项目结构](#项目结构)
 21. [未来塔2兼容性预留](#未来塔2兼容性预留)
+22. [测试与可验证性](#测试与可验证性)
 
 ---
 
@@ -1815,3 +1816,37 @@ CrossSpire/
 ```
 
 未映射的实体永远走远程引用 + fallback 效果通道。
+
+---
+
+## 测试与可验证性
+
+本节描述**如何验证生产规则**，与「平台与调试边界」（Harness/ADB 为外部工具、不进发布 JAR）互补。验收 NFR 见 [`spec.md`](./spec.md) NFR-16–18；操作细则见 [`development/logic-layer-testing.md`](./development/logic-layer-testing.md)；OpenCode 委派见仓库根 `AGENTS.md`。
+
+### 金字塔
+
+1. **逻辑层 JUnit（默认语义门禁）** — pure Gate / Planner / Policy、协议 DTO、内存 multi-step scenario；无设备、无游戏主循环。
+2. **Patch / STS 引擎集成（罕用）** — 仅当合同就是引擎行为且无法抽 pure。
+3. **Android Harness smoke（稀有）** — host/join/console、设备路径、发布级共进路径；**不**作为 phase / ownership / induce 的日常回归库。
+
+### 可测边界
+
+| 宜 pure、可 JUnit | 常耦合 STS / 设备 |
+|-------------------|-------------------|
+| `CombatPhase` / `CombatPhaseCoordinator`、queue manager、monster-turn admit gate | `@SpirePatch` 字节码挂载 |
+| `LocalOwnerGate`、`PowerLogicGate`、attachment registry 策略 | `CombatResultReplayer` 对 `AbstractCreature` 的写数与 Action 入队 |
+| Protocol / StandardPacket / Gson 往返 | 真实 socket 与 ADB 转发 |
+| PartyManager、RoomHost 目录、map/event planner 决策 | BaseMod console、双机时序 |
+
+诱导重放合同不变：**AUTHORITATIVE_APPLY + LOCAL_OWNER_ONLY**（见术语与 §8）；逻辑层测试断言的是**谁 apply、谁 fire、谁 skip**，不是 STS 伤害公式。
+
+### 提取约定
+
+- `MessageRouter`、`CombatResultReplayer`、Patches 中的 **if 决策**应调用 `main` 中的 pure 辅助类型；测试只绑定这些类型，**禁止**在 test 内镜像另一套分支。
+- 目标决策面（任务驱动，见 `plan.md` / `task.md` P-Testing）：combat_result admit 与 host 本地 induce、personal target、induced hop、owner-fire vs skip；phase/queue/monster admit 补边界表。
+- 不把从 `desktop-1.0.jar` 仿真整局战斗作为默认单元策略。
+
+### 与调试基础设施的关系
+
+- Harness / game-probe / Arthas：**外部**开发工具（§设计目标 · 平台与调试边界）。
+- 逻辑层测试：验证 **CrossSpire 规则**是否与本架构一致；改规则先改 SDD + 失败 JUnit，再改实现。

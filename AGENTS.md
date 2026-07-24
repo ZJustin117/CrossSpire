@@ -7,6 +7,7 @@
 | [`docs/spec.md`](docs/spec.md) | spec | 用户故事、功能需求、验收标准 |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | plan | 架构设计、协议、模块定义、数据模型 |
 | `AGENTS.md` | dev-guide | 本文档 — 开发约定与规则 |
+| [`docs/development/logic-layer-testing.md`](docs/development/logic-layer-testing.md) | testing-guide | 测试金字塔、逻辑层写法、与 Harness 分工 |
 | [`docs/reference/`](docs/reference/) | reference | BaseMod + ModTheSpire API 参考 |
 | [`shared/cross-spire-protocol/protocol-schema.json`](shared/cross-spire-protocol/protocol-schema.json) | data-model | 协议消息 JSON Schema |
 
@@ -60,20 +61,21 @@ The `docs/reference/` directory contains API documentation for the two key moddi
 
 | Agent | 何时用 | 何时不用 |
 |-------|--------|----------|
-| `junit-test` | 逻辑/协议改完要回归；排查 unit 失败；用户明确要 JUnit 结果 | 纯读代码/设计；代码尚不可编译；只改 docs |
-| `android-deploy-jar` | 改了 mod 源码后要上机验证；设备需刷新 `CrossSpire.jar`；E2E 前构建+推送 | 只跑 unit；jar 未变；无设备；纯 console 联机且设备已是新 jar |
-| `android-harness` | 联机、host/join/console、真机路径必须验证；用户明确 E2E | 默认每次改动；无 `.env.local`/设备；unit 已覆盖；还需先推 jar 时先用 deploy |
-| `android-arthas` | Android JVM 线程、类加载、方法参数/返回值、调用耗时或 Arthas bridge 诊断 | 默认每次改动；游戏语义或联机验证；需要改源码/热替换 |
+| `junit-test` | **语义默认门禁**：协议、Gate/Planner/Policy、逻辑 scenario 改完；排查 unit 失败；用户要 JUnit | 纯读代码/设计；代码尚不可编译；只改 docs；需要设备联机（转 harness） |
+| `android-deploy-jar` | 改了 mod 源码后要上机验证；设备需刷新 `CrossSpire.jar`；E2E 前构建+推送 | 只跑 unit/逻辑层；jar 未变；无设备；纯 console 且设备已是新 jar；**语义回归** |
+| `android-harness` | 联机、host/join/console、真机路径；用户明确设备 E2E / 发布 smoke | **默认每次改动**；phase/ownership/induce 等应用 JUnit 覆盖的语义；无 `.env.local`/设备；还需先推 jar 时先用 deploy |
+| `android-arthas` | Android JVM 线程、类加载、方法参数/返回值、调用耗时或 Arthas bridge 诊断 | 默认每次改动；**游戏语义**或联机验收；需要改源码/热替换 |
 
 ### 委派规则（省 token / 防涣散）
 
 1. **一次委派 = 一个窄目标**（如「全量 `./gradlew test`」、`android-deploy-jar` 推双机，或「D1 host + D2 join + `crossspire status`」）。禁止「重构 + 跑测 + 翻日志 + 修代码」塞进同一子任务。
-2. **顺序**：改代码 → 需要时 `junit-test` → **设备需新 jar 时** `android-deploy-jar` → **仅当**联机契约或 Android 路径受影响再 `android-harness`。`android-arthas` 仅用于独立的 JVM 诊断，非默认验证路径；不要默认双开 E2E。
+2. **顺序**：改代码 → **语义/规则变更必须** `junit-test` → **仅当**联机契约或 Android 路径受影响：`android-deploy-jar`（需新 jar）→ `android-harness`。`android-arthas` 仅 JVM 诊断；不要默认双开 E2E，**不要用 harness 代替逻辑层 JUnit**。
 3. **失败**：子 agent **只回摘要**（pass/fail、失败类/方法、关键输出摘录）。**主 agent 修源码**后再委派复测；子 agent 不 edit。
 4. **不要**在主会话里自己跑完整 suite/长 harness，除非 subagent 不可用；也不要把整份 test 日志贴回主对话。
 5. JUnit、deploy-jar 与 harness **一般串行**（先 unit，再 jar 推送，再 E2E）；无依赖的并行 harness 不要开。
 6. Task 恢复会话时 `task_id` 仅用系统返回的 `ses…`；**新任务省略 `task_id`**（勿传随机 UUID）。插件 `local-env` 会在执行前**剥离**非 `ses` 前缀的 `task_id`（不当作 resume）。
 7. 依赖 `.env.local`；缺变量时子 agent 应阻塞并列出键名，主 agent 勿发明绝对路径。
+8. 写测/抽 Policy 时对照 [`docs/development/logic-layer-testing.md`](docs/development/logic-layer-testing.md)；**禁止**在测试类内镜像生产 `if` 决策。
 
 ## Storage
 
@@ -113,8 +115,8 @@ The `docs/reference/` directory contains API documentation for the two key moddi
 
 ## TDD / SDD Workflow
 
-1. Before implementation, update the applicable SDD source of truth: `spec.md` for acceptance behavior, `ARCHITECTURE.md` for ownership/routing/protocol design, and `protocol-schema.json` before Java when message formats change.
-2. Start each behavior change with a focused failing JUnit test. Prefer pure state/validation helpers for protocol and phase rules; add patch integration tests only where engine behavior is the contract.
-3. Implement the smallest change that makes the new test pass. Keep the implementation aligned with the SDD ownership boundaries and preserve backward compatibility within the major protocol version.
+1. Before implementation, update the applicable SDD source of truth: `spec.md` for acceptance behavior, `ARCHITECTURE.md` for ownership/routing/protocol design, and `protocol-schema.json` before Java when message formats change. Testing rules: [`docs/development/logic-layer-testing.md`](docs/development/logic-layer-testing.md) and `ARCHITECTURE.md` §22.
+2. Start each behavior change with a focused failing JUnit test. Prefer pure Gate/Planner/Policy and multi-step logic scenarios for multiplayer rules (phase, ownership, induce, queue admit). Add patch/engine tests only where engine behavior is the contract.
+3. Implement the smallest change that makes the new test pass. New branching in `MessageRouter` / `CombatResultReplayer` / patches should call pure helpers in `main` (do not leave decisions only in engine-coupled methods). Keep SDD ownership boundaries and major-version protocol compatibility.
 4. Update patch documentation in `mods/cross-spire/README.md` whenever adding or materially changing a gameplay patch.
-5. Delegate JUnit execution to the `junit-test` subagent after each coherent implementation slice. When devices need a rebuilt mod JAR, delegate `android-deploy-jar` before harness. Delegate Android Harness verification only after JUnit passes (when run) and when an Android/network contract changed.
+5. Delegate **semantic regression** to `junit-test` after each coherent slice. Only after JUnit is green: `android-deploy-jar` if devices need a new JAR, then `android-harness` **only** for device/network/console contracts or release co-op smoke — never as the sole check for phase/ownership/induce.
